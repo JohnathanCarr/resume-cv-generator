@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Resume parser harness</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; }
+    pre { background: #f4f4f4; padding: 1rem; overflow: auto; font-size: 12px; }
+    label { display: inline-block; margin-right: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Resume parser harness</h1>
+  <p>
+    Serve the repository root over HTTP (for example <code>python3 -m http.server 8790</code>)
+    and open <code>/test/parser.html</code>. Pick a fixture or drop in any PDF.
+  </p>
+  <p>
+    <label>Fixture
+      <select id="fixture">
+        <option value="fixtures/resume_sans_title_first.pdf">resume_sans_title_first.pdf</option>
+        <option value="fixtures/resume_serif_company_first.pdf">resume_serif_company_first.pdf</option>
+      </select>
+    </label>
+    <label>Or upload <input type="file" id="file" accept=".pdf"></label>
+  </p>
+  <pre id="out">Choose a fixture…</pre>
+
+  <script src="../extension/pdf.min.js"></script>
+  <script src="../extension/resumeParser.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '../extension/pdf.worker.min.js';
+    const out = document.getElementById('out');
+
+    async function run(buffer) {
+      out.textContent = 'Parsing…';
+      try {
+        const result = await ResumeParser.parse(pdfjsLib, buffer);
+        out.textContent = JSON.stringify(result, null, 2);
+      } catch (err) {
+        out.textContent = 'Error: ' + (err && err.stack || err);
+      }
+    }
+
+    async function runFixture(path) {
+      const res = await fetch(path, { cache: 'no-store' });
+      run(await res.arrayBuffer());
+    }
+
+    document.getElementById('fixture').addEventListener('change', (e) => runFixture(e.target.value));
+    document.getElementById('file').addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (f) run(await f.arrayBuffer());
+    });
+    runFixture(document.getElementById('fixture').value);
+  </script>
+</body>
+</html>

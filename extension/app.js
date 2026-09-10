@@ -1320,9 +1320,6 @@ class CoverLetterApp {
   try {
     const requestData = { profile: this.profile, jobText, type: 'resume' };
 
-    // DEBUG #1 — what you're sending
-    console.log('REQ.profile.education =', requestData.profile?.education);
-
     this.lastApiCall = { request: requestData, timestamp: new Date().toISOString() };
 
     const response = await fetch('http://localhost:8787/generateResume', {
@@ -1415,36 +1412,33 @@ class CoverLetterApp {
     formatResume(resumeContent) {
         // Parse the JSON resume content
         let resume;
-        let edu = {}; 
+        let eduList = [];
         try {
             resume = typeof resumeContent === 'string' ? JSON.parse(resumeContent) : resumeContent;
             console.log('Parsed resume data:', resume); // Debug log
-            // normalize education from API to a single object with consistent keys
-            const eduSrc = Array.isArray(resume.education) ? (resume.education[0] || {}) : (resume.education || {});
-            edu = {
-                school: eduSrc.school || eduSrc.university || '',
-                location: eduSrc.location || '',
-                dates: eduSrc.dates || eduSrc.graduation || eduSrc.end || '',
-                degree: eduSrc.degree || eduSrc.degreeType || '',
-                major: eduSrc.major || '',
-                minor: eduSrc.minor || '',
-                gpa: eduSrc.gpa || '',
-                honors:  eduSrc.honors || '',
-                coursework: eduSrc.coursework || ''
-            };
+
+            // Normalize education to a list of entries with consistent keys. The
+            // model may return an array or a single object; fall back to the
+            // profile's own entries when it returns nothing.
+            const fromModel = Array.isArray(resume.education)
+                ? resume.education
+                : (resume.education ? [resume.education] : []);
+            const source = fromModel.length ? fromModel : (this.profile.education || []);
+            eduList = source.map(e => ({
+                school: e.school || e.university || e.institution || '',
+                location: e.location || '',
+                dates: e.dates || e.graduation || (e.start && e.end ? `${e.start} - ${e.end}` : e.end || ''),
+                degree: e.degree || e.degreeType || '',
+                major: e.major || '',
+                minor: e.minor || '',
+                gpa: e.gpa || '',
+                honors: e.honors || '',
+                coursework: e.coursework || ''
+            })).filter(e => e.school || e.degree);
         } catch (error) {
             console.error('Error parsing resume content:', error);
             return `<p style="color: red;">Error formatting resume content</p>`;
         }
-
-        console.log('EDU FINAL ->',
-            'school:', edu.school,
-            'degree:', edu.degree,
-            'major:', edu.major,
-            'dates:', edu.dates,
-            'gpa:', edu.gpa,
-            'PROFILE EDU:', this.profile?.education
-        );
 
 
         // Single-source rendering with exact measurements for pixel-perfect preview/PDF match
@@ -1507,7 +1501,8 @@ class CoverLetterApp {
 
                
 
-                                <!-- Education Section -->
+                <!-- Education Section -->
+                ${eduList.length > 0 ? `
                 <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
                 <h2 style="
                     margin: 0 0 0.4em 0;
@@ -1517,72 +1512,27 @@ class CoverLetterApp {
                     border-bottom: 1pt solid #000;
                     padding-bottom: 2pt;
                 ">EDUCATION & HONORS</h2>
-
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                    ${(edu.school || this.profile.education?.university || '')}
-                    ${(edu.location || this.profile.location)
-                        ? ` – ${(edu.location || this.profile.location)}`
-                        : ''}
-                    </span>
-                    <span style="font-size: ${contactFontSize};">
-                    ${
-                        (edu.dates || this.profile.education?.end)
-                        ? `Graduation Date: ${(edu.dates || this.profile.education?.end)}`
-                        : ''
-                    }
-                    </span>
-                </div>
-
-                ${
-                    (edu.degree || this.profile.education?.degreeType)
-                    ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">
-                            ${(edu.degree || this.profile.education?.degreeType)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.major || this.profile.education?.major)
-                    ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">
-                            Major: ${(edu.major || this.profile.education?.major)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.minor || this.profile.education?.minor)
-                    ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">
-                            Minor: ${(edu.minor || this.profile.education?.minor)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.gpa || this.profile.education?.gpa)
-                    ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">
-                            GPA: ${(edu.gpa || this.profile.education?.gpa)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.honors || this.profile.education?.honors || edu.coursework || this.profile.education?.coursework)
-                    ? `<div style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
-                            ${
-                            (edu.honors || this.profile.education?.honors)
-                                ? `• ${(edu.honors || this.profile.education?.honors)}<br>`
-                                : ''
-                            }
-                            ${
-                            (edu.coursework || this.profile.education?.coursework)
-                                ? `• Relevant Coursework: ${(edu.coursework || this.profile.education?.coursework)}`
-                                : ''
-                            }
-                        </div>`
-                    : ''
-                }
-                </div>
+                ${eduList.map(edu => `
+                <div class="education-entry" style="margin-bottom: ${entrySpacing};">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span style="font-size: ${contactFontSize}; font-weight: bold;">
+                        ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
+                        </span>
+                        <span style="font-size: ${contactFontSize};">
+                        ${edu.dates ? `Graduation Date: ${edu.dates}` : ''}
+                        </span>
+                    </div>
+                    ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
+                    ${edu.major ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Major: ${edu.major}</div>` : ''}
+                    ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
+                    ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
+                    ${(edu.honors || edu.coursework) ? `
+                    <div style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
+                        ${edu.honors ? `• ${edu.honors}<br>` : ''}
+                        ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
+                    </div>` : ''}
+                </div>`).join('')}
+                </div>` : ''}
 
 
 

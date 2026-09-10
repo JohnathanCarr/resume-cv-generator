@@ -602,6 +602,11 @@ body {
     margin-left: auto;
 }
 
+#profile-status {
+    margin-top: 0;
+    margin-bottom: var(--space-lg);
+}
+
 .section-description {
     font-size: 0.875rem;
     color: var(--text-tertiary);

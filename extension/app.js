@@ -269,6 +269,19 @@ class CoverLetterApp {
         if (errorModal) errorModal.classList.add('hidden');
     }
 
+    // Status shown inside the Profile tab (the generation status lives in the Generate tab).
+    showProfileStatus(message, type = 'loading') {
+        const statusEl = document.getElementById('profile-status');
+        if (!statusEl) return;
+        clearTimeout(this._profileStatusTimer);
+        statusEl.textContent = message;
+        statusEl.className = `status-message status-${type}`;
+        statusEl.classList.remove('hidden');
+        if (type !== 'loading') {
+            this._profileStatusTimer = setTimeout(() => statusEl.classList.add('hidden'), 8000);
+        }
+    }
+
     showStatus(message, type = 'loading') {
         const statusEl = document.getElementById('generation-status');
         if (statusEl) {
@@ -863,11 +876,62 @@ class CoverLetterApp {
             };
             await this.saveUploadedResume();
             this.renderUploadedResume();
-            this.showStatus('Resume uploaded.', 'success');
+
+            await this.autofillFromResume(buffer);
         } catch (error) {
             console.error('Resume upload error:', error);
             this.showError(`Failed to upload resume: ${error.message}`);
         }
+    }
+
+    // Parse the uploaded PDF and fold the result into the profile additively.
+    async autofillFromResume(buffer) {
+        if (typeof pdfjsLib === 'undefined' || typeof ResumeParser === 'undefined' || typeof ProfileMerge === 'undefined') {
+            this.showProfileStatus('Resume uploaded (parser unavailable).', 'success');
+            return;
+        }
+
+        this.showProfileStatus('Reading your resume…', 'loading');
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+                ? chrome.runtime.getURL('pdf.worker.min.js')
+                : 'pdf.worker.min.js';
+
+        const { profile: parsed, meta } = await ResumeParser.parse(pdfjsLib, buffer);
+        const { profile, report } = ProfileMerge.merge(this.profile, parsed);
+        this.profile = profile;
+        this.lastParseMeta = meta;
+
+        this.renderProfile();
+        await this.saveData();
+
+        this.showProfileStatus(this.describeMergeReport(report, meta), 'success');
+        if (meta.warnings.length) {
+            console.warn('Resume parser warnings:', meta.warnings);
+        }
+    }
+
+    describeMergeReport(report, meta) {
+        const parts = [];
+        const count = (label, r) => {
+            if (!r) return;
+            const bits = [];
+            if (r.added) bits.push(`${r.added} new`);
+            if (r.updated) bits.push(`${r.updated} updated`);
+            if (bits.length) parts.push(`${label}: ${bits.join(', ')}`);
+        };
+        count('skills', report.skills);
+        count('education', report.education);
+        count('experience', report.experiences);
+        count('projects', report.projects);
+        count('extras', report.extras);
+
+        if (!parts.length) {
+            return meta.warnings.length
+                ? `Resume uploaded, but nothing could be parsed. ${meta.warnings[0]}`
+                : 'Resume uploaded. Nothing new to add — your profile already has everything.';
+        }
+        return `Resume uploaded and profile updated (${parts.join('; ')}).`;
     }
 
     async saveUploadedResume() {

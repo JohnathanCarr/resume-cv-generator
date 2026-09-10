@@ -565,6 +565,43 @@ body {
     border-radius: var(--radius-full);
 }
 
+.section h2 .header-action {
+    margin-left: var(--space-sm);
+    font-family: var(--font-body);
+    letter-spacing: normal;
+}
+
+/* Uploaded resume chip (Personal Information header) */
+.uploaded-resume {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0.5rem 0.75rem;
+    margin-bottom: var(--space-lg);
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    background: var(--glass-bg-elevated);
+    border: 1px solid var(--accent-primary-glow);
+    border-radius: var(--radius-lg);
+}
+
+.uploaded-resume-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.uploaded-resume-meta {
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.uploaded-resume .btn {
+    margin-left: auto;
+}
+
 .section-description {
     font-size: 0.875rem;
     color: var(--text-tertiary);

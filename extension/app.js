@@ -13,6 +13,7 @@ class CoverLetterApp {
             extras: []
         };
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
+        this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -36,7 +37,10 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume']);
+        if (result.uploadedResume) {
+            this.uploadedResume = result.uploadedResume;
+        }
         if (result.profile) {
             // shallow merge first
             this.profile = { 
@@ -100,6 +104,20 @@ class CoverLetterApp {
         // Profile management
         document.getElementById('save-profile')?.addEventListener('click', () => {
             this.saveProfile();
+        });
+
+        // Resume upload
+        document.getElementById('upload-resume')?.addEventListener('click', () => {
+            document.getElementById('resume-file').click();
+        });
+
+        document.getElementById('resume-file')?.addEventListener('change', (e) => {
+            this.handleResumeUpload(e.target.files[0]);
+            e.target.value = ''; // allow re-selecting the same file
+        });
+
+        document.getElementById('view-resume')?.addEventListener('click', () => {
+            this.viewUploadedResume();
         });
 
         document.getElementById('import-profile')?.addEventListener('click', () => {
@@ -262,6 +280,7 @@ class CoverLetterApp {
         setFieldValue('profile-contact', this.profile.contact);
         setFieldValue('profile-location', this.profile.location);
         
+        this.renderUploadedResume();
         this.renderEducation();
         this.renderSkills();
         this.renderExperiences();
@@ -793,6 +812,112 @@ class CoverLetterApp {
         } catch (error) {
             this.showError('Failed to import profile. Please check the file format.');
         }
+    }
+
+    // Resume Upload
+    async handleResumeUpload(file) {
+        if (!file) return;
+
+        const MAX_BYTES = 20 * 1024 * 1024;
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        if (!isPdf) {
+            this.showError('Please upload a PDF file.', false);
+            return;
+        }
+        if (file.size > MAX_BYTES) {
+            this.showError('That PDF is larger than 20 MB. Please upload a smaller file.', false);
+            return;
+        }
+
+        try {
+            const buffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            const magic = String.fromCharCode(...bytes.slice(0, 5));
+            if (magic !== '%PDF-') {
+                this.showError('That file does not look like a valid PDF.', false);
+                return;
+            }
+
+            this.uploadedResume = {
+                name: file.name,
+                size: file.size,
+                uploadedAt: new Date().toISOString(),
+                dataBase64: this.bytesToBase64(bytes)
+            };
+            await this.saveUploadedResume();
+            this.renderUploadedResume();
+            this.showStatus('Resume uploaded.', 'success');
+        } catch (error) {
+            console.error('Resume upload error:', error);
+            this.showError(`Failed to upload resume: ${error.message}`);
+        }
+    }
+
+    async saveUploadedResume() {
+        try {
+            await chrome.storage.local.set({ uploadedResume: this.uploadedResume });
+        } catch (error) {
+            console.error('Error saving uploaded resume:', error);
+        }
+    }
+
+    renderUploadedResume() {
+        const chip = document.getElementById('uploaded-resume');
+        const label = document.getElementById('upload-resume-label');
+        if (!chip) return;
+
+        if (!this.uploadedResume) {
+            chip.classList.add('hidden');
+            if (label) label.textContent = 'Upload Resume';
+            return;
+        }
+
+        const nameEl = document.getElementById('uploaded-resume-name');
+        const metaEl = document.getElementById('uploaded-resume-meta');
+        if (nameEl) nameEl.textContent = this.uploadedResume.name;
+        if (metaEl) {
+            const kb = Math.max(1, Math.round((this.uploadedResume.size || 0) / 1024));
+            const date = this.uploadedResume.uploadedAt
+                ? new Date(this.uploadedResume.uploadedAt).toLocaleDateString()
+                : '';
+            metaEl.textContent = `${kb} KB${date ? ` · ${date}` : ''}`;
+        }
+        chip.classList.remove('hidden');
+        if (label) label.textContent = 'Replace Resume';
+    }
+
+    viewUploadedResume() {
+        if (!this.uploadedResume?.dataBase64) {
+            this.showError('No resume has been uploaded yet.', false);
+            return;
+        }
+        const bytes = this.base64ToBytes(this.uploadedResume.dataBase64);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+
+        if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+            chrome.tabs.create({ url });
+        } else {
+            window.open(url, '_blank');
+        }
+        // Give the new tab time to load the blob before revoking
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+    bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+    }
+
+    base64ToBytes(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
     }
 
     // Cover Letter Generation

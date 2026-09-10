@@ -6,16 +6,7 @@ class CoverLetterApp {
             name: '',
             contact: '',
             location: '',
-            education: {
-                university: '',
-                degreeType: '',
-                major: '',
-                start: '',
-                end: '',
-                gpa: '',
-                honors: '',
-                coursework: ''
-            },
+            education: [],
             skills: [],
             experiences: [],
             projects: [],
@@ -52,18 +43,7 @@ class CoverLetterApp {
                 ...this.profile,
                 ...result.profile
             };
-            // deep-merge education to keep all child fields intact
-            this.profile.education = {
-                 university: '', 
-                 degreeType: '', 
-                 major: '', 
-                 start: '', 
-                 end: '', 
-                 gpa: '',
-                 honors: '',
-                 coursework: '',
-                 ...(result.profile.education || {})
-            };
+            this.profile.education = this.migrateEducation(result.profile.education);
             }
         }  catch (e) { console.error('Error loading data:', e); }
     }
@@ -92,15 +72,7 @@ class CoverLetterApp {
         const profileFields = [
             'profile-name',
             'profile-contact',
-            'profile-location', 
-            'profile-university',
-            'profile-degree-type',
-            'profile-major',
-            'profile-education-start',
-            'profile-education-end',
-            'profile-education-gpa',
-            'profile-education-honors',
-            'profile-education-coursework'
+            'profile-location'
         ];
         profileFields.forEach(fieldId => {
             const field = document.getElementById(fieldId);
@@ -150,7 +122,11 @@ class CoverLetterApp {
             }
         });
 
-        // Experience and project management
+        // Education, experience and project management
+        document.getElementById('add-education')?.addEventListener('click', () => {
+            this.addEducation();
+        });
+
         document.getElementById('add-experience')?.addEventListener('click', () => {
             this.addExperience();
         });
@@ -209,38 +185,6 @@ class CoverLetterApp {
 
         document.getElementById('profile-location')?.addEventListener('input', (e) => {
             this.profile.location = e.target.value;
-        });
-
-        document.getElementById('profile-university')?.addEventListener('input', (e) => {
-            this.profile.education.university = e.target.value;
-        });
-
-        document.getElementById('profile-degree-type')?.addEventListener('input', (e) => {
-            this.profile.education.degreeType = e.target.value;
-        });
-
-        document.getElementById('profile-major')?.addEventListener('input', (e) => {
-            this.profile.education.major = e.target.value;
-        });
-
-        document.getElementById('profile-education-start')?.addEventListener('input', (e) => {
-            this.profile.education.start = e.target.value;
-        });
-
-        document.getElementById('profile-education-end')?.addEventListener('input', (e) => {
-            this.profile.education.end = e.target.value;
-        });
-
-        document.getElementById('profile-education-gpa')?.addEventListener('input', (e) => {
-            this.profile.education.gpa = e.target.value;
-        });
-
-        document.getElementById('profile-education-honors')?.addEventListener('input', (e) => {
-            this.profile.education.honors = e.target.value;
-        });
-
-        document.getElementById('profile-education-coursework')?.addEventListener('input', (e) => {
-            this.profile.education.coursework = e.target.value;
         });
     }
 
@@ -317,15 +261,8 @@ class CoverLetterApp {
         setFieldValue('profile-name', this.profile.name);
         setFieldValue('profile-contact', this.profile.contact);
         setFieldValue('profile-location', this.profile.location);
-        setFieldValue('profile-university', this.profile.education?.university);
-        setFieldValue('profile-degree-type', this.profile.education?.degreeType);
-        setFieldValue('profile-major', this.profile.education?.major);
-        setFieldValue('profile-education-start', this.profile.education?.start);
-        setFieldValue('profile-education-end', this.profile.education?.end);
-        setFieldValue('profile-education-gpa', this.profile.education?.gpa);
-        setFieldValue('profile-education-honors', this.profile.education?.honors);
-        setFieldValue('profile-education-coursework', this.profile.education?.coursework);
         
+        this.renderEducation();
         this.renderSkills();
         this.renderExperiences();
         this.renderProjects();
@@ -461,6 +398,109 @@ class CoverLetterApp {
         });
 
         return div;
+    }
+
+    // Education was a single object before multi-entry support; convert
+    // legacy saves to a one-element array so nothing is lost.
+    migrateEducation(education) {
+        if (Array.isArray(education)) return education;
+        if (!education || typeof education !== 'object') return [];
+        const hasContent = Object.values(education).some(v => v && String(v).trim());
+        if (!hasContent) return [];
+        return [{
+            id: Date.now().toString(),
+            institution: education.university || '',
+            degreeType: education.degreeType || '',
+            major: education.major || '',
+            minor: education.minor || '',
+            location: education.location || '',
+            start: education.start || '',
+            end: education.end || '',
+            gpa: education.gpa || '',
+            honors: education.honors || '',
+            coursework: education.coursework || ''
+        }];
+    }
+
+    renderEducation() {
+        const container = document.getElementById('education-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        this.profile.education.forEach((edu, index) => {
+            container.appendChild(this.createEducationElement(edu, index));
+        });
+    }
+
+    createEducationElement(edu, index) {
+        const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const div = document.createElement('div');
+        div.className = 'experience-card glass-elevated';
+        div.innerHTML = `
+            <div class="card-header">
+                <div class="card-title">
+                    <input type="text" placeholder="Institution (e.g., Stanford University)" value="${esc(edu.institution)}" data-field="institution" data-index="${index}">
+                    <div class="input-row input-row-2">
+                        <input type="text" placeholder="Degree Type (e.g., Bachelor of Science)" value="${esc(edu.degreeType)}" data-field="degreeType" data-index="${index}">
+                        <input type="text" placeholder="Major (e.g., Computer Science)" value="${esc(edu.major)}" data-field="major" data-index="${index}">
+                    </div>
+                    <div class="input-row input-row-2">
+                        <input type="text" placeholder="Minor (optional)" value="${esc(edu.minor)}" data-field="minor" data-index="${index}">
+                        <input type="text" placeholder="Location (e.g., Stanford, CA)" value="${esc(edu.location)}" data-field="location" data-index="${index}">
+                    </div>
+                    <div class="input-row input-row-3">
+                        <input type="text" placeholder="Start Year" value="${esc(edu.start)}" data-field="start" data-index="${index}">
+                        <input type="text" placeholder="End Year" value="${esc(edu.end)}" data-field="end" data-index="${index}">
+                        <input type="text" placeholder="GPA (e.g., 3.8/4.0)" value="${esc(edu.gpa)}" data-field="gpa" data-index="${index}">
+                    </div>
+                    <div class="input-row input-row-2">
+                        <input type="text" placeholder="Honors (e.g., Dean's List, Magna Cum Laude)" value="${esc(edu.honors)}" data-field="honors" data-index="${index}">
+                        <input type="text" placeholder="Relevant Coursework" value="${esc(edu.coursework)}" data-field="coursework" data-index="${index}">
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-danger btn-sm btn-ripple remove-education" data-index="${index}">Remove</button>
+                </div>
+            </div>
+        `;
+
+        div.querySelectorAll('input[data-field]').forEach(input => {
+            input.addEventListener('input', (e) => {
+                this.profile.education[index][e.target.dataset.field] = e.target.value;
+                this.saveData();
+            });
+        });
+
+        div.querySelector('.remove-education').addEventListener('click', () => {
+            this.removeEducation(index);
+        });
+
+        return div;
+    }
+
+    addEducation() {
+        this.profile.education.push({
+            id: Date.now().toString(),
+            institution: '',
+            degreeType: '',
+            major: '',
+            minor: '',
+            location: '',
+            start: '',
+            end: '',
+            gpa: '',
+            honors: '',
+            coursework: ''
+        });
+        this.renderEducation();
+        this.saveData();
+    }
+
+    removeEducation(index) {
+        this.profile.education.splice(index, 1);
+        this.renderEducation();
+        this.saveData();
     }
 
     addExperience() {

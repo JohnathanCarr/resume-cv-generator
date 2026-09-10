@@ -93,26 +93,21 @@
                         <input type="text" id="profile-location" placeholder="City, State (e.g., San Francisco, CA)">
                     </div>
                     
-                    <div class="form-group">
-                        <label>Education</label>
-                        <input type="text" id="profile-university" placeholder="University Name (e.g., Stanford University)">
-                        
-                        <div class="input-row input-row-2">
-                            <input type="text" id="profile-degree-type" placeholder="Degree Type (e.g., Bachelor of Science)">
-                            <input type="text" id="profile-major" placeholder="Major (e.g., Computer Science)">
-                        </div>
-                        
-                        <div class="input-row input-row-3">
-                            <input type="text" id="profile-education-start" placeholder="Start Year">
-                            <input type="text" id="profile-education-end" placeholder="End Year">
-                            <input type="text" id="profile-education-gpa" placeholder="GPA (e.g., 3.8/4.0)">
-                        </div>
-                        
-                        <div class="input-row input-row-2">
-                            <input type="text" id="profile-education-honors" placeholder="Honors (e.g., Dean's List, Magna Cum Laude)">
-                            <input type="text" id="profile-education-coursework" placeholder="Relevant Coursework">
-                        </div>
-                    </div>
+                </section>
+
+                <!-- Education Section -->
+                <section class="section glass glass-shimmer">
+                    <h2>Education</h2>
+                    <p class="section-description">Add each institution you attended. Degrees, honors, and coursework are used to tailor your resume.</p>
+                    
+                    <button id="add-education" class="btn btn-secondary btn-ripple">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add Education
+                    </button>
+                    <div id="education-container"></div>
                 </section>
 
                 <!-- Skills Section -->

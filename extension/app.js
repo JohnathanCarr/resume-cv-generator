@@ -1,11 +1,23 @@
 // Cover Letter Generator App Logic
 
 class CoverLetterApp {
+    static EXTRA_TYPES = [
+        ['research', 'Research'],
+        ['program', 'Program'],
+        ['certification', 'Certification'],
+        ['award', 'Award'],
+        ['publication', 'Publication'],
+        ['leadership', 'Leadership'],
+        ['volunteer', 'Volunteer'],
+        ['other', 'Other']
+    ];
+
     constructor() {
         this.profile = {
             name: '',
             contact: '',
             location: '',
+            summary: '',
             education: [],
             skills: [],
             experiences: [],
@@ -76,7 +88,8 @@ class CoverLetterApp {
         const profileFields = [
             'profile-name',
             'profile-contact',
-            'profile-location'
+            'profile-location',
+            'profile-summary'
         ];
         profileFields.forEach(fieldId => {
             const field = document.getElementById(fieldId);
@@ -204,6 +217,10 @@ class CoverLetterApp {
         document.getElementById('profile-location')?.addEventListener('input', (e) => {
             this.profile.location = e.target.value;
         });
+
+        document.getElementById('profile-summary')?.addEventListener('input', (e) => {
+            this.profile.summary = e.target.value;
+        });
     }
 
     // UI Management
@@ -279,6 +296,7 @@ class CoverLetterApp {
         setFieldValue('profile-name', this.profile.name);
         setFieldValue('profile-contact', this.profile.contact);
         setFieldValue('profile-location', this.profile.location);
+        setFieldValue('profile-summary', this.profile.summary);
         
         this.renderUploadedResume();
         this.renderEducation();
@@ -702,10 +720,9 @@ class CoverLetterApp {
                     <input type="text" placeholder="Organization/Institution" value="${extra.organization || ''}" data-field="organization" data-index="${index}">
                     <div class="input-row input-row-3">
                         <select data-field="type" data-index="${index}">
-                            <option value="research" ${extra.type === 'research' ? 'selected' : ''}>Research</option>
-                            <option value="program" ${extra.type === 'program' ? 'selected' : ''}>Program</option>
-                            <option value="certification" ${extra.type === 'certification' ? 'selected' : ''}>Certification</option>
-                            <option value="award" ${extra.type === 'award' ? 'selected' : ''}>Award</option>
+                            ${CoverLetterApp.EXTRA_TYPES.map(([value, label]) =>
+                                `<option value="${value}" ${extra.type === value ? 'selected' : ''}>${label}</option>`
+                            ).join('')}
                         </select>
                         <input type="text" placeholder="Start Date" value="${extra.start || ''}" data-field="start" data-index="${index}">
                         <input type="text" placeholder="End Date (or 'Present')" value="${extra.end || ''}" data-field="end" data-index="${index}">

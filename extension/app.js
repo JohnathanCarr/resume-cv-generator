@@ -133,18 +133,6 @@ class CoverLetterApp {
             this.viewUploadedResume();
         });
 
-        document.getElementById('import-profile')?.addEventListener('click', () => {
-            document.getElementById('import-file').click();
-        });
-
-        document.getElementById('export-profile')?.addEventListener('click', () => {
-            this.exportProfile();
-        });
-
-        document.getElementById('import-file')?.addEventListener('change', (e) => {
-            this.importProfile(e.target.files[0]);
-        });
-
         // Skills management
         document.getElementById('skills-input')?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -802,46 +790,6 @@ class CoverLetterApp {
                         statusEl.textContent = '';
                     }
                 }, 3000);
-    }
-
-    exportProfile() {
-        const dataStr = JSON.stringify(this.profile, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `cover-letter-profile-${new Date().toISOString().split('T')[0]}.json`;
-        link.click();
-        
-        URL.revokeObjectURL(url);
-    }
-
-    async importProfile(file) {
-        if (!file) return;
-        
-        try {
-            const text = await file.text();
-            const importedProfile = JSON.parse(text);
-            
-            // Validate profile structure
-            if (typeof importedProfile === 'object') {
-                this.profile = { ...this.profile, ...importedProfile };
-                this.renderProfile();
-                this.saveData();
-                this.showStatus('Profile imported successfully!', 'success');
-                setTimeout(() => {
-                    const statusEl = document.getElementById('generation-status');
-                    if (statusEl) {
-                        statusEl.textContent = '';
-                    }
-                }, 3000);
-            } else {
-                throw new Error('Invalid profile format');
-            }
-        } catch (error) {
-            this.showError('Failed to import profile. Please check the file format.');
-        }
     }
 
     // Resume Upload

@@ -10,7 +10,7 @@ Transform your job applications with AI-powered documents that sound like strate
 - 📄 **Professional Resumes**: ATS-optimized, one-page layouts that fill completely  
 - 🧠 **AI Detection Proof**: Avoids all telltale AI writing patterns
 - ⚡ **Instant PDF Downloads**: One-click download straight to Downloads folder
-- 💾 **Smart Profile Management**: Autosave, import/export, comprehensive data tracking
+- 💾 **Smart Profile Management**: Upload your existing resume to autofill your profile, autosave, comprehensive data tracking
 - 🔒 **100% Private**: All data stays on your device, secure local proxy
 - 🎨 **Professional Formatting**: Clean, ATS-friendly business documents
 
@@ -81,11 +81,16 @@ Transform your job applications with AI-powered documents that sound like strate
 ## 🎯 How to Use
 
 ### First Time Setup
-1. **Fill out your Profile** (one-time setup):
-   - Personal info, education, skills
+1. **Upload your current resume** (PDF) with the **Upload Resume** button next to Personal Information. Your skills, education, experience, projects and extras are parsed locally (no AI call) and filled in for you. The PDF is kept so you can view it any time.
+2. **Review and complete your Profile**:
+   - Personal info and summary
+   - Education (one entry per institution)
+   - Skills
    - Work experiences with achievements
    - Projects with technical details
-   - Additional experience (research, programs, certifications)
+   - Additional experience (research, certifications, awards, publications, leadership, volunteering)
+
+   Uploading another resume later only **adds** what is new — nothing you entered is removed.
 
 ### Generate Documents
 1. **Go to Generate tab**
@@ -98,7 +103,7 @@ Transform your job applications with AI-powered documents that sound like strate
 ### Pro Tips
 - **Mark items "Must Include"** to guarantee they appear on resumes
 - **Classify extras** as Research/Program/Certification for better placement
-- **Export your profile** regularly for backup
+- **Keep your profile complete** — list every skill you have, not just the ones on one resume; each generated document picks what fits the job
 - **Different jobs = different documents** - each is tailored specifically
 
 ## 📋 What You Need
@@ -163,7 +168,7 @@ Chrome Extension ──→ Local Proxy ──→ OpenAI GPT-4-Turbo
 - ✅ **All data stays local** - stored in Chrome's secure storage
 - ✅ **API key never exposed** - only stored in local proxy
 - ✅ **No cloud accounts** required - everything runs on your device
-- ✅ **Export/import** your data anytime as JSON files
+- ✅ **Uploaded resume stays on your device** — parsed in the browser, never sent to the AI
 - ✅ **No tracking** or analytics - completely private
 
 ## 🎯 Perfect For
@@ -204,7 +209,10 @@ ai-cover-letter-generator/
 │   ├── styles.css     # Styling and print CSS
 │   ├── background.js  # Extension background script
 │   ├── manifest.json  # Extension configuration
-│   └── jspdf.min.js   # PDF generation library
+│   ├── resumeParser.js # Heuristic PDF → profile parser (no AI)
+│   ├── profileMerge.js # Additive profile merge with dedup
+│   ├── jspdf.min.js   # PDF generation library
+│   └── pdf.min.js     # pdf.js for reading uploaded resumes
 ├── proxy/             # Local server
 │   ├── server.js      # API proxy server
 │   ├── package.json   # Dependencies

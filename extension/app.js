@@ -1,27 +1,31 @@
 // Cover Letter Generator App Logic
 
 class CoverLetterApp {
+    static EXTRA_TYPES = [
+        ['research', 'Research'],
+        ['program', 'Program'],
+        ['certification', 'Certification'],
+        ['award', 'Award'],
+        ['publication', 'Publication'],
+        ['leadership', 'Leadership'],
+        ['volunteer', 'Volunteer'],
+        ['other', 'Other']
+    ];
+
     constructor() {
         this.profile = {
             name: '',
             contact: '',
             location: '',
-            education: {
-                university: '',
-                degreeType: '',
-                major: '',
-                start: '',
-                end: '',
-                gpa: '',
-                honors: '',
-                coursework: ''
-            },
+            summary: '',
+            education: [],
             skills: [],
             experiences: [],
             projects: [],
             extras: []
         };
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
+        this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -45,25 +49,17 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume']);
+        if (result.uploadedResume) {
+            this.uploadedResume = result.uploadedResume;
+        }
         if (result.profile) {
             // shallow merge first
             this.profile = { 
                 ...this.profile,
                 ...result.profile
             };
-            // deep-merge education to keep all child fields intact
-            this.profile.education = {
-                 university: '', 
-                 degreeType: '', 
-                 major: '', 
-                 start: '', 
-                 end: '', 
-                 gpa: '',
-                 honors: '',
-                 coursework: '',
-                 ...(result.profile.education || {})
-            };
+            this.profile.education = this.migrateEducation(result.profile.education);
             }
         }  catch (e) { console.error('Error loading data:', e); }
     }
@@ -92,15 +88,8 @@ class CoverLetterApp {
         const profileFields = [
             'profile-name',
             'profile-contact',
-            'profile-location', 
-            'profile-university',
-            'profile-degree-type',
-            'profile-major',
-            'profile-education-start',
-            'profile-education-end',
-            'profile-education-gpa',
-            'profile-education-honors',
-            'profile-education-coursework'
+            'profile-location',
+            'profile-summary'
         ];
         profileFields.forEach(fieldId => {
             const field = document.getElementById(fieldId);
@@ -130,16 +119,18 @@ class CoverLetterApp {
             this.saveProfile();
         });
 
-        document.getElementById('import-profile')?.addEventListener('click', () => {
-            document.getElementById('import-file').click();
+        // Resume upload
+        document.getElementById('upload-resume')?.addEventListener('click', () => {
+            document.getElementById('resume-file').click();
         });
 
-        document.getElementById('export-profile')?.addEventListener('click', () => {
-            this.exportProfile();
+        document.getElementById('resume-file')?.addEventListener('change', (e) => {
+            this.handleResumeUpload(e.target.files[0]);
+            e.target.value = ''; // allow re-selecting the same file
         });
 
-        document.getElementById('import-file')?.addEventListener('change', (e) => {
-            this.importProfile(e.target.files[0]);
+        document.getElementById('view-resume')?.addEventListener('click', () => {
+            this.viewUploadedResume();
         });
 
         // Skills management
@@ -150,7 +141,11 @@ class CoverLetterApp {
             }
         });
 
-        // Experience and project management
+        // Education, experience and project management
+        document.getElementById('add-education')?.addEventListener('click', () => {
+            this.addEducation();
+        });
+
         document.getElementById('add-experience')?.addEventListener('click', () => {
             this.addExperience();
         });
@@ -211,36 +206,8 @@ class CoverLetterApp {
             this.profile.location = e.target.value;
         });
 
-        document.getElementById('profile-university')?.addEventListener('input', (e) => {
-            this.profile.education.university = e.target.value;
-        });
-
-        document.getElementById('profile-degree-type')?.addEventListener('input', (e) => {
-            this.profile.education.degreeType = e.target.value;
-        });
-
-        document.getElementById('profile-major')?.addEventListener('input', (e) => {
-            this.profile.education.major = e.target.value;
-        });
-
-        document.getElementById('profile-education-start')?.addEventListener('input', (e) => {
-            this.profile.education.start = e.target.value;
-        });
-
-        document.getElementById('profile-education-end')?.addEventListener('input', (e) => {
-            this.profile.education.end = e.target.value;
-        });
-
-        document.getElementById('profile-education-gpa')?.addEventListener('input', (e) => {
-            this.profile.education.gpa = e.target.value;
-        });
-
-        document.getElementById('profile-education-honors')?.addEventListener('input', (e) => {
-            this.profile.education.honors = e.target.value;
-        });
-
-        document.getElementById('profile-education-coursework')?.addEventListener('input', (e) => {
-            this.profile.education.coursework = e.target.value;
+        document.getElementById('profile-summary')?.addEventListener('input', (e) => {
+            this.profile.summary = e.target.value;
         });
     }
 
@@ -290,6 +257,19 @@ class CoverLetterApp {
         if (errorModal) errorModal.classList.add('hidden');
     }
 
+    // Status shown inside the Profile tab (the generation status lives in the Generate tab).
+    showProfileStatus(message, type = 'loading') {
+        const statusEl = document.getElementById('profile-status');
+        if (!statusEl) return;
+        clearTimeout(this._profileStatusTimer);
+        statusEl.textContent = message;
+        statusEl.className = `status-message status-${type}`;
+        statusEl.classList.remove('hidden');
+        if (type !== 'loading') {
+            this._profileStatusTimer = setTimeout(() => statusEl.classList.add('hidden'), 8000);
+        }
+    }
+
     showStatus(message, type = 'loading') {
         const statusEl = document.getElementById('generation-status');
         if (statusEl) {
@@ -317,15 +297,10 @@ class CoverLetterApp {
         setFieldValue('profile-name', this.profile.name);
         setFieldValue('profile-contact', this.profile.contact);
         setFieldValue('profile-location', this.profile.location);
-        setFieldValue('profile-university', this.profile.education?.university);
-        setFieldValue('profile-degree-type', this.profile.education?.degreeType);
-        setFieldValue('profile-major', this.profile.education?.major);
-        setFieldValue('profile-education-start', this.profile.education?.start);
-        setFieldValue('profile-education-end', this.profile.education?.end);
-        setFieldValue('profile-education-gpa', this.profile.education?.gpa);
-        setFieldValue('profile-education-honors', this.profile.education?.honors);
-        setFieldValue('profile-education-coursework', this.profile.education?.coursework);
+        setFieldValue('profile-summary', this.profile.summary);
         
+        this.renderUploadedResume();
+        this.renderEducation();
         this.renderSkills();
         this.renderExperiences();
         this.renderProjects();
@@ -461,6 +436,109 @@ class CoverLetterApp {
         });
 
         return div;
+    }
+
+    // Education was a single object before multi-entry support; convert
+    // legacy saves to a one-element array so nothing is lost.
+    migrateEducation(education) {
+        if (Array.isArray(education)) return education;
+        if (!education || typeof education !== 'object') return [];
+        const hasContent = Object.values(education).some(v => v && String(v).trim());
+        if (!hasContent) return [];
+        return [{
+            id: Date.now().toString(),
+            institution: education.university || '',
+            degreeType: education.degreeType || '',
+            major: education.major || '',
+            minor: education.minor || '',
+            location: education.location || '',
+            start: education.start || '',
+            end: education.end || '',
+            gpa: education.gpa || '',
+            honors: education.honors || '',
+            coursework: education.coursework || ''
+        }];
+    }
+
+    renderEducation() {
+        const container = document.getElementById('education-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        this.profile.education.forEach((edu, index) => {
+            container.appendChild(this.createEducationElement(edu, index));
+        });
+    }
+
+    createEducationElement(edu, index) {
+        const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const div = document.createElement('div');
+        div.className = 'experience-card glass-elevated';
+        div.innerHTML = `
+            <div class="card-header">
+                <div class="card-title">
+                    <input type="text" placeholder="Institution (e.g., Stanford University)" value="${esc(edu.institution)}" data-field="institution" data-index="${index}">
+                    <div class="input-row input-row-2">
+                        <input type="text" placeholder="Degree Type (e.g., Bachelor of Science)" value="${esc(edu.degreeType)}" data-field="degreeType" data-index="${index}">
+                        <input type="text" placeholder="Major (e.g., Computer Science)" value="${esc(edu.major)}" data-field="major" data-index="${index}">
+                    </div>
+                    <div class="input-row input-row-2">
+                        <input type="text" placeholder="Minor (optional)" value="${esc(edu.minor)}" data-field="minor" data-index="${index}">
+                        <input type="text" placeholder="Location (e.g., Stanford, CA)" value="${esc(edu.location)}" data-field="location" data-index="${index}">
+                    </div>
+                    <div class="input-row input-row-3">
+                        <input type="text" placeholder="Start Year" value="${esc(edu.start)}" data-field="start" data-index="${index}">
+                        <input type="text" placeholder="End Year" value="${esc(edu.end)}" data-field="end" data-index="${index}">
+                        <input type="text" placeholder="GPA (e.g., 3.8/4.0)" value="${esc(edu.gpa)}" data-field="gpa" data-index="${index}">
+                    </div>
+                    <div class="input-row input-row-2">
+                        <input type="text" placeholder="Honors (e.g., Dean's List, Magna Cum Laude)" value="${esc(edu.honors)}" data-field="honors" data-index="${index}">
+                        <input type="text" placeholder="Relevant Coursework" value="${esc(edu.coursework)}" data-field="coursework" data-index="${index}">
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-danger btn-sm btn-ripple remove-education" data-index="${index}">Remove</button>
+                </div>
+            </div>
+        `;
+
+        div.querySelectorAll('input[data-field]').forEach(input => {
+            input.addEventListener('input', (e) => {
+                this.profile.education[index][e.target.dataset.field] = e.target.value;
+                this.saveData();
+            });
+        });
+
+        div.querySelector('.remove-education').addEventListener('click', () => {
+            this.removeEducation(index);
+        });
+
+        return div;
+    }
+
+    addEducation() {
+        this.profile.education.push({
+            id: Date.now().toString(),
+            institution: '',
+            degreeType: '',
+            major: '',
+            minor: '',
+            location: '',
+            start: '',
+            end: '',
+            gpa: '',
+            honors: '',
+            coursework: ''
+        });
+        this.renderEducation();
+        this.saveData();
+    }
+
+    removeEducation(index) {
+        this.profile.education.splice(index, 1);
+        this.renderEducation();
+        this.saveData();
     }
 
     addExperience() {
@@ -643,10 +721,9 @@ class CoverLetterApp {
                     <input type="text" placeholder="Organization/Institution" value="${extra.organization || ''}" data-field="organization" data-index="${index}">
                     <div class="input-row input-row-3">
                         <select data-field="type" data-index="${index}">
-                            <option value="research" ${extra.type === 'research' ? 'selected' : ''}>Research</option>
-                            <option value="program" ${extra.type === 'program' ? 'selected' : ''}>Program</option>
-                            <option value="certification" ${extra.type === 'certification' ? 'selected' : ''}>Certification</option>
-                            <option value="award" ${extra.type === 'award' ? 'selected' : ''}>Award</option>
+                            ${CoverLetterApp.EXTRA_TYPES.map(([value, label]) =>
+                                `<option value="${value}" ${extra.type === value ? 'selected' : ''}>${label}</option>`
+                            ).join('')}
                         </select>
                         <input type="text" placeholder="Start Date" value="${extra.start || ''}" data-field="start" data-index="${index}">
                         <input type="text" placeholder="End Date (or 'Present')" value="${extra.end || ''}" data-field="end" data-index="${index}">
@@ -715,44 +792,161 @@ class CoverLetterApp {
                 }, 3000);
     }
 
-    exportProfile() {
-        const dataStr = JSON.stringify(this.profile, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `cover-letter-profile-${new Date().toISOString().split('T')[0]}.json`;
-        link.click();
-        
-        URL.revokeObjectURL(url);
+    // Resume Upload
+    async handleResumeUpload(file) {
+        if (!file) return;
+
+        const MAX_BYTES = 20 * 1024 * 1024;
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        if (!isPdf) {
+            this.showError('Please upload a PDF file.', false);
+            return;
+        }
+        if (file.size > MAX_BYTES) {
+            this.showError('That PDF is larger than 20 MB. Please upload a smaller file.', false);
+            return;
+        }
+
+        try {
+            const buffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            const magic = String.fromCharCode(...bytes.slice(0, 5));
+            if (magic !== '%PDF-') {
+                this.showError('That file does not look like a valid PDF.', false);
+                return;
+            }
+
+            this.uploadedResume = {
+                name: file.name,
+                size: file.size,
+                uploadedAt: new Date().toISOString(),
+                dataBase64: this.bytesToBase64(bytes)
+            };
+            await this.saveUploadedResume();
+            this.renderUploadedResume();
+
+            await this.autofillFromResume(buffer);
+        } catch (error) {
+            console.error('Resume upload error:', error);
+            this.showError(`Failed to upload resume: ${error.message}`);
+        }
     }
 
-    async importProfile(file) {
-        if (!file) return;
-        
-        try {
-            const text = await file.text();
-            const importedProfile = JSON.parse(text);
-            
-            // Validate profile structure
-            if (typeof importedProfile === 'object') {
-                this.profile = { ...this.profile, ...importedProfile };
-                this.renderProfile();
-                this.saveData();
-                this.showStatus('Profile imported successfully!', 'success');
-                setTimeout(() => {
-                    const statusEl = document.getElementById('generation-status');
-                    if (statusEl) {
-                        statusEl.textContent = '';
-                    }
-                }, 3000);
-            } else {
-                throw new Error('Invalid profile format');
-            }
-        } catch (error) {
-            this.showError('Failed to import profile. Please check the file format.');
+    // Parse the uploaded PDF and fold the result into the profile additively.
+    async autofillFromResume(buffer) {
+        if (typeof pdfjsLib === 'undefined' || typeof ResumeParser === 'undefined' || typeof ProfileMerge === 'undefined') {
+            this.showProfileStatus('Resume uploaded (parser unavailable).', 'success');
+            return;
         }
+
+        this.showProfileStatus('Reading your resume…', 'loading');
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+                ? chrome.runtime.getURL('pdf.worker.min.js')
+                : 'pdf.worker.min.js';
+
+        const { profile: parsed, meta } = await ResumeParser.parse(pdfjsLib, buffer);
+        const { profile, report } = ProfileMerge.merge(this.profile, parsed);
+        this.profile = profile;
+        this.lastParseMeta = meta;
+
+        this.renderProfile();
+        await this.saveData();
+
+        this.showProfileStatus(this.describeMergeReport(report, meta), 'success');
+        if (meta.warnings.length) {
+            console.warn('Resume parser warnings:', meta.warnings);
+        }
+    }
+
+    describeMergeReport(report, meta) {
+        const parts = [];
+        const count = (label, r) => {
+            if (!r) return;
+            const bits = [];
+            if (r.added) bits.push(`${r.added} new`);
+            if (r.updated) bits.push(`${r.updated} updated`);
+            if (bits.length) parts.push(`${label}: ${bits.join(', ')}`);
+        };
+        count('skills', report.skills);
+        count('education', report.education);
+        count('experience', report.experiences);
+        count('projects', report.projects);
+        count('extras', report.extras);
+
+        if (!parts.length) {
+            return meta.warnings.length
+                ? `Resume uploaded, but nothing could be parsed. ${meta.warnings[0]}`
+                : 'Resume uploaded. Nothing new to add — your profile already has everything.';
+        }
+        return `Resume uploaded and profile updated (${parts.join('; ')}).`;
+    }
+
+    async saveUploadedResume() {
+        try {
+            await chrome.storage.local.set({ uploadedResume: this.uploadedResume });
+        } catch (error) {
+            console.error('Error saving uploaded resume:', error);
+        }
+    }
+
+    renderUploadedResume() {
+        const chip = document.getElementById('uploaded-resume');
+        const label = document.getElementById('upload-resume-label');
+        if (!chip) return;
+
+        if (!this.uploadedResume) {
+            chip.classList.add('hidden');
+            if (label) label.textContent = 'Upload Resume';
+            return;
+        }
+
+        const nameEl = document.getElementById('uploaded-resume-name');
+        const metaEl = document.getElementById('uploaded-resume-meta');
+        if (nameEl) nameEl.textContent = this.uploadedResume.name;
+        if (metaEl) {
+            const kb = Math.max(1, Math.round((this.uploadedResume.size || 0) / 1024));
+            const date = this.uploadedResume.uploadedAt
+                ? new Date(this.uploadedResume.uploadedAt).toLocaleDateString()
+                : '';
+            metaEl.textContent = `${kb} KB${date ? ` · ${date}` : ''}`;
+        }
+        chip.classList.remove('hidden');
+        if (label) label.textContent = 'Replace Resume';
+    }
+
+    viewUploadedResume() {
+        if (!this.uploadedResume?.dataBase64) {
+            this.showError('No resume has been uploaded yet.', false);
+            return;
+        }
+        const bytes = this.base64ToBytes(this.uploadedResume.dataBase64);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+
+        if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+            chrome.tabs.create({ url });
+        } else {
+            window.open(url, '_blank');
+        }
+        // Give the new tab time to load the blob before revoking
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+    bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+    }
+
+    base64ToBytes(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
     }
 
     // Cover Letter Generation
@@ -1074,9 +1268,6 @@ class CoverLetterApp {
   try {
     const requestData = { profile: this.profile, jobText, type: 'resume' };
 
-    // DEBUG #1 — what you're sending
-    console.log('REQ.profile.education =', requestData.profile?.education);
-
     this.lastApiCall = { request: requestData, timestamp: new Date().toISOString() };
 
     const response = await fetch('http://localhost:8787/generateResume', {
@@ -1169,36 +1360,33 @@ class CoverLetterApp {
     formatResume(resumeContent) {
         // Parse the JSON resume content
         let resume;
-        let edu = {}; 
+        let eduList = [];
         try {
             resume = typeof resumeContent === 'string' ? JSON.parse(resumeContent) : resumeContent;
             console.log('Parsed resume data:', resume); // Debug log
-            // normalize education from API to a single object with consistent keys
-            const eduSrc = Array.isArray(resume.education) ? (resume.education[0] || {}) : (resume.education || {});
-            edu = {
-                school: eduSrc.school || eduSrc.university || '',
-                location: eduSrc.location || '',
-                dates: eduSrc.dates || eduSrc.graduation || eduSrc.end || '',
-                degree: eduSrc.degree || eduSrc.degreeType || '',
-                major: eduSrc.major || '',
-                minor: eduSrc.minor || '',
-                gpa: eduSrc.gpa || '',
-                honors:  eduSrc.honors || '',
-                coursework: eduSrc.coursework || ''
-            };
+
+            // Normalize education to a list of entries with consistent keys. The
+            // model may return an array or a single object; fall back to the
+            // profile's own entries when it returns nothing.
+            const fromModel = Array.isArray(resume.education)
+                ? resume.education
+                : (resume.education ? [resume.education] : []);
+            const source = fromModel.length ? fromModel : (this.profile.education || []);
+            eduList = source.map(e => ({
+                school: e.school || e.university || e.institution || '',
+                location: e.location || '',
+                dates: e.dates || e.graduation || (e.start && e.end ? `${e.start} - ${e.end}` : e.end || ''),
+                degree: e.degree || e.degreeType || '',
+                major: e.major || '',
+                minor: e.minor || '',
+                gpa: e.gpa || '',
+                honors: e.honors || '',
+                coursework: e.coursework || ''
+            })).filter(e => e.school || e.degree);
         } catch (error) {
             console.error('Error parsing resume content:', error);
             return `<p style="color: red;">Error formatting resume content</p>`;
         }
-
-        console.log('EDU FINAL ->',
-            'school:', edu.school,
-            'degree:', edu.degree,
-            'major:', edu.major,
-            'dates:', edu.dates,
-            'gpa:', edu.gpa,
-            'PROFILE EDU:', this.profile?.education
-        );
 
 
         // Single-source rendering with exact measurements for pixel-perfect preview/PDF match
@@ -1261,7 +1449,8 @@ class CoverLetterApp {
 
                
 
-                                <!-- Education Section -->
+                <!-- Education Section -->
+                ${eduList.length > 0 ? `
                 <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
                 <h2 style="
                     margin: 0 0 0.4em 0;
@@ -1271,72 +1460,27 @@ class CoverLetterApp {
                     border-bottom: 1pt solid #000;
                     padding-bottom: 2pt;
                 ">EDUCATION & HONORS</h2>
-
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                    ${(edu.school || this.profile.education?.university || '')}
-                    ${(edu.location || this.profile.location)
-                        ? ` – ${(edu.location || this.profile.location)}`
-                        : ''}
-                    </span>
-                    <span style="font-size: ${contactFontSize};">
-                    ${
-                        (edu.dates || this.profile.education?.end)
-                        ? `Graduation Date: ${(edu.dates || this.profile.education?.end)}`
-                        : ''
-                    }
-                    </span>
-                </div>
-
-                ${
-                    (edu.degree || this.profile.education?.degreeType)
-                    ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">
-                            ${(edu.degree || this.profile.education?.degreeType)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.major || this.profile.education?.major)
-                    ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">
-                            Major: ${(edu.major || this.profile.education?.major)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.minor || this.profile.education?.minor)
-                    ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">
-                            Minor: ${(edu.minor || this.profile.education?.minor)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.gpa || this.profile.education?.gpa)
-                    ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">
-                            GPA: ${(edu.gpa || this.profile.education?.gpa)}
-                        </div>`
-                    : ''
-                }
-
-                ${
-                    (edu.honors || this.profile.education?.honors || edu.coursework || this.profile.education?.coursework)
-                    ? `<div style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
-                            ${
-                            (edu.honors || this.profile.education?.honors)
-                                ? `• ${(edu.honors || this.profile.education?.honors)}<br>`
-                                : ''
-                            }
-                            ${
-                            (edu.coursework || this.profile.education?.coursework)
-                                ? `• Relevant Coursework: ${(edu.coursework || this.profile.education?.coursework)}`
-                                : ''
-                            }
-                        </div>`
-                    : ''
-                }
-                </div>
+                ${eduList.map(edu => `
+                <div class="education-entry" style="margin-bottom: ${entrySpacing};">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span style="font-size: ${contactFontSize}; font-weight: bold;">
+                        ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
+                        </span>
+                        <span style="font-size: ${contactFontSize};">
+                        ${edu.dates ? `Graduation Date: ${edu.dates}` : ''}
+                        </span>
+                    </div>
+                    ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
+                    ${edu.major ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Major: ${edu.major}</div>` : ''}
+                    ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
+                    ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
+                    ${(edu.honors || edu.coursework) ? `
+                    <div style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
+                        ${edu.honors ? `• ${edu.honors}<br>` : ''}
+                        ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
+                    </div>` : ''}
+                </div>`).join('')}
+                </div>` : ''}
 
 
 

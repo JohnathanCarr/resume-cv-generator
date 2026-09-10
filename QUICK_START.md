@@ -34,7 +34,7 @@
 5. Click the extension icon!
 
 ## 🎯 Generate Documents
-1. **Fill your profile** (one-time setup)
+1. **Upload your resume** (PDF) to autofill your profile, then review it
 2. **Paste job description** in Generate tab
 3. **Choose document type**:
    - **Generate Cover Letter** → Strategic business pitch
@@ -44,7 +44,7 @@
 ## 🎛️ Pro Features
 - **Mark "Must Include"** on experiences/projects for resumes
 - **Classify extras** as Research/Program/Certification
-- **Export/Import** profile data for backup
+- **Upload a new resume** any time — new items are added, nothing is removed
 - **Instant downloads** - no print dialogs
 
 ---

@@ -83,6 +83,40 @@ function trimResumeForOnePage(resume) {
   return resume;
 }
 
+// profile.education is an array of institutions (older saves may still send
+// a single object); render every entry as one line for the prompts.
+function formatEducation(profile) {
+  const list = Array.isArray(profile.education)
+    ? profile.education
+    : (profile.education && typeof profile.education === 'object' ? [profile.education] : []);
+  const lines = list.map(edu => {
+    const school = edu.institution || edu.university || '';
+    const degree = [edu.degreeType, edu.major ? `in ${edu.major}` : ''].filter(Boolean).join(' ');
+    let line = [degree, school].filter(Boolean).join(', ') || 'Not specified';
+    if (edu.location) line += ` (${edu.location})`;
+    if (edu.start && edu.end) line += ` ${edu.start} - ${edu.end}`;
+    else if (edu.end) line += ` ${edu.end}`;
+    if (edu.minor) line += `; Minor: ${edu.minor}`;
+    if (edu.gpa) line += `; GPA: ${edu.gpa}`;
+    if (edu.honors) line += `; Honors: ${edu.honors}`;
+    if (edu.coursework) line += `; Coursework: ${edu.coursework}`;
+    return line;
+  });
+  return lines.length ? lines.join('\n') : 'Not specified';
+}
+
+function formatExtras(profile) {
+  if (!Array.isArray(profile.extras) || !profile.extras.length) return 'None';
+  return profile.extras.map(extra => {
+    let line = `[${extra.type || 'other'}] ${extra.title || ''}`;
+    if (extra.organization) line += ` at ${extra.organization}`;
+    if (extra.start && extra.end) line += ` (${extra.start} - ${extra.end})`;
+    else if (extra.end) line += ` (${extra.end})`;
+    if (extra.description) line += `\nDescription: ${extra.description}`;
+    return line;
+  }).join('\n\n');
+}
+
 
 
 // Resume generation endpoint
@@ -145,7 +179,9 @@ ${jobText}
 CANDIDATE PROFILE:
 Name: ${profile.name}
 Location: ${profile.location || 'Not specified'}
-Education: ${profile.education?.degreeType || ''} ${profile.education?.major || ''}, ${profile.education?.university || 'Not specified'}${profile.education?.start && profile.education?.end ? ` (${profile.education.start} - ${profile.education.end})` : ''}${profile.education?.gpa ? `, GPA: ${profile.education.gpa}` : ''}
+Summary (adapt to the role; do not copy verbatim): ${profile.summary || 'None provided'}
+Education (one line per institution; include every institution):
+${formatEducation(profile)}
 
 Skills: ${profile.skills ? profile.skills.join(', ') : 'None listed'}
 
@@ -167,27 +203,33 @@ ${profile.projects ? profile.projects.map(proj => {
   return s;
 }).join('\n\n') : 'None listed'}
 
-Programs/Certifications (if any):
-${Array.isArray(profile.programs) && profile.programs.length ? profile.programs.join('\n') : 'None'}
+Additional experience (research, programs, certifications, awards, publications, leadership, volunteering):
+${formatExtras(profile)}
 
 OUTPUT JSON (omit a section key if you have no content for it):
 {
   "summary": "short headline/tagline (one line)",
   "skills": ["up to 4 categorized lines"],
-  "education": {
-    "degree": "...",
-    "school": "...",
-    "location": "...",
-    "dates": "...",
-    "gpa": "..."
-  },
+  "education": [
+    {
+      "school": "...",
+      "degree": "...",
+      "major": "...",
+      "minor": "optional",
+      "location": "...",
+      "dates": "...",
+      "gpa": "optional",
+      "honors": "optional",
+      "coursework": "optional, 3-6 relevant courses"
+    }
+  ],
   "experience": [
     { "title": "...", "company": "...", "dates": "...", "location": "...", "bullets": ["...","...","..."] }
   ],
   "projects": [
     { "name": "...", "link": "optional", "bullets": ["...","..."] }
   ],
-  "programs": ["only include if actually provided in profile"]
+  "programs": ["only include if the profile lists additional experience; one line each, e.g. 'AWS Solutions Architect – Associate (2024)'"]
 }`;
 
 
@@ -214,8 +256,8 @@ OUTPUT JSON (omit a section key if you have no content for it):
     let parsedResponse;
     try {
       parsedResponse = JSON.parse(responseContent);
-      // Drop Programs if user didn't provide any; never fabricate
-      const userProvidedPrograms = Array.isArray(profile.programs) && profile.programs.length > 0;
+      // Drop Programs if user didn't provide any additional experience; never fabricate
+      const userProvidedPrograms = Array.isArray(profile.extras) && profile.extras.length > 0;
       if (!userProvidedPrograms && 'programs' in parsedResponse) {
         delete parsedResponse.programs;
       }
@@ -341,7 +383,9 @@ ${jobText}
 My Profile:
 Name: ${profile.name}
 Contact: ${profile.contact}
-Education: ${profile.education?.degreeType || ''} ${profile.education?.major || ''}, ${profile.education?.university || 'Not specified'}${profile.education?.start && profile.education?.end ? ` (${profile.education.start} - ${profile.education.end})` : ''}${profile.education?.gpa ? `, GPA: ${profile.education.gpa}` : ''}
+Summary: ${profile.summary || 'None provided'}
+Education:
+${formatEducation(profile)}
 Skills: ${profile.skills ? profile.skills.join(', ') : 'None listed'}
 
 Work Experience: ${profile.experiences ? profile.experiences.map(exp => {

@@ -76,7 +76,29 @@
                 
                 <!-- Personal Information Section -->
                 <section class="section glass glass-shimmer">
-                    <h2>Personal Information</h2>
+                    <h2>
+                        Personal Information
+                        <button id="upload-resume" class="btn btn-secondary btn-sm btn-ripple header-action">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <span id="upload-resume-label">Upload Resume</span>
+                        </button>
+                    </h2>
+                    <input type="file" id="resume-file" accept=".pdf,application/pdf" style="display: none;">
+                    
+                    <div id="uploaded-resume" class="uploaded-resume hidden">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <span id="uploaded-resume-name" class="uploaded-resume-name"></span>
+                        <span id="uploaded-resume-meta" class="uploaded-resume-meta"></span>
+                        <button id="view-resume" class="btn btn-secondary btn-sm btn-ripple">View</button>
+                    </div>
+                    <div id="profile-status" class="status-message hidden"></div>
                     
                     <div class="form-group">
                         <label for="profile-name">Full Name</label>
@@ -94,25 +116,24 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>Education</label>
-                        <input type="text" id="profile-university" placeholder="University Name (e.g., Stanford University)">
-                        
-                        <div class="input-row input-row-2">
-                            <input type="text" id="profile-degree-type" placeholder="Degree Type (e.g., Bachelor of Science)">
-                            <input type="text" id="profile-major" placeholder="Major (e.g., Computer Science)">
-                        </div>
-                        
-                        <div class="input-row input-row-3">
-                            <input type="text" id="profile-education-start" placeholder="Start Year">
-                            <input type="text" id="profile-education-end" placeholder="End Year">
-                            <input type="text" id="profile-education-gpa" placeholder="GPA (e.g., 3.8/4.0)">
-                        </div>
-                        
-                        <div class="input-row input-row-2">
-                            <input type="text" id="profile-education-honors" placeholder="Honors (e.g., Dean's List, Magna Cum Laude)">
-                            <input type="text" id="profile-education-coursework" placeholder="Relevant Coursework">
-                        </div>
+                        <label for="profile-summary">Professional Summary</label>
+                        <textarea id="profile-summary" rows="3" placeholder="A short summary or objective (optional). Used as the headline on generated resumes."></textarea>
                     </div>
+                </section>
+
+                <!-- Education Section -->
+                <section class="section glass glass-shimmer">
+                    <h2>Education</h2>
+                    <p class="section-description">Add each institution you attended. Degrees, honors, and coursework are used to tailor your resume.</p>
+                    
+                    <button id="add-education" class="btn btn-secondary btn-ripple">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add Education
+                    </button>
+                    <div id="education-container"></div>
                 </section>
 
                 <!-- Skills Section -->
@@ -159,7 +180,7 @@
                 <!-- Additional Experience Section -->
                 <section class="section glass glass-shimmer">
                     <h2>Additional Experience</h2>
-                    <p class="section-description">Research, certifications, publications, awards, and other achievements.</p>
+                    <p class="section-description">Research, certifications, awards, publications, leadership, volunteering, and other achievements.</p>
                     
                     <button id="add-extra" class="btn btn-secondary btn-ripple">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -182,26 +203,6 @@
                             </svg>
                             Save Profile
                         </button>
-                        
-                        <button id="import-profile" class="btn btn-secondary btn-ripple">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
-                            Import JSON
-                        </button>
-                        
-                        <button id="export-profile" class="btn btn-secondary btn-ripple">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Export JSON
-                        </button>
-                        
-                        <input type="file" id="import-file" accept=".json" style="display: none;">
                     </div>
                 </section>
             </div>
@@ -362,6 +363,9 @@
 
     <!-- Scripts -->
     <script src="jspdf.min.js"></script>
+    <script src="pdf.min.js"></script>
+    <script src="resumeParser.js"></script>
+    <script src="profileMerge.js"></script>
     <script src="theme.js"></script>
     <script src="app.js"></script>
 </body>

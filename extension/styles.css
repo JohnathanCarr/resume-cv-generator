@@ -749,6 +749,11 @@ body {
     backdrop-filter: blur(10px);
 }
 
+/* Space between a section's "+ Add ___" button and the list beneath it */
+.section > .btn-secondary {
+    margin-bottom: var(--space-md);
+}
+
 .btn-secondary:hover:not(:disabled) {
     background: var(--glass-bg-floating);
     border-color: var(--accent-primary);
@@ -916,7 +921,11 @@ body {
 }
 
 .card-title input,
-.card-title textarea {
+.card-title textarea,
+.card-title select {
+    /* Form controls don't inherit color/font from their parent; set both explicitly */
+    color: var(--text-primary);
+    font-family: var(--font-body);
     background: var(--input-bg);
     border: 1px solid var(--input-border);
     border-radius: var(--radius-md);
@@ -925,8 +934,14 @@ body {
     transition: all var(--transition-medium);
 }
 
+.card-title input::placeholder,
+.card-title textarea::placeholder {
+    color: var(--text-tertiary);
+}
+
 .card-title input:focus,
-.card-title textarea:focus {
+.card-title textarea:focus,
+.card-title select:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px var(--accent-primary-glow);
 }
@@ -992,10 +1007,16 @@ body {
     flex: 1;
     padding: 0.625rem 0.875rem;
     font-size: 0.875rem;
+    color: var(--text-primary);
+    font-family: var(--font-body);
     background: var(--input-bg);
     border: 1px solid var(--input-border);
     border-radius: var(--radius-md);
     transition: all var(--transition-medium);
+}
+
+.bullet-item input::placeholder {
+    color: var(--text-tertiary);
 }
 
 .bullet-item input:focus {

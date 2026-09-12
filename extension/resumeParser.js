@@ -16,7 +16,8 @@
 
     const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
     const YEAR = '(?:19|20)\\d{2}';
-    const DATE = `(?:${MONTH}\\s+${YEAR}|\\d{1,2}\\/${YEAR}|${YEAR})`;
+    const SEASON = '(?:Spring|Summer|Fall|Autumn|Winter)';
+    const DATE = `(?:${MONTH}\\s+${YEAR}|${SEASON}\\s+${YEAR}|\\d{1,2}\\/${YEAR}|${YEAR})`;
     const DATE_END = `(?:${DATE}|Present|Current|Now|Ongoing|Today)`;
     const DATE_RANGE_RE = new RegExp(`(${DATE})\\s*(?:-|–|—|to|through|until)\\s*(${DATE_END})`, 'i');
     const SINGLE_DATE_RE = new RegExp(`(?:(?:Expected|Anticipated|Graduated|Graduating|Graduation(?:\\s+Date)?|Class\\s+of)\\s*:?\\s*)?(${DATE})`, 'i');
@@ -34,6 +35,8 @@
     const REMOTE_RE = /\b(Remote|Hybrid|On-site|Onsite)\b/i;
 
     const BULLET_CHARS = /^[•●◦▪▫■□‣○◆◇➢➤►▶\-–—*·]\s*/;
+    const DANGLING_YEAR_RE = new RegExp(`^${YEAR}$`);
+    const ENDS_WITH_PERIOD_WORD_RE = new RegExp(`(?:${MONTH}|${SEASON})$`, 'i');
     const SEPARATOR_RE = /\s*(?:\||•|·|\s[–—]\s|\s-\s)\s*/;
 
     const DEGREE_RE = /\b(Bachelor(?:'s)?(?:\s+of\s+[A-Za-z]+)?|Master(?:'s)?(?:\s+of\s+[A-Za-z]+)?|Doctor(?:ate)?(?:\s+of\s+[A-Za-z]+)?|Associate(?:'s)?(?:\s+of\s+[A-Za-z]+)?|B\.?S\.?(?:c\.?)?|B\.?A\.?|B\.?Eng\.?|B\.?B\.?A\.?|B\.?F\.?A\.?|M\.?S\.?(?:c\.?)?|M\.?A\.?|M\.?Eng\.?|M\.?B\.?A\.?|M\.?F\.?A\.?|Ph\.?D\.?|A\.?A\.?|A\.?S\.?|J\.?D\.?|M\.?D\.?)(?![A-Za-z])/;
@@ -53,7 +56,7 @@
 
     const SECTION_SYNONYMS = {
         summary: ['summary', 'professional summary', 'career summary', 'profile', 'professional profile', 'objective', 'career objective', 'about', 'about me', 'overview'],
-        skills: ['skills', 'technical skills', 'core skills', 'key skills', 'skills and interests', 'skills and expertise', 'technical expertise', 'technologies', 'tools and technologies', 'core competencies', 'competencies', 'areas of expertise', 'technical proficiencies', 'proficiencies', 'languages and tools', 'skills summary', 'skills and tools', 'tech stack'],
+        skills: ['skills', 'technical skills', 'core skills', 'key skills', 'skills and interests', 'skills and expertise', 'technical expertise', 'technologies', 'tools and technologies', 'core competencies', 'competencies', 'areas of expertise', 'expertise', 'technical proficiencies', 'proficiencies', 'languages and tools', 'skills summary', 'skills and tools', 'tech stack', 'technical stack', 'qualifications', 'technical qualifications', 'technical summary', 'technical profile', 'technical competencies', 'technical background', 'computer skills', 'programming skills', 'software skills', 'skills and technologies', 'technical skills and tools', 'toolbox', 'technologies and tools'],
         education: ['education', 'education and honors', 'education and training', 'academic background', 'academics', 'academic history', 'educational background', 'education and certifications'],
         experience: ['experience', 'work experience', 'professional experience', 'employment', 'employment history', 'work history', 'career history', 'relevant experience', 'professional background', 'internships', 'internship experience', 'industry experience', 'experience and internships'],
         projects: ['projects', 'personal projects', 'technical projects', 'selected projects', 'academic projects', 'key projects', 'project experience', 'projects and research', 'notable projects', 'software projects', 'portfolio'],
@@ -79,7 +82,10 @@
     // Joins a wrapped continuation onto the previous text, re-attaching hyphenated breaks.
     const joinWrapped = (prev, next) => /\w-$/.test(prev) ? prev + next : `${prev} ${next}`;
     const endsSentence = (s) => /[.!?]["')\]]?$/.test(clean(s));
-    const stripTrailingPunct = (s) => clean(s).replace(/[\s,;:|•·–—-]+$/g, '').replace(/^[\s,;:|•·–—-]+/g, '');
+    // Also drops "( )" / "[]" left behind when a date or location was pulled out of brackets.
+    const stripTrailingPunct = (s) => clean(String(s || '').replace(/[(\[]\s*[)\]]/g, ' '))
+        .replace(/[\s,;:|•·–—-]+$/g, '')
+        .replace(/^[\s,;:|•·–—-]+/g, '');
     const normalizeHeading = (s) => clean(s).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     const isAllCaps = (s) => /[A-Z]/.test(s) && s === s.toUpperCase();
     const wordCount = (s) => clean(s).split(' ').filter(Boolean).length;
@@ -233,7 +239,7 @@
 
         // Unknown but heading-shaped: all caps, bold, at the left margin.
         if (!known && isAllCaps(raw) && line.bold && line.x <= leftMargin + 2 && wordCount(raw) <= 4) {
-            return 'program';
+            return 'unknown';
         }
         return null;
     }
@@ -384,6 +390,10 @@
                 newEntry(line);
             } else if (opts.boldStartsEntry && line.bold && entry.header.length >= 1 && !hasDate) {
                 newEntry(line);
+            } else if (DANGLING_YEAR_RE.test(line.text) && entry.header.length && ENDS_WITH_PERIOD_WORD_RE.test(entry.header[entry.header.length - 1].text)) {
+                // Right-aligned "Spring 2025" wrapped so that "2025" fell onto its own line.
+                const last = entry.header[entry.header.length - 1];
+                entry.header[entry.header.length - 1] = { ...last, text: `${last.text} ${line.text}` };
             } else if (entry.header.length < maxHeader) {
                 entry.header.push(line);
             } else {
@@ -401,12 +411,21 @@
         return { start: '', end: '', rest: clean(text) };
     }
 
+    // Pulls "City, ST" and/or a Remote/Hybrid marker (bare or in parentheses)
+    // out of the text: "Bear Creek AI, (Remote) – Birmingham, AL" →
+    // location "Birmingham, AL (Remote)", rest "Bear Creek AI".
     function extractLocation(text) {
-        const loc = matchLocation(text);
-        if (loc) return { location: clean(loc[0]), rest: clean(text.replace(loc[0], ' ')) };
-        const rem = text.match(REMOTE_RE);
-        if (rem) return { location: clean(rem[0]), rest: clean(text.replace(REMOTE_RE, ' ')) };
-        return { location: '', rest: clean(text) };
+        let rest = text;
+        let location = '';
+        const loc = matchLocation(rest);
+        if (loc) { location = clean(loc[0]); rest = rest.replace(loc[0], ' '); }
+        const remote = rest.match(new RegExp(`\\(?\\s*${REMOTE_RE.source}\\s*\\)?`, 'i'));
+        if (remote) {
+            const tag = clean(remote[0].replace(/[()]/g, ''));
+            location = location ? `${location} (${tag})` : tag;
+            rest = rest.replace(remote[0], ' ');
+        }
+        return { location, rest: stripTrailingPunct(rest) };
     }
 
     function splitPieces(text) {
@@ -487,8 +506,11 @@
             if (!pieces.length) continue;
             const name = pieces[0];
             const tail = pieces.slice(1);
-            const extraHeader = e.header.slice(1).map(l => extractDates(l.text).rest);
-            const description = clean([...tail, ...extraHeader, ...e.body].join(' | '));
+            // Projects have no date fields, so keep any date in the description.
+            const dates = [d.start, d.end].filter(Boolean).join(' - ');
+            const extraHeader = e.header.slice(1).map(l => l.text);
+            const description = [...tail, ...extraHeader, dates, ...e.body]
+                .map(stripTrailingPunct).filter(Boolean).join(' | ');
             out.push({
                 name: stripTrailingPunct(name),
                 description,
@@ -582,6 +604,64 @@
         return out;
     }
 
+    // Lower-case technology names that would otherwise fail the
+    // "looks like a proper noun" test when extracting skills from prose.
+    const KNOWN_SKILLS = new Set([
+        'python', 'java', 'javascript', 'typescript', 'c', 'c++', 'c#', 'go', 'golang', 'rust', 'ruby', 'php',
+        'swift', 'kotlin', 'scala', 'r', 'matlab', 'sql', 'nosql', 'html', 'css', 'sass', 'bash', 'shell',
+        'powershell', 'react', 'react native', 'angular', 'vue', 'svelte', 'next.js', 'nextjs', 'node', 'node.js',
+        'nodejs', 'express', 'django', 'flask', 'fastapi', 'spring', 'spring boot', 'rails', 'laravel', '.net',
+        'asp.net', 'graphql', 'rest', 'grpc', 'docker', 'kubernetes', 'k8s', 'terraform', 'ansible', 'jenkins',
+        'git', 'github', 'gitlab', 'bitbucket', 'ci/cd', 'aws', 'azure', 'gcp', 'linux', 'unix', 'macos', 'nginx',
+        'postgresql', 'postgres', 'mysql', 'sqlite', 'mongodb', 'redis', 'elasticsearch', 'dynamodb', 'firebase',
+        'supabase', 'kafka', 'rabbitmq', 'spark', 'hadoop', 'airflow', 'pandas', 'numpy', 'scipy', 'matplotlib',
+        'seaborn', 'scikit-learn', 'sklearn', 'tensorflow', 'pytorch', 'keras', 'opencv', 'nltk', 'spacy',
+        'huggingface', 'langchain', 'llamaindex', 'openai', 'pinecone', 'weaviate', 'chromadb', 'tableau',
+        'power bi', 'excel', 'jira', 'confluence', 'figma', 'agile', 'scrum', 'kanban', 'tdd', 'jest', 'pytest',
+        'cypress', 'selenium', 'playwright', 'puppeteer', 'webpack', 'vite', 'babel', 'npm', 'yarn', 'pnpm',
+        'gradle', 'maven', 'xcode', 'android studio', 'intellij', 'vs code', 'jupyter', 'streamlit', 'gradio'
+    ]);
+
+    // Skill sections come in two shapes: plain lists ("Git, Docker, AWS") and
+    // prose ("Designed pipelines using OpenAI embeddings, Pinecone, and
+    // LangChain"). Lists split cleanly on delimiters; prose needs the verb
+    // phrases stripped and only named technologies kept.
+    const SKILL_PROSE_RE = /\b(designed|built|shipped|owned|developed|implemented|evaluated|engineered|created|led|managed|maintained|deployed|delivered|using|including|spanning|across|leveraging|utilizing)\b/i;
+    const SKILL_VERB_LEAD_RE = /^(?:designed|built|shipped|owned|developed|implemented|evaluated|engineered|created|led|managed|maintained|deployed|delivered|extensive|strong|solid|hands-on|worked|working)\b/i;
+    const SKILL_TAIL_RE = /\b(?:using|with|across|in|via|on|including|through|leveraging|utilizing|of)\s+([A-Z][\w.+#/ -]*|[a-z][\w.+#-]*)$/;
+
+    function looksLikeSkill(item) {
+        if (!item || item.length > 40 || wordCount(item) > 4) return false;
+        const lower = item.toLowerCase();
+        if (KNOWN_SKILLS.has(lower)) return true;
+        if (SKILL_VERB_LEAD_RE.test(item)) return false;
+        if (/^[A-Z0-9]/.test(item)) return true;                 // Proper noun / acronym
+        if (wordCount(item) === 1 && /[./+#-]/.test(item)) return true; // scikit-learn, node.js, c++
+        return false;
+    }
+
+    // Join wrapped lines into one string per bullet / category line.
+    function joinSkillLines(lines) {
+        const items = [];
+        const leftX = Math.min(...lines.map(l => l.x));
+        let prev = null;
+        for (const line of lines) {
+            const explicitBullet = BULLET_CHARS.test(line.text);
+            const hasLabel = /^[A-Za-z][\w\/&()' -]{1,40}:\s/.test(stripBullet(line.text));
+            const text = stripBullet(line.text);
+            const continues = prev && !explicitBullet && !hasLabel && (
+                /^[a-z]/.test(text) || line.x > leftX + 4 || !endsSentence(prev.text)
+            );
+            if (continues) {
+                items[items.length - 1] = joinWrapped(items[items.length - 1], text);
+            } else {
+                items.push(text);
+            }
+            prev = { text };
+        }
+        return items;
+    }
+
     function parseSkills(section) {
         const skills = [];
         const seen = new Set();
@@ -592,21 +672,34 @@
         // is taken so "JavaScript Frameworks/Libs:" keeps "JavaScript".
         const CATEGORY_RE = /(?:(?:^|[,;|•·])\s*[A-Za-z][\w\/&()' -]{1,40}:\s*|\s+[A-Za-z][\w\/&()'-]{1,30}:\s*)/g;
 
-        for (const line of section.lines) {
-            let text = stripBullet(line.text);
+        const push = (item) => {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            skills.push(item);
+        };
+
+        for (let text of joinSkillLines(section.lines)) {
             // "Languages: Python, Java; Tools: Git" → drop every "Label:" prefix.
             text = text.replace(CATEGORY_RE, ', ');
             // "AWS (SQS, Lambda)" → "AWS, SQS, Lambda"
             text = text.replace(/\(([^)]*)\)/g, ', $1, ');
 
+            const prose = wordCount(text) > 10 && SKILL_PROSE_RE.test(text);
+
             for (let item of text.split(/\s*[,|•·;]\s*|\s{2,}|\s\/\s|\s+and\s+/i)) {
-                item = stripTrailingPunct(item.replace(LEAD_RE, '')).replace(/\.$/, '');
-                item = item.replace(/^\((.*)\)$/, '$1');
-                if (!item || item.length > 50 || wordCount(item) > 5) continue;
-                const key = item.toLowerCase();
-                if (seen.has(key)) continue;
-                seen.add(key);
-                skills.push(item);
+                item = item.replace(/^(?:and|or|plus)\s+/i, '').replace(LEAD_RE, '');
+                item = stripTrailingPunct(item).replace(/\.$/, '').replace(/^\((.*)\)$/, '$1');
+                if (!item) continue;
+
+                if (prose) {
+                    // "shipped production features end-to-end across React" → "React"
+                    const tail = item.match(SKILL_TAIL_RE);
+                    if (tail) item = tail[1].trim();
+                    if (looksLikeSkill(item)) push(item);
+                } else if (item.length <= 50 && wordCount(item) <= 5) {
+                    push(item);
+                }
             }
         }
         return skills;
@@ -659,6 +752,16 @@
         return out;
     }
 
+    // Short lines and/or date ranges → a list of credentials or activities;
+    // long sentence-like lines → prose we can't safely turn into entries.
+    function looksLikeEntryList(lines) {
+        if (!lines.length) return false;
+        const counts = lines.map(l => wordCount(stripBullet(l.text))).sort((a, b) => a - b);
+        const median = counts[Math.floor(counts.length / 2)];
+        const dated = lines.filter(l => DATE_RANGE_RE.test(l.text) || SINGLE_DATE_RE.test(l.text)).length;
+        return median <= 10 || dated / lines.length >= 0.5;
+    }
+
     // ── Entry point ────────────────────────────────────────────────────────
 
     async function parse(pdfjsLib, data) {
@@ -698,6 +801,17 @@
                     break;
                 case 'projects':
                     profile.projects.push(...parseProjects(section, leftMargin, rightMargin, trustEOL));
+                    break;
+                case 'unknown':
+                    // A heading we don't recognise: file it as extras only if its
+                    // lines look like short entries. Prose (e.g. a skills section
+                    // under an unusual name) would otherwise become junk extras.
+                    if (looksLikeEntryList(section.lines)) {
+                        profile.extras.push(...parseExtras({ ...section, kind: 'other' }, leftMargin, rightMargin, trustEOL));
+                        warnings.push(`Section "${section.heading}" was not recognised; its items were added to extras as "Other".`);
+                    } else {
+                        warnings.push(`Section "${section.heading}" was not recognised and was skipped. Review it manually.`);
+                    }
                     break;
                 default:
                     if (EXTRA_KINDS.has(section.kind)) {

@@ -203,7 +203,7 @@ ${profile.projects ? profile.projects.map(proj => {
   return s;
 }).join('\n\n') : 'None listed'}
 
-Additional experience (research, programs, certifications, awards, publications, leadership, volunteering):
+Certifications & achievements (certifications, awards, research, publications, leadership, volunteering, programs):
 ${formatExtras(profile)}
 
 OUTPUT JSON (omit a section key if you have no content for it):
@@ -229,7 +229,7 @@ OUTPUT JSON (omit a section key if you have no content for it):
   "projects": [
     { "name": "...", "link": "optional", "bullets": ["...","..."] }
   ],
-  "programs": ["only include if the profile lists additional experience; one line each, e.g. 'AWS Solutions Architect – Associate (2024)'"]
+  "programs": ["only include if the profile lists certifications & achievements; one line each, e.g. 'AWS Solutions Architect – Associate (2024)'"]
 }`;
 
 
@@ -256,7 +256,7 @@ OUTPUT JSON (omit a section key if you have no content for it):
     let parsedResponse;
     try {
       parsedResponse = JSON.parse(responseContent);
-      // Drop Programs if user didn't provide any additional experience; never fabricate
+      // Drop Programs if user didn't provide any certifications/achievements; never fabricate
       const userProvidedPrograms = Array.isArray(profile.extras) && profile.extras.length > 0;
       if (!userProvidedPrograms && 'programs' in parsedResponse) {
         delete parsedResponse.programs;
@@ -402,7 +402,7 @@ Projects: ${profile.projects ? profile.projects.map(proj => {
   return projStr;
 }).join('\n\n') : 'None listed'}
 
-Additional Experience: ${profile.extras ? profile.extras.map(extra => {
+Certifications & Achievements: ${profile.extras ? profile.extras.map(extra => {
   let extraStr = `${extra.title} at ${extra.organization}`;
   if (extra.start && extra.end) extraStr += ` (${extra.start} - ${extra.end})`;
   if (extra.description) extraStr += `\nDescription: ${extra.description}`;

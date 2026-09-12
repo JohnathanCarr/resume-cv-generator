@@ -88,7 +88,7 @@ Transform your job applications with AI-powered documents that sound like strate
    - Skills
    - Work experiences with achievements
    - Projects with technical details
-   - Additional experience (research, certifications, awards, publications, leadership, volunteering)
+   - Certifications & achievements (certifications, awards, research, publications, leadership, volunteering)
 
    Uploading another resume later only **adds** what is new — nothing you entered is removed.
 

@@ -51,3 +51,6 @@ debug.log
 .env.example
 .env
 .env.example
+
+# Local resume fixtures with real contact details (never commit)
+test/fixtures/local/

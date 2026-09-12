@@ -874,12 +874,13 @@ class CoverLetterApp {
         count('projects', report.projects);
         count('extras', report.extras);
 
+        const notes = meta.warnings.length ? ` ${meta.warnings.join(' ')}` : '';
         if (!parts.length) {
             return meta.warnings.length
-                ? `Resume uploaded, but nothing could be parsed. ${meta.warnings[0]}`
+                ? `Resume uploaded, but nothing could be parsed.${notes}`
                 : 'Resume uploaded. Nothing new to add — your profile already has everything.';
         }
-        return `Resume uploaded and profile updated (${parts.join('; ')}).`;
+        return `Resume uploaded and profile updated (${parts.join('; ')}).${notes}`;
     }
 
     async saveUploadedResume() {

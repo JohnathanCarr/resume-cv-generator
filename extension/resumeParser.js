@@ -239,7 +239,7 @@
 
         // Unknown but heading-shaped: all caps, bold, at the left margin.
         if (!known && isAllCaps(raw) && line.bold && line.x <= leftMargin + 2 && wordCount(raw) <= 4) {
-            return 'program';
+            return 'unknown';
         }
         return null;
     }
@@ -752,6 +752,16 @@
         return out;
     }
 
+    // Short lines and/or date ranges → a list of credentials or activities;
+    // long sentence-like lines → prose we can't safely turn into entries.
+    function looksLikeEntryList(lines) {
+        if (!lines.length) return false;
+        const counts = lines.map(l => wordCount(stripBullet(l.text))).sort((a, b) => a - b);
+        const median = counts[Math.floor(counts.length / 2)];
+        const dated = lines.filter(l => DATE_RANGE_RE.test(l.text) || SINGLE_DATE_RE.test(l.text)).length;
+        return median <= 10 || dated / lines.length >= 0.5;
+    }
+
     // ── Entry point ────────────────────────────────────────────────────────
 
     async function parse(pdfjsLib, data) {
@@ -791,6 +801,17 @@
                     break;
                 case 'projects':
                     profile.projects.push(...parseProjects(section, leftMargin, rightMargin, trustEOL));
+                    break;
+                case 'unknown':
+                    // A heading we don't recognise: file it as extras only if its
+                    // lines look like short entries. Prose (e.g. a skills section
+                    // under an unusual name) would otherwise become junk extras.
+                    if (looksLikeEntryList(section.lines)) {
+                        profile.extras.push(...parseExtras({ ...section, kind: 'other' }, leftMargin, rightMargin, trustEOL));
+                        warnings.push(`Section "${section.heading}" was not recognised; its items were added to extras as "Other".`);
+                    } else {
+                        warnings.push(`Section "${section.heading}" was not recognised and was skipped. Review it manually.`);
+                    }
                     break;
                 default:
                     if (EXTRA_KINDS.has(section.kind)) {

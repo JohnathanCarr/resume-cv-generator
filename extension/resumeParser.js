@@ -582,6 +582,64 @@
         return out;
     }
 
+    // Lower-case technology names that would otherwise fail the
+    // "looks like a proper noun" test when extracting skills from prose.
+    const KNOWN_SKILLS = new Set([
+        'python', 'java', 'javascript', 'typescript', 'c', 'c++', 'c#', 'go', 'golang', 'rust', 'ruby', 'php',
+        'swift', 'kotlin', 'scala', 'r', 'matlab', 'sql', 'nosql', 'html', 'css', 'sass', 'bash', 'shell',
+        'powershell', 'react', 'react native', 'angular', 'vue', 'svelte', 'next.js', 'nextjs', 'node', 'node.js',
+        'nodejs', 'express', 'django', 'flask', 'fastapi', 'spring', 'spring boot', 'rails', 'laravel', '.net',
+        'asp.net', 'graphql', 'rest', 'grpc', 'docker', 'kubernetes', 'k8s', 'terraform', 'ansible', 'jenkins',
+        'git', 'github', 'gitlab', 'bitbucket', 'ci/cd', 'aws', 'azure', 'gcp', 'linux', 'unix', 'macos', 'nginx',
+        'postgresql', 'postgres', 'mysql', 'sqlite', 'mongodb', 'redis', 'elasticsearch', 'dynamodb', 'firebase',
+        'supabase', 'kafka', 'rabbitmq', 'spark', 'hadoop', 'airflow', 'pandas', 'numpy', 'scipy', 'matplotlib',
+        'seaborn', 'scikit-learn', 'sklearn', 'tensorflow', 'pytorch', 'keras', 'opencv', 'nltk', 'spacy',
+        'huggingface', 'langchain', 'llamaindex', 'openai', 'pinecone', 'weaviate', 'chromadb', 'tableau',
+        'power bi', 'excel', 'jira', 'confluence', 'figma', 'agile', 'scrum', 'kanban', 'tdd', 'jest', 'pytest',
+        'cypress', 'selenium', 'playwright', 'puppeteer', 'webpack', 'vite', 'babel', 'npm', 'yarn', 'pnpm',
+        'gradle', 'maven', 'xcode', 'android studio', 'intellij', 'vs code', 'jupyter', 'streamlit', 'gradio'
+    ]);
+
+    // Skill sections come in two shapes: plain lists ("Git, Docker, AWS") and
+    // prose ("Designed pipelines using OpenAI embeddings, Pinecone, and
+    // LangChain"). Lists split cleanly on delimiters; prose needs the verb
+    // phrases stripped and only named technologies kept.
+    const SKILL_PROSE_RE = /\b(designed|built|shipped|owned|developed|implemented|evaluated|engineered|created|led|managed|maintained|deployed|delivered|using|including|spanning|across|leveraging|utilizing)\b/i;
+    const SKILL_VERB_LEAD_RE = /^(?:designed|built|shipped|owned|developed|implemented|evaluated|engineered|created|led|managed|maintained|deployed|delivered|extensive|strong|solid|hands-on|worked|working)\b/i;
+    const SKILL_TAIL_RE = /\b(?:using|with|across|in|via|on|including|through|leveraging|utilizing|of)\s+([A-Z][\w.+#/ -]*|[a-z][\w.+#-]*)$/;
+
+    function looksLikeSkill(item) {
+        if (!item || item.length > 40 || wordCount(item) > 4) return false;
+        const lower = item.toLowerCase();
+        if (KNOWN_SKILLS.has(lower)) return true;
+        if (SKILL_VERB_LEAD_RE.test(item)) return false;
+        if (/^[A-Z0-9]/.test(item)) return true;                 // Proper noun / acronym
+        if (wordCount(item) === 1 && /[./+#-]/.test(item)) return true; // scikit-learn, node.js, c++
+        return false;
+    }
+
+    // Join wrapped lines into one string per bullet / category line.
+    function joinSkillLines(lines) {
+        const items = [];
+        const leftX = Math.min(...lines.map(l => l.x));
+        let prev = null;
+        for (const line of lines) {
+            const explicitBullet = BULLET_CHARS.test(line.text);
+            const hasLabel = /^[A-Za-z][\w\/&()' -]{1,40}:\s/.test(stripBullet(line.text));
+            const text = stripBullet(line.text);
+            const continues = prev && !explicitBullet && !hasLabel && (
+                /^[a-z]/.test(text) || line.x > leftX + 4 || !endsSentence(prev.text)
+            );
+            if (continues) {
+                items[items.length - 1] = joinWrapped(items[items.length - 1], text);
+            } else {
+                items.push(text);
+            }
+            prev = { text };
+        }
+        return items;
+    }
+
     function parseSkills(section) {
         const skills = [];
         const seen = new Set();
@@ -592,21 +650,34 @@
         // is taken so "JavaScript Frameworks/Libs:" keeps "JavaScript".
         const CATEGORY_RE = /(?:(?:^|[,;|•·])\s*[A-Za-z][\w\/&()' -]{1,40}:\s*|\s+[A-Za-z][\w\/&()'-]{1,30}:\s*)/g;
 
-        for (const line of section.lines) {
-            let text = stripBullet(line.text);
+        const push = (item) => {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            skills.push(item);
+        };
+
+        for (let text of joinSkillLines(section.lines)) {
             // "Languages: Python, Java; Tools: Git" → drop every "Label:" prefix.
             text = text.replace(CATEGORY_RE, ', ');
             // "AWS (SQS, Lambda)" → "AWS, SQS, Lambda"
             text = text.replace(/\(([^)]*)\)/g, ', $1, ');
 
+            const prose = wordCount(text) > 10 && SKILL_PROSE_RE.test(text);
+
             for (let item of text.split(/\s*[,|•·;]\s*|\s{2,}|\s\/\s|\s+and\s+/i)) {
-                item = stripTrailingPunct(item.replace(LEAD_RE, '')).replace(/\.$/, '');
-                item = item.replace(/^\((.*)\)$/, '$1');
-                if (!item || item.length > 50 || wordCount(item) > 5) continue;
-                const key = item.toLowerCase();
-                if (seen.has(key)) continue;
-                seen.add(key);
-                skills.push(item);
+                item = item.replace(/^(?:and|or|plus)\s+/i, '').replace(LEAD_RE, '');
+                item = stripTrailingPunct(item).replace(/\.$/, '').replace(/^\((.*)\)$/, '$1');
+                if (!item) continue;
+
+                if (prose) {
+                    // "shipped production features end-to-end across React" → "React"
+                    const tail = item.match(SKILL_TAIL_RE);
+                    if (tail) item = tail[1].trim();
+                    if (looksLikeSkill(item)) push(item);
+                } else if (item.length <= 50 && wordCount(item) <= 5) {
+                    push(item);
+                }
             }
         }
         return skills;

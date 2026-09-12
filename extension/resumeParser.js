@@ -16,7 +16,8 @@
 
     const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
     const YEAR = '(?:19|20)\\d{2}';
-    const DATE = `(?:${MONTH}\\s+${YEAR}|\\d{1,2}\\/${YEAR}|${YEAR})`;
+    const SEASON = '(?:Spring|Summer|Fall|Autumn|Winter)';
+    const DATE = `(?:${MONTH}\\s+${YEAR}|${SEASON}\\s+${YEAR}|\\d{1,2}\\/${YEAR}|${YEAR})`;
     const DATE_END = `(?:${DATE}|Present|Current|Now|Ongoing|Today)`;
     const DATE_RANGE_RE = new RegExp(`(${DATE})\\s*(?:-|–|—|to|through|until)\\s*(${DATE_END})`, 'i');
     const SINGLE_DATE_RE = new RegExp(`(?:(?:Expected|Anticipated|Graduated|Graduating|Graduation(?:\\s+Date)?|Class\\s+of)\\s*:?\\s*)?(${DATE})`, 'i');
@@ -34,6 +35,8 @@
     const REMOTE_RE = /\b(Remote|Hybrid|On-site|Onsite)\b/i;
 
     const BULLET_CHARS = /^[•●◦▪▫■□‣○◆◇➢➤►▶\-–—*·]\s*/;
+    const DANGLING_YEAR_RE = new RegExp(`^${YEAR}$`);
+    const ENDS_WITH_PERIOD_WORD_RE = new RegExp(`(?:${MONTH}|${SEASON})$`, 'i');
     const SEPARATOR_RE = /\s*(?:\||•|·|\s[–—]\s|\s-\s)\s*/;
 
     const DEGREE_RE = /\b(Bachelor(?:'s)?(?:\s+of\s+[A-Za-z]+)?|Master(?:'s)?(?:\s+of\s+[A-Za-z]+)?|Doctor(?:ate)?(?:\s+of\s+[A-Za-z]+)?|Associate(?:'s)?(?:\s+of\s+[A-Za-z]+)?|B\.?S\.?(?:c\.?)?|B\.?A\.?|B\.?Eng\.?|B\.?B\.?A\.?|B\.?F\.?A\.?|M\.?S\.?(?:c\.?)?|M\.?A\.?|M\.?Eng\.?|M\.?B\.?A\.?|M\.?F\.?A\.?|Ph\.?D\.?|A\.?A\.?|A\.?S\.?|J\.?D\.?|M\.?D\.?)(?![A-Za-z])/;
@@ -79,7 +82,10 @@
     // Joins a wrapped continuation onto the previous text, re-attaching hyphenated breaks.
     const joinWrapped = (prev, next) => /\w-$/.test(prev) ? prev + next : `${prev} ${next}`;
     const endsSentence = (s) => /[.!?]["')\]]?$/.test(clean(s));
-    const stripTrailingPunct = (s) => clean(s).replace(/[\s,;:|•·–—-]+$/g, '').replace(/^[\s,;:|•·–—-]+/g, '');
+    // Also drops "( )" / "[]" left behind when a date or location was pulled out of brackets.
+    const stripTrailingPunct = (s) => clean(String(s || '').replace(/[(\[]\s*[)\]]/g, ' '))
+        .replace(/[\s,;:|•·–—-]+$/g, '')
+        .replace(/^[\s,;:|•·–—-]+/g, '');
     const normalizeHeading = (s) => clean(s).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     const isAllCaps = (s) => /[A-Z]/.test(s) && s === s.toUpperCase();
     const wordCount = (s) => clean(s).split(' ').filter(Boolean).length;
@@ -384,6 +390,10 @@
                 newEntry(line);
             } else if (opts.boldStartsEntry && line.bold && entry.header.length >= 1 && !hasDate) {
                 newEntry(line);
+            } else if (DANGLING_YEAR_RE.test(line.text) && entry.header.length && ENDS_WITH_PERIOD_WORD_RE.test(entry.header[entry.header.length - 1].text)) {
+                // Right-aligned "Spring 2025" wrapped so that "2025" fell onto its own line.
+                const last = entry.header[entry.header.length - 1];
+                entry.header[entry.header.length - 1] = { ...last, text: `${last.text} ${line.text}` };
             } else if (entry.header.length < maxHeader) {
                 entry.header.push(line);
             } else {
@@ -401,12 +411,21 @@
         return { start: '', end: '', rest: clean(text) };
     }
 
+    // Pulls "City, ST" and/or a Remote/Hybrid marker (bare or in parentheses)
+    // out of the text: "Bear Creek AI, (Remote) – Birmingham, AL" →
+    // location "Birmingham, AL (Remote)", rest "Bear Creek AI".
     function extractLocation(text) {
-        const loc = matchLocation(text);
-        if (loc) return { location: clean(loc[0]), rest: clean(text.replace(loc[0], ' ')) };
-        const rem = text.match(REMOTE_RE);
-        if (rem) return { location: clean(rem[0]), rest: clean(text.replace(REMOTE_RE, ' ')) };
-        return { location: '', rest: clean(text) };
+        let rest = text;
+        let location = '';
+        const loc = matchLocation(rest);
+        if (loc) { location = clean(loc[0]); rest = rest.replace(loc[0], ' '); }
+        const remote = rest.match(new RegExp(`\\(?\\s*${REMOTE_RE.source}\\s*\\)?`, 'i'));
+        if (remote) {
+            const tag = clean(remote[0].replace(/[()]/g, ''));
+            location = location ? `${location} (${tag})` : tag;
+            rest = rest.replace(remote[0], ' ');
+        }
+        return { location, rest: stripTrailingPunct(rest) };
     }
 
     function splitPieces(text) {
@@ -487,8 +506,11 @@
             if (!pieces.length) continue;
             const name = pieces[0];
             const tail = pieces.slice(1);
-            const extraHeader = e.header.slice(1).map(l => extractDates(l.text).rest);
-            const description = clean([...tail, ...extraHeader, ...e.body].join(' | '));
+            // Projects have no date fields, so keep any date in the description.
+            const dates = [d.start, d.end].filter(Boolean).join(' - ');
+            const extraHeader = e.header.slice(1).map(l => l.text);
+            const description = [...tail, ...extraHeader, dates, ...e.body]
+                .map(stripTrailingPunct).filter(Boolean).join(' | ');
             out.push({
                 name: stripTrailingPunct(name),
                 description,

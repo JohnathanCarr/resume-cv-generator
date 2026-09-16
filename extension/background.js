@@ -3,6 +3,19 @@
 let appTabId = null;
 const APP_URL = chrome.runtime.getURL('app.html');
 
+// First install: open the app and mark onboarding as not yet seen.
+// Reloading an unpacked extension does not fire this with reason "install".
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== 'install') return;
+  try {
+    await chrome.storage.local.set({ onboarding: { seen: false, installedAt: new Date().toISOString() } });
+    const tab = await chrome.tabs.create({ url: APP_URL, active: true });
+    appTabId = tab.id;
+  } catch (error) {
+    console.error('Error during first-run setup:', error);
+  }
+});
+
 // Handle extension icon click
 chrome.action.onClicked.addListener(async (tab) => {
   try {

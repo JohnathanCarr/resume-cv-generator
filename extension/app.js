@@ -26,6 +26,7 @@ class CoverLetterApp {
         };
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
         this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
+        this.onboarding = null;     // { seen, installedAt, completedAt? }
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -44,12 +45,14 @@ class CoverLetterApp {
         this.setupEventListeners();
         this.setupAutosave();
         this.renderProfile();
+        this.maybeStartOnboarding();
     }
 
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding']);
+        this.onboarding = result.onboarding || null;
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -117,6 +120,11 @@ class CoverLetterApp {
         // Profile management
         document.getElementById('save-profile')?.addEventListener('click', () => {
             this.saveProfile();
+        });
+
+        // Guided tour replay
+        document.getElementById('help-tour')?.addEventListener('click', () => {
+            this.startTour();
         });
 
         // Resume upload
@@ -790,6 +798,92 @@ class CoverLetterApp {
                         statusEl.textContent = '';
                     }
                 }, 3000);
+    }
+
+    // Onboarding
+    // First run = no onboarding record yet (installed before this feature) or
+    // the background script seeded { seen: false } on install.
+    maybeStartOnboarding() {
+        const seen = this.onboarding && this.onboarding.seen;
+        if (!seen) this.startTour();
+    }
+
+    async markOnboardingSeen(skipped) {
+        this.onboarding = {
+            ...(this.onboarding || {}),
+            seen: true,
+            completedAt: new Date().toISOString(),
+            skipped: !!skipped
+        };
+        try {
+            await chrome.storage.local.set({ onboarding: this.onboarding });
+        } catch (error) {
+            console.error('Error saving onboarding state:', error);
+        }
+    }
+
+    tourSteps() {
+        return [
+            {
+                target: null,
+                title: 'Welcome to Resume Studio',
+                body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
+                       <ol>
+                         <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
+                         <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
+                         <li><strong>Paste a job description</strong> and generate.</li>
+                       </ol>
+                       <p>Generating needs an OpenAI API key in <code>proxy/.env</code> and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+            },
+            {
+                target: '#upload-resume',
+                tab: 'profile',
+                title: 'Start with your resume',
+                placement: 'bottom',
+                body: '<p>Upload a PDF and your name, contact details, education, skills, experience and projects are filled in for you. Nothing is sent to the AI — parsing happens right here in the browser.</p><p>Upload a different resume later and only new items are added; nothing you entered is removed.</p>'
+            },
+            {
+                target: '#skills-input',
+                tab: 'profile',
+                title: 'List every skill you have',
+                placement: 'bottom',
+                body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
+            },
+            {
+                target: '#add-experience',
+                tab: 'profile',
+                title: 'Add and edit anything',
+                placement: 'bottom',
+                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must Include</strong> on an experience or project to guarantee it appears on generated resumes.</p>'
+            },
+            {
+                target: '#job-text',
+                tab: 'generate',
+                title: 'Paste the job description',
+                placement: 'right',
+                body: '<p>Include the title, company and requirements. The more of the posting you paste, the more precisely the documents are tailored.</p>'
+            },
+            {
+                target: '.generation-buttons',
+                tab: 'generate',
+                title: 'Generate and download',
+                placement: 'top',
+                body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
+            }
+        ];
+    }
+
+    startTour() {
+        if (typeof OnboardingTour === 'undefined') return;
+        this.hideError();
+        OnboardingTour.start(this.tourSteps(), {
+            switchTab: (tab) => this.switchTab(tab),
+            onFinish: ({ skipped }) => {
+                this.markOnboardingSeen(skipped);
+                this.switchTab('profile');
+                window.scrollTo({ top: 0 });
+            }
+        });
     }
 
     // Resume Upload

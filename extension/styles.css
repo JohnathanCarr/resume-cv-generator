@@ -1367,6 +1367,93 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 17b: GUIDED TOUR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tour-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    pointer-events: auto;
+}
+
+/* Centred steps have no spotlight, so the overlay itself paints the dim. */
+.tour-overlay.tour-overlay-dim {
+    background: var(--surface-overlay);
+    backdrop-filter: blur(6px);
+}
+
+/* The spotlight is a transparent box whose huge box-shadow paints the dim
+   backdrop, so the target shows through untouched. */
+.tour-spotlight {
+    position: fixed;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 0 9999px var(--surface-overlay), 0 0 0 3px var(--accent-primary);
+    transition: left var(--transition-medium), top var(--transition-medium),
+                width var(--transition-medium), height var(--transition-medium);
+    pointer-events: none;
+}
+
+.tour-tooltip {
+    position: fixed;
+    z-index: 1101;
+    width: min(380px, calc(100vw - 24px));
+    padding: var(--space-lg);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    animation: statusAppear 0.25s ease;
+}
+
+.tour-tooltip-centered {
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%);
+    width: min(460px, calc(100vw - 24px));
+}
+
+.tour-progress {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-xs);
+}
+
+.tour-title {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 var(--space-sm) 0;
+}
+
+.tour-body {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.tour-body p { margin: 0 0 var(--space-sm) 0; }
+.tour-body p:last-child { margin-bottom: 0; }
+.tour-body ol { margin: var(--space-xs) 0 0 1.2em; padding: 0; }
+.tour-body code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.1em 0.35em;
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+}
+
+.tour-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.tour-spacer { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
    SECTION 18: ACTION BAR
    ═══════════════════════════════════════════════════════════════════════════ */
 

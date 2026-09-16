@@ -1454,6 +1454,76 @@ body {
 .tour-spacer { flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 17c: GETTING STARTED CHECKLIST
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.checklist {
+    padding: var(--space-lg) var(--space-xl);
+}
+
+.checklist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.checklist-header h2 {
+    margin-bottom: var(--space-sm);
+}
+
+.checklist-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-xs);
+}
+
+.checklist-items li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    transition: color var(--transition-medium);
+}
+
+.checklist-mark {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--glass-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: transparent;
+    transition: all var(--transition-medium);
+}
+
+.checklist-items li.done {
+    color: var(--text-tertiary);
+    text-decoration: line-through;
+}
+
+.checklist-items li.done .checklist-mark {
+    background: var(--status-success);
+    border-color: var(--status-success);
+    color: #fff;
+}
+
+.checklist-items li.done .checklist-mark::after {
+    content: '✓';
+}
+
+.checklist-hint {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    SECTION 18: ACTION BAR
    ═══════════════════════════════════════════════════════════════════════════ */
 

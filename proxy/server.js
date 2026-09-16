@@ -43,7 +43,12 @@ app.use(timeout(120000)); // 2 minute timeout for comprehensive resume generatio
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    // Lets the extension's Getting Started checklist confirm setup without exposing the key.
+    keyConfigured: Boolean(process.env.OPENAI_API_KEY && !/your[-_ ]?(openai[-_ ]?)?(api[-_ ]?)?key/i.test(process.env.OPENAI_API_KEY))
+  });
 });
 
 function truncateWords(s, maxWords = 20) {

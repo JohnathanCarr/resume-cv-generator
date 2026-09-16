@@ -81,6 +81,20 @@
                  PROFILE TAB
                  ═══════════════════════════════════════════════════════════════ -->
             <div id="profile-tab" class="tab-content active">
+
+                <!-- Getting Started checklist (hidden once complete or dismissed) -->
+                <section id="getting-started" class="section glass checklist hidden">
+                    <div class="checklist-header">
+                        <h2>Getting Started</h2>
+                        <button id="checklist-dismiss" class="modal-close" aria-label="Dismiss checklist" title="Dismiss">&times;</button>
+                    </div>
+                    <ul class="checklist-items">
+                        <li data-item="resume"><span class="checklist-mark"></span><span>Upload your current resume</span></li>
+                        <li data-item="name"><span class="checklist-mark"></span><span>Add your name to Personal Information</span></li>
+                        <li data-item="proxy"><span class="checklist-mark"></span><span>Start the local server with your OpenAI API key <span class="checklist-hint" id="checklist-proxy-hint"></span></span></li>
+                        <li data-item="generated"><span class="checklist-mark"></span><span>Generate your first document</span></li>
+                    </ul>
+                </section>
                 
                 <!-- Personal Information Section -->
                 <section class="section glass glass-shimmer">

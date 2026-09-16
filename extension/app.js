@@ -26,6 +26,8 @@ class CoverLetterApp {
         };
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
         this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
+        this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
+        this.proxyStatus = null;    // { reachable, keyConfigured } from /health
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -44,12 +46,15 @@ class CoverLetterApp {
         this.setupEventListeners();
         this.setupAutosave();
         this.renderProfile();
+        this.maybeStartOnboarding();
+        this.refreshProxyStatus().then(() => this.renderChecklist());
     }
 
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding']);
+        this.onboarding = result.onboarding || null;
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -117,6 +122,16 @@ class CoverLetterApp {
         // Profile management
         document.getElementById('save-profile')?.addEventListener('click', () => {
             this.saveProfile();
+        });
+
+        // Guided tour replay
+        document.getElementById('help-tour')?.addEventListener('click', () => {
+            this.startTour();
+        });
+
+        document.getElementById('checklist-dismiss')?.addEventListener('click', () => {
+            this.saveOnboarding({ checklistDismissed: true });
+            this.renderChecklist();
         });
 
         // Resume upload
@@ -196,6 +211,7 @@ class CoverLetterApp {
         // Profile field updates
         document.getElementById('profile-name')?.addEventListener('input', (e) => {
             this.profile.name = e.target.value;
+            this.renderChecklist();
         });
 
         document.getElementById('profile-contact')?.addEventListener('input', (e) => {
@@ -227,6 +243,8 @@ class CoverLetterApp {
             });
             const activeTabContent = document.getElementById(`${tabName}-tab`);
             if (activeTabContent) activeTabContent.classList.add('active');
+
+            if (tabName === 'profile') this.refreshChecklistFromProxy();
         } catch (error) {
             console.error('Error switching tabs:', error);
         }
@@ -300,6 +318,7 @@ class CoverLetterApp {
         setFieldValue('profile-summary', this.profile.summary);
         
         this.renderUploadedResume();
+        this.renderChecklist();
         this.renderEducation();
         this.renderSkills();
         this.renderExperiences();
@@ -792,6 +811,151 @@ class CoverLetterApp {
                 }, 3000);
     }
 
+    // Re-check the proxy when the user comes back to the Profile tab so the
+    // checklist reflects a server they just started.
+    async refreshChecklistFromProxy() {
+        await this.refreshProxyStatus();
+        this.renderChecklist();
+    }
+
+    // Onboarding
+    // First run = no onboarding record yet (installed before this feature) or
+    // the background script seeded { seen: false } on install.
+    maybeStartOnboarding() {
+        const seen = this.onboarding && this.onboarding.seen;
+        if (!seen) this.startTour();
+    }
+
+    async saveOnboarding(patch) {
+        this.onboarding = { ...(this.onboarding || {}), ...patch };
+        try {
+            await chrome.storage.local.set({ onboarding: this.onboarding });
+        } catch (error) {
+            console.error('Error saving onboarding state:', error);
+        }
+    }
+
+    markOnboardingSeen(skipped) {
+        return this.saveOnboarding({ seen: true, completedAt: new Date().toISOString(), skipped: !!skipped });
+    }
+
+    // Getting Started checklist: ticks itself from live state and hides once
+    // everything is done or the user dismisses it.
+    async refreshProxyStatus() {
+        try {
+            const res = await fetch('http://localhost:8787/health', { cache: 'no-store' });
+            const data = await res.json();
+            this.proxyStatus = { reachable: res.ok, keyConfigured: !!data.keyConfigured };
+        } catch (_) {
+            this.proxyStatus = { reachable: false, keyConfigured: false };
+        }
+    }
+
+    checklistState() {
+        return {
+            resume: !!this.uploadedResume,
+            name: !!(this.profile.name && this.profile.name.trim()),
+            proxy: !!(this.proxyStatus && this.proxyStatus.reachable && this.proxyStatus.keyConfigured),
+            generated: !!(this.onboarding && this.onboarding.firstGeneratedAt)
+        };
+    }
+
+    renderChecklist() {
+        const card = document.getElementById('getting-started');
+        if (!card) return;
+        const state = this.checklistState();
+        const allDone = Object.values(state).every(Boolean);
+        const dismissed = !!(this.onboarding && this.onboarding.checklistDismissed);
+
+        if (allDone || dismissed) {
+            card.classList.add('hidden');
+            return;
+        }
+
+        card.querySelectorAll('li[data-item]').forEach(li => {
+            li.classList.toggle('done', !!state[li.dataset.item]);
+        });
+
+        const hint = document.getElementById('checklist-proxy-hint');
+        if (hint) {
+            if (!this.proxyStatus) hint.textContent = '';
+            else if (!this.proxyStatus.reachable) hint.textContent = '— server not running (run start-proxy)';
+            else if (!this.proxyStatus.keyConfigured) hint.textContent = '— server running, but no API key in proxy/.env';
+            else hint.textContent = '';
+        }
+        card.classList.remove('hidden');
+    }
+
+    recordFirstGeneration() {
+        if (this.onboarding && this.onboarding.firstGeneratedAt) return;
+        this.saveOnboarding({ firstGeneratedAt: new Date().toISOString() });
+        this.renderChecklist();
+    }
+
+    tourSteps() {
+        return [
+            {
+                target: null,
+                title: 'Welcome to Resume Studio',
+                body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
+                       <ol>
+                         <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
+                         <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
+                         <li><strong>Paste a job description</strong> and generate.</li>
+                       </ol>
+                       <p>Generating needs an OpenAI API key in <code>proxy/.env</code> and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+            },
+            {
+                target: '#upload-resume',
+                tab: 'profile',
+                title: 'Start with your resume',
+                placement: 'bottom',
+                body: '<p>Upload a PDF and your name, contact details, education, skills, experience and projects are filled in for you. Nothing is sent to the AI — parsing happens right here in the browser.</p><p>Upload a different resume later and only new items are added; nothing you entered is removed.</p>'
+            },
+            {
+                target: '#skills-input',
+                tab: 'profile',
+                title: 'List every skill you have',
+                placement: 'bottom',
+                body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
+            },
+            {
+                target: '#add-experience',
+                tab: 'profile',
+                title: 'Add and edit anything',
+                placement: 'bottom',
+                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must Include</strong> on an experience or project to guarantee it appears on generated resumes.</p>'
+            },
+            {
+                target: '#job-text',
+                tab: 'generate',
+                title: 'Paste the job description',
+                placement: 'right',
+                body: '<p>Include the title, company and requirements. The more of the posting you paste, the more precisely the documents are tailored.</p>'
+            },
+            {
+                target: '.generation-buttons',
+                tab: 'generate',
+                title: 'Generate and download',
+                placement: 'top',
+                body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
+            }
+        ];
+    }
+
+    startTour() {
+        if (typeof OnboardingTour === 'undefined') return;
+        this.hideError();
+        OnboardingTour.start(this.tourSteps(), {
+            switchTab: (tab) => this.switchTab(tab),
+            onFinish: ({ skipped }) => {
+                this.markOnboardingSeen(skipped);
+                this.switchTab('profile');
+                window.scrollTo({ top: 0 });
+            }
+        });
+    }
+
     // Resume Upload
     async handleResumeUpload(file) {
         if (!file) return;
@@ -1003,6 +1167,7 @@ class CoverLetterApp {
             await this.saveData();
 
             this.showStatus('Cover letter generated successfully!', 'success');
+            this.recordFirstGeneration();
             const downloadBtn = document.getElementById('download-pdf');
             if (downloadBtn) downloadBtn.disabled = false;
 
@@ -1309,6 +1474,7 @@ class CoverLetterApp {
     await this.saveData();
 
     this.showStatus('Resume generated successfully!', 'success');
+    this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
 

@@ -1823,7 +1823,7 @@ class CoverLetterApp {
                                     ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
                                 </span>
                                 <span style="font-size: ${contactFontSize};">
-                                    ${exp.dates}
+                                    ${exp.dates || ''}
                                 </span>
                             </div>
                             <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">

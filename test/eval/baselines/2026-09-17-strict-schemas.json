@@ -1,0 +1,43 @@
+{
+  "label": "strict-schemas",
+  "stamp": "2026-09-17T01-11-12",
+  "kinds": {
+    "resume": {
+      "n": 15,
+      "meanScore": 0.911,
+      "meanMs": 15767,
+      "failures": 0,
+      "checks": {
+        "validShape": 1,
+        "hasCoreSections": 1,
+        "wordBudget": 1,
+        "pageFill": 0.17,
+        "bulletLength": 1,
+        "educationComplete": 1,
+        "mustIncludeHonored": 1,
+        "noFabricatedNumbers": 1,
+        "jdKeywordCoverage": 0.94,
+        "actionVerbBullets": 0.99
+      }
+    },
+    "cover": {
+      "n": 15,
+      "meanScore": 0.926,
+      "meanMs": 23713,
+      "failures": 0,
+      "checks": {
+        "valid": 1,
+        "length": 1,
+        "paragraphs": 1,
+        "namesCompany": 0.87,
+        "noBuzzwords": 0.73,
+        "noAiTells": 1,
+        "noFabricatedNumbers": 1,
+        "groundedInProfile": 0.83,
+        "sentenceVariety": 0.87,
+        "punctuationRestraint": 1,
+        "jdKeywordCoverage": 0.89
+      }
+    }
+  }
+}

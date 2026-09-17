@@ -8,23 +8,17 @@
 ### 🪟 Windows
 1. **Download ZIP** from GitHub → Extract
 2. **Double-click** `setup.bat` → Wait for installation
-3. **Rename** `proxy/env.example` to `proxy/.env`
-4. **Edit** `proxy/.env` → Add your API key
-5. **Double-click** `start-proxy.bat` → Keep window open
+3. **Double-click** `start-proxy.bat` → Keep window open
 
 ### 🍎 Mac  
 1. **Download ZIP** from GitHub → Extract
 2. **Run** `./setup.sh` → Wait for installation
-3. **Rename** `proxy/env.example` to `proxy/.env`
-4. **Edit** `proxy/.env` → Add your API key
-5. **Run** `./start-proxy.sh` → Keep terminal open
+3. **Run** `./start-proxy.sh` → Keep terminal open
 
 ### 🐧 Linux
 1. **Download ZIP** from GitHub → Extract
 2. **Run** `bash setup.sh` → Wait for installation
-3. **Rename** `proxy/env.example` to `proxy/.env`
-4. **Edit** `proxy/.env` → Add your API key
-5. **Run** `bash start-proxy.sh` → Keep terminal open
+3. **Run** `bash start-proxy.sh` → Keep terminal open
 
 ## 🔧 Chrome Extension
 1. Open `chrome://extensions/`
@@ -32,6 +26,7 @@
 3. Click **Load unpacked**
 4. Select the **`extension`** folder
 5. Click the extension icon!
+6. Click the **gear icon** and paste your OpenAI API key
 
 ## 🎯 Generate Documents
 1. **Upload your resume** (PDF) to autofill your profile, then review it

@@ -13,7 +13,7 @@ There is no bundler, linter, or test runner. Files in `extension/` are loaded st
 ```bash
 # Proxy (needed only for Generate and resume-PDF download)
 cd proxy && npm install          # first time; Puppeteer downloads Chromium (allowScripts is set in package.json)
-cd proxy && npm start            # http://localhost:8787, reads OPENAI_API_KEY from proxy/.env
+cd proxy && npm start            # http://localhost:8787; the API key arrives per request from the extension
 curl -s http://localhost:8787/health
 
 # Syntax-check the proxy without starting it

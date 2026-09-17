@@ -9,11 +9,8 @@ echo ""
 
 cd proxy
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "❌ ERROR: .env file not found!"
-    echo "Please rename 'env.example' to '.env' and add your OpenAI API key"
-    echo "See README.md for detailed instructions"
+if [ ! -d "node_modules" ]; then
+    echo "❌ ERROR: dependencies not installed. Run ./setup.sh first."
     exit 1
 fi
 

@@ -1,15 +1,27 @@
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-require('dotenv').config();
 
 const app = express();
 const PORT = 8787;
+const VERIFY_MODEL = 'gpt-4o-mini';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// The API key is supplied by the extension on every request as
+// "Authorization: Bearer sk-...". It is never stored, logged or echoed here.
+function requireApiKey(req, res, next) {
+  const header = req.get('authorization') || '';
+  const match = header.match(/^Bearer\s+(\S+)$/i);
+  if (!match) {
+    return res.status(401).json({ error: 'Missing API key. Add your OpenAI key in the extension\'s Settings.' });
+  }
+  req.openai = new OpenAI({ apiKey: match[1] });
+  next();
+}
+
+// OpenAI errors carry the key in some messages' request details; strip anything key-shaped.
+function safeErrorMessage(error) {
+  return String(error && error.message || 'Unknown error').replace(/sk-[A-Za-z0-9_-]{6,}/g, 'sk-***');
+}
 
 // Middleware
 app.use(cors({
@@ -21,7 +33,7 @@ app.use(cors({
     return cb(null, false);
   },
   methods: ['POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false
 }));
 
@@ -43,12 +55,26 @@ app.use(timeout(120000)); // 2 minute timeout for comprehensive resume generatio
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    // Lets the extension's Getting Started checklist confirm setup without exposing the key.
-    keyConfigured: Boolean(process.env.OPENAI_API_KEY && !/your[-_ ]?(openai[-_ ]?)?(api[-_ ]?)?key/i.test(process.env.OPENAI_API_KEY))
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Confirms a key works with one minimal request. Returns the model that answered.
+app.post('/verifyKey', requireApiKey, async (req, res) => {
+  try {
+    const completion = await req.openai.chat.completions.create({
+      model: VERIFY_MODEL,
+      messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+      max_tokens: 2,
+      temperature: 0
+    });
+    res.json({ ok: true, model: completion.model });
+  } catch (error) {
+    const status = error.status === 401 ? 401 : 502;
+    const message = error.status === 401
+      ? 'OpenAI rejected this key. Check it and try again.'
+      : `Could not reach OpenAI: ${safeErrorMessage(error)}`;
+    res.status(status).json({ ok: false, error: message });
+  }
 });
 
 function truncateWords(s, maxWords = 20) {
@@ -125,7 +151,7 @@ function formatExtras(profile) {
 
 
 // Resume generation endpoint
-app.post('/generateResume', async (req, res) => {
+app.post('/generateResume', requireApiKey, async (req, res) => {
   const startTime = Date.now();
   
   try {
@@ -241,7 +267,7 @@ OUTPUT JSON (omit a section key if you have no content for it):
     // Call OpenAI API
     let completion;
     try {
-      completion = await openai.chat.completions.create({
+      completion = await req.openai.chat.completions.create({
         model: "gpt-4-turbo",
         messages: [
           { role: "system", content: systemPrompt },
@@ -299,7 +325,7 @@ OUTPUT JSON (omit a section key if you have no content for it):
     if (!res.headersSent) {
       const errorResponse = {
         error: 'Failed to generate resume',
-        message: error.message,
+        message: safeErrorMessage(error),
         timestamp: new Date().toISOString()
       };
       
@@ -313,7 +339,7 @@ OUTPUT JSON (omit a section key if you have no content for it):
 });
 
 // Cover letter generation endpoint
-app.post('/generateCoverLetter', async (req, res) => {
+app.post('/generateCoverLetter', requireApiKey, async (req, res) => {
   const startTime = Date.now();
   
   try {
@@ -429,11 +455,6 @@ Return your response as JSON with this exact format:
 
 DO NOT include any other text outside the JSON response.`;
 
-    console.log('Full user prompt being sent:');
-    console.log('='.repeat(50));
-    console.log(userPrompt);
-    console.log('='.repeat(50));
-
     // Define the JSON schema for structured output
     const responseFormat = {
       type: "json_schema",
@@ -461,7 +482,7 @@ DO NOT include any other text outside the JSON response.`;
       try {
         // Call OpenAI API with structured outputs
         // Using gpt-4-turbo for better prompt following
-        completion = await openai.chat.completions.create({
+        completion = await req.openai.chat.completions.create({
           model: "gpt-4-turbo",
           messages: [
             { role: "system", content: systemPrompt },
@@ -478,7 +499,7 @@ DO NOT include any other text outside the JSON response.`;
         if (error.code === 'model_not_found' || error.message?.includes('structured outputs')) {
           // Fallback to json_object mode if strict schema not supported
           console.log('Falling back to json_object mode');
-          completion = await openai.chat.completions.create({
+          completion = await req.openai.chat.completions.create({
             model: "gpt-4o",
             messages: [
               { role: "system", content: systemPrompt },
@@ -515,7 +536,7 @@ DO NOT include any other text outside the JSON response.`;
         // Retry once with explicit JSON reminder
         console.log('JSON parse failed, retrying with explicit instructions');
         try {
-          const retryCompletion = await openai.chat.completions.create({
+          const retryCompletion = await req.openai.chat.completions.create({
             model: "gpt-4o",
             messages: [
               { role: "system", content: systemPrompt },
@@ -573,7 +594,7 @@ DO NOT include any other text outside the JSON response.`;
     // Don't log PII, just error details
     const errorResponse = {
       error: 'Failed to generate cover letter',
-      message: error.message,
+      message: safeErrorMessage(error),
       timestamp: new Date().toISOString()
     };
     
@@ -639,10 +660,7 @@ app.post("/pdf/fromHtml", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Cover Letter Proxy server running on http://localhost:${PORT}`);
   console.log(`Health check available at http://localhost:${PORT}/health`);
-  
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('WARNING: OPENAI_API_KEY not found in environment variables');
-  }
+  console.log('API keys are supplied per request by the extension (Settings → OpenAI API key).');
 });
 
 module.exports = app;

@@ -945,6 +945,12 @@ class CoverLetterApp {
         await this.persistApiKey();
     }
 
+    requireApiKeyForGeneration() {
+        if (this.apiKey?.value) return true;
+        this.showError('Add your OpenAI API key in Settings (gear icon) before generating.', false);
+        return false;
+    }
+
     // Headers for every proxy call that reaches OpenAI.
     apiHeaders(extra = {}) {
         const headers = { 'Content-Type': 'application/json', ...extra };
@@ -1273,6 +1279,7 @@ class CoverLetterApp {
             this.showError('Please complete your profile first.', false);
             return;
         }
+        if (!this.requireApiKeyForGeneration()) return;
 
         this.showLoading();
         this.showStatus('Generating cover letter...', 'loading');
@@ -1290,9 +1297,7 @@ class CoverLetterApp {
 
             const response = await fetch('http://localhost:8787/generateCoverLetter', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.apiHeaders(),
                 body: JSON.stringify(requestData)
             });
 
@@ -1573,6 +1578,7 @@ class CoverLetterApp {
   const jobText = document.getElementById('job-text').value.trim();
   if (!jobText) { this.showError('Please enter a job description.', false); return; }
   if (!this.profile.name) { this.showError('Please complete your profile first.', false); return; }
+  if (!this.requireApiKeyForGeneration()) return;
 
   this.showLoading();
   this.showStatus('Generating resume...', 'loading');
@@ -1584,7 +1590,7 @@ class CoverLetterApp {
 
     const response = await fetch('http://localhost:8787/generateResume', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.apiHeaders(),
       body: JSON.stringify(requestData)
     });
 

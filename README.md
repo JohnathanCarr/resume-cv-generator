@@ -53,14 +53,7 @@ Transform your job applications with AI-powered documents that sound like strate
 2. Run: `bash setup.sh`
 3. Wait for installation to complete
 
-### Step 4: Add Your API Key
-1. Navigate to the **`proxy`** folder inside the project
-2. **Rename** `env.example` to `.env`
-3. **Open** `.env` in any text editor
-4. **Replace** `your-openai-api-key-here` with your actual API key
-5. **Save** the file
-
-### Step 5: Start the Server (Choose Your OS)
+### Step 4: Start the Server (Choose Your OS)
 
 **🪟 Windows:** Double-click `start-proxy.bat`
 
@@ -70,13 +63,20 @@ Transform your job applications with AI-powered documents that sound like strate
 
 **Keep this window open** while using the extension!
 
-### Step 6: Install Chrome Extension
+### Step 5: Install Chrome Extension
 1. Open **Google Chrome**
 2. Go to `chrome://extensions/`
 3. Enable **"Developer mode"** (toggle in top-right)
 4. Click **"Load unpacked"**
 5. Select the **`extension`** folder (inside the project)
 6. **Click the extension icon** to start!
+
+### Step 6: Add Your API Key
+1. In the extension, click the **gear icon** in the header
+2. **Paste** the key from Step 2 and click **Save key**
+3. The panel shows **Verified** once the local server confirms it works
+
+Your key is stored only in this browser's extension storage and sent to the local server on each request. Once saved it can be replaced or removed, but never viewed.
 
 ## 🎯 How to Use
 
@@ -133,7 +133,7 @@ Transform your job applications with AI-powered documents that sound like strate
 
 **❌ "Failed to generate" errors**
 - Check proxy is running (should see "Server running on http://localhost:8787")
-- Verify API key is correct in `proxy/.env`
+- Open Settings (gear icon) and check the key shows **Verified**; use **Replace key** if not
 - Check OpenAI account has credits
 - Try restarting the proxy server
 
@@ -166,7 +166,7 @@ Chrome Extension ──→ Local Proxy ──→ OpenAI GPT-4-Turbo
 ## 📊 Data Privacy & Security
 
 - ✅ **All data stays local** - stored in Chrome's secure storage
-- ✅ **API key never exposed** - only stored in local proxy
+- ✅ **API key never exposed** - stored in the extension, sent only to your local server, never displayed once saved
 - ✅ **No cloud accounts** required - everything runs on your device
 - ✅ **Uploaded resume stays on your device** — parsed in the browser, never sent to the AI
 - ✅ **No tracking** or analytics - completely private
@@ -215,8 +215,7 @@ ai-cover-letter-generator/
 │   └── pdf.min.js     # pdf.js for reading uploaded resumes
 ├── proxy/             # Local server
 │   ├── server.js      # API proxy server
-│   ├── package.json   # Dependencies
-│   └── env.example    # Environment template
+│   └── package.json   # Dependencies
 ├── setup.sh           # Mac/Linux setup script
 ├── setup.bat          # Windows setup script
 ├── start-proxy.sh     # Mac/Linux server start

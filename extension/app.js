@@ -1308,7 +1308,7 @@ class CoverLetterApp {
 
             const result = await response.json();
             this.lastApiCall.response = result;
-
+            this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
 
             // Display the cover letter
             this.displayCoverLetter(result.coverLetter);
@@ -1618,6 +1618,7 @@ class CoverLetterApp {
     }
 
     this.lastApiCall.response = result;
+    this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
 
     // Render once (no duplicates)
     this.displayResume(result.resumeContent);

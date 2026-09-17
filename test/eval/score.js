@@ -221,8 +221,14 @@ function scoreCoverLetter({ coverLetter, profile, jobText, company }) {
   const paras = text.split(/\n\s*\n/).filter(p => p.trim());
   checks.paragraphs = (paras.length >= 3 && paras.length <= 4) ? 1 : 0.5;
 
-  checks.namesCompany = company && lower(text).includes(lower(company)) ? 1 : 0;
-  if (company && !checks.namesCompany) fails.push('does not name the company');
+  // Full name is best practice (at least once); the distinctive first word
+  // ("Lumen" for "Lumen Health") is how people actually write and gets partial credit.
+  const firstWord = (company || '').split(/\s+/)[0] || '';
+  checks.namesCompany = !company ? 1
+    : lower(text).includes(lower(company)) ? 1
+    : (firstWord.length >= 4 && new RegExp(`\\b${firstWord}\\b`, 'i').test(text)) ? 0.5
+    : 0;
+  if (company && checks.namesCompany === 0) fails.push('does not name the company');
 
   const buzz = buzzwordHits(text);
   checks.noBuzzwords = buzz.length === 0 ? 1 : buzz.length <= 2 ? 0.5 : 0;

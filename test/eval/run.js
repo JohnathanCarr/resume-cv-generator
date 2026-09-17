@@ -73,7 +73,56 @@ async function call(endpoint, key, body) {
 
 function fmt(n) { return (n * 100).toFixed(0).padStart(3) + '%'; }
 
+// Re-apply the current rubric to a saved run without calling the API.
+function rescore(runDir) {
+  const files = fs.readdirSync(runDir).filter(f => /__(resume|cover)\.json$/.test(f));
+  const results = [];
+  for (const f of files) {
+    const saved = JSON.parse(fs.readFileSync(path.join(runDir, f), 'utf8'));
+    const [profile, job, kind] = f.replace(/\.json$/, '').split('__');
+    const company = (saved.request.jobText.split('\n')[1] || '').split('·')[0].trim();
+    const scored = kind === 'resume'
+      ? scoreResume({ resumeContent: saved.response.resumeContent, profile: saved.request.profile, jobText: saved.request.jobText, company })
+      : scoreCoverLetter({ coverLetter: saved.response.coverLetter, profile: saved.request.profile, jobText: saved.request.jobText, company });
+    results.push({ kind, profile, job, ms: 0, ...scored });
+    console.log(`${kind.padEnd(7)} ${fmt(scored.score)}  ${profile} × ${job}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
+  }
+  return results;
+}
+
+function summarise(results, label) {
+  const summary = { label, kinds: {} };
+  for (const kind of ['resume', 'cover']) {
+    const rows = results.filter(r => r.kind === kind);
+    if (!rows.length) continue;
+    const checks = {};
+    for (const r of rows) for (const [k, v] of Object.entries(r.checks)) (checks[k] ||= []).push(v);
+    summary.kinds[kind] = {
+      n: rows.length,
+      meanScore: +(rows.reduce((a, r) => a + r.score, 0) / rows.length).toFixed(3),
+      meanMs: Math.round(rows.reduce((a, r) => a + r.ms, 0) / rows.length),
+      failures: rows.filter(r => r.fails.length).length,
+      checks: Object.fromEntries(Object.entries(checks).map(([k, v]) => [k, +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2)]))
+    };
+  }
+  console.log('\n── Summary ──');
+  for (const [kind, s] of Object.entries(summary.kinds)) {
+    console.log(`${kind.padEnd(7)} n=${s.n}  score=${fmt(s.meanScore)}  failures=${s.failures}  mean=${s.meanMs}ms`);
+    for (const [k, v] of Object.entries(s.checks)) console.log(`   ${k.padEnd(24)} ${fmt(v)}`);
+  }
+  return summary;
+}
+
 async function main() {
+  const rescoreDir = arg('rescore', null);
+  if (rescoreDir) {
+    const dir = path.isAbsolute(rescoreDir) ? rescoreDir : path.resolve(process.cwd(), rescoreDir);
+    const results = rescore(dir);
+    const summary = summarise(results, `rescore:${path.basename(dir)}`);
+    fs.writeFileSync(path.join(dir, 'summary.rescored.json'), JSON.stringify({ summary, results }, null, 2));
+    return;
+  }
+
   const key = readKey();
   const only = arg('only', null);
   const label = arg('label', 'run');
@@ -116,27 +165,7 @@ async function main() {
     }
   }
 
-  // Aggregate per kind and per check.
-  const summary = { label, stamp, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id), kinds: {} };
-  for (const kind of ['resume', 'cover']) {
-    const rows = results.filter(r => r.kind === kind);
-    if (!rows.length) continue;
-    const checks = {};
-    for (const r of rows) for (const [k, v] of Object.entries(r.checks)) (checks[k] ||= []).push(v);
-    summary.kinds[kind] = {
-      n: rows.length,
-      meanScore: +(rows.reduce((a, r) => a + r.score, 0) / rows.length).toFixed(3),
-      meanMs: Math.round(rows.reduce((a, r) => a + r.ms, 0) / rows.length),
-      failures: rows.filter(r => r.fails.length).length,
-      checks: Object.fromEntries(Object.entries(checks).map(([k, v]) => [k, +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2)]))
-    };
-  }
-
-  console.log('\n── Summary ──');
-  for (const [kind, s] of Object.entries(summary.kinds)) {
-    console.log(`${kind.padEnd(7)} n=${s.n}  score=${fmt(s.meanScore)}  failures=${s.failures}  mean=${s.meanMs}ms`);
-    for (const [k, v] of Object.entries(s.checks)) console.log(`   ${k.padEnd(24)} ${fmt(v)}`);
-  }
+  const summary = { ...summarise(results, label), stamp, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
 
   fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify({ summary, results }, null, 2));
   if (arg('baseline', false)) {

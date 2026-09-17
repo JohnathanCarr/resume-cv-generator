@@ -3,6 +3,7 @@ const cors = require('cors');
 const OpenAI = require('openai');
 
 const { GENERATION_MODEL, VERIFY_MODEL, REASONING, MAX_COMPLETION_TOKENS } = require('./config');
+const { analyzeMatch, renderMatchForPrompt } = require('./prompts/matchAnalysis');
 
 const app = express();
 const PORT = 8787;
@@ -167,19 +168,12 @@ app.post('/generateResume', requireApiKey, async (req, res) => {
     
     console.log(`[${new Date().toISOString()}] Resume generation request started`);
     
-    // Extract company name and role from job text
-    const companyMatch = jobText.match(/(?:company|organization|at|join)\s*:?\s*([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.|!)/i) ||
-                        jobText.match(/([A-Z][a-zA-Z\s&.,]{2,30})(?:\s+is\s+(?:seeking|looking|hiring))/i) ||
-                        jobText.match(/(?:we|our company)\s+(?:are|is)\s+([A-Z][a-zA-Z\s&.,]+)/i);
-    const companyName = companyMatch ? companyMatch[1].trim().replace(/[.,!]$/, '') : '[COMPANY NAME]';
-    
-    const roleMatch = jobText.match(/(?:position|role|job title|title|hiring)\s*:?\s*([A-Z][a-zA-Z\s-]+?)(?:\s|$|,|\.|!|at)/i) ||
-                     jobText.match(/(?:seeking|looking for|hiring)\s+(?:a|an)?\s*([A-Z][a-zA-Z\s-]+?)(?:\s+to|\s+who|$)/i) ||
-                     jobText.match(/^([A-Z][a-zA-Z\s-]+?)(?:\s+at|\s+position|\s+-)/);
-    const roleName = roleMatch ? roleMatch[1].trim().replace(/[.,!-]$/, '') : '[ROLE]';
-
-    console.log('Detected company:', companyName);
-    console.log('Detected role:', roleName);
+    // Structured read of the posting against the profile; replaces regex guessing.
+    const match = await analyzeMatch(req.openai, { profile, jobText });
+    const companyName = match.company || 'the company';
+    const roleName = match.role || 'the role';
+    const matchText = renderMatchForPrompt(match);
+    console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
     // Enhanced prompt with one-page logic and Must Include handling
     const mustIncludeExperiences = profile.experiences.filter(exp => exp.mustInclude);
@@ -207,6 +201,9 @@ Prioritize: “mustInclude” experiences/projects → role relevance → recenc
 
 JOB POSTING:
 ${jobText}
+
+MATCH ANALYSIS (use this to decide what to include and which exact keywords to mirror):
+${matchText}
 
 CANDIDATE PROFILE:
 Name: ${profile.name}
@@ -314,6 +311,7 @@ OUTPUT JSON (omit a section key if you have no content for it):
     // Return the structured response
     return res.json({
       resumeContent: parsedResponse,
+      matchAnalysis: match,
       metadata: {
         generatedAt: new Date().toISOString(),
         processingTime: endTime - startTime
@@ -355,19 +353,12 @@ app.post('/generateCoverLetter', requireApiKey, async (req, res) => {
     
     console.log(`[${new Date().toISOString()}] Cover letter generation request started`);
     
-    // Extract company name and role from job text
-    const companyMatch = jobText.match(/(?:company|organization|at|join)\s*:?\s*([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.|!)/i) ||
-                        jobText.match(/([A-Z][a-zA-Z\s&.,]{2,30})(?:\s+is\s+(?:seeking|looking|hiring))/i) ||
-                        jobText.match(/(?:we|our company)\s+(?:are|is)\s+([A-Z][a-zA-Z\s&.,]+)/i);
-    const companyName = companyMatch ? companyMatch[1].trim().replace(/[.,!]$/, '') : '[COMPANY NAME]';
-    
-    const roleMatch = jobText.match(/(?:position|role|job title|title|hiring)\s*:?\s*([A-Z][a-zA-Z\s-]+?)(?:\s|$|,|\.|!|at)/i) ||
-                     jobText.match(/(?:seeking|looking for|hiring)\s+(?:a|an)?\s*([A-Z][a-zA-Z\s-]+?)(?:\s+to|\s+who|$)/i) ||
-                     jobText.match(/^([A-Z][a-zA-Z\s-]+?)(?:\s+at|\s+position|\s+-)/);
-    const roleName = roleMatch ? roleMatch[1].trim().replace(/[.,!-]$/, '') : '[ROLE]';
-
-    console.log('Detected company:', companyName);
-    console.log('Detected role:', roleName);
+    // Structured read of the posting against the profile; replaces regex guessing.
+    const match = await analyzeMatch(req.openai, { profile, jobText });
+    const companyName = match.company || 'the company';
+    const roleName = match.role || 'the role';
+    const matchText = renderMatchForPrompt(match);
+    console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
     // Construct the enhanced prompt
     const systemPrompt = `You are an elite executive cover letter consultant. You MUST follow ALL instructions precisely. You write consultant-level pitches that sound like strategic business proposals, NOT job applications. You NEVER use generic phrases, clichés, or beggar language. Every word must demonstrate unique value and insider knowledge.`;
@@ -411,6 +402,9 @@ Use the facts from my profile below as a foundation. You may enhance experiences
 
 Job Post:
 ${jobText}
+
+Match analysis (requirements and which of my profile items support each):
+${matchText}
 
 My Profile:
 Name: ${profile.name}
@@ -582,6 +576,7 @@ DO NOT include any other text outside the JSON response.`;
     // Return the structured response
     res.json({
       coverLetter: parsedResponse.coverLetter,
+      matchAnalysis: match,
       metadata: {
         generatedAt: new Date().toISOString(),
         processingTime: endTime - startTime

@@ -1638,49 +1638,27 @@ class CoverLetterApp {
   this.showStatus('Generating resume...', 'loading');
 
   try {
-    const requestData = { profile: this.profile, jobText, type: 'resume' };
+    let result = await this.requestResume({ profile: this.profile, jobText });
 
-    this.lastApiCall = { request: requestData, timestamp: new Date().toISOString() };
-
-    const response = await fetch('http://localhost:8787/generateResume', {
-      method: 'POST',
-      headers: this.apiHeaders(),
-      body: JSON.stringify(requestData)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    // DEBUG #2 — raw server result
-    console.log('RAW result from server =', result);
-
-    // DEBUG #3 — parse resumeContent + inspect education
-    let parsedResume;
-    try {
-      parsedResume = typeof result.resumeContent === 'string'
-        ? JSON.parse(result.resumeContent)
-        : result.resumeContent;
-
-      console.log('PARSED.resume.education =', parsedResume?.education,
-        'type =', Array.isArray(parsedResume?.education) ? 'array' : typeof parsedResume?.education);
-    } catch (e) {
-      console.error('Could not parse result.resumeContent as JSON:', e);
+    // The proxy budgets by word count; only the rendered page knows whether it
+    // actually fits. If it overflows, ask once more with a tighter ceiling.
+    let overflow = await this.renderResumeAndMeasure(result.resumeContent);
+    let refit = false;
+    if (overflow > 1.0 && result.metadata?.words) {
+      const maxWords = Math.floor(result.metadata.words / overflow * 0.92);
+      this.showStatus('Trimming to one page…', 'loading');
+      result = await this.requestResume({ profile: this.profile, jobText, budget: { maxWords } });
+      overflow = await this.renderResumeAndMeasure(result.resumeContent);
+      refit = true;
     }
 
     this.lastApiCall.response = result;
     this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
-
-    // Render once (no duplicates)
-    this.displayResume(result.resumeContent);
     this.switchToResumeView();
 
     await this.saveData();
 
-    this.showStatus('Resume generated successfully!', 'success');
+    this.showStatus(this.describeResumeResult(result, { overflow, refit }), overflow > 1.0 ? 'error' : 'success');
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
@@ -1694,6 +1672,51 @@ class CoverLetterApp {
   }
 }
 
+
+    async requestResume(body) {
+        this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
+        const response = await fetch('http://localhost:8787/generateResume', {
+            method: 'POST',
+            headers: this.apiHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).
+    renderResumeAndMeasure(resumeContent) {
+        return new Promise((resolve) => {
+            const onRendered = () => {
+                document.removeEventListener('resume-rendered', onRendered);
+                const page = document.querySelector('.resume-content .resume-page');
+                if (!page) return resolve(0);
+                // 11in at CSS 96dpi. Padding is inside the page box, so scrollHeight is the whole thing.
+                resolve(page.scrollHeight / 1056);
+            };
+            document.addEventListener('resume-rendered', onRendered);
+            // A display:none container has no height; show the resume view before rendering.
+            this.switchToResumeView();
+            this.displayResume(resumeContent);
+        });
+    }
+
+    describeResumeResult(result, { overflow, refit }) {
+        const meta = result.metadata || {};
+        const parts = [];
+        if (overflow > 1.0) {
+            parts.push(`Resume generated, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
+        } else {
+            parts.push(refit ? 'Resume generated and trimmed to fit one page.' : 'Resume generated.');
+        }
+        if (meta.words && meta.words < 450 && meta.usedBullets >= meta.availableBullets) {
+            parts.push(`It uses everything in your profile (${meta.words} words); a full page is usually 550–700. Add more achievements, coursework, or certifications to your profile to fill it.`);
+        }
+        return parts.join(' ');
+    }
 
     displayResume(resumeContent) {
         // Switch to generate tab to ensure the preview element is visible

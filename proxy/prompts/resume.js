@@ -76,9 +76,28 @@ Hard rules:
 4. Skills: 3–4 category lines, most relevant to the posting first, using the posting's spelling of each term. Only skills from the profile.
 5. Education: every institution in the profile, with the details given. Coursework only if the profile lists it; keep the 3–6 most relevant.
 6. Programs/certifications: only what the profile lists under certifications & achievements; otherwise an empty list.
-7. Keep to a single U.S. Letter page (≈ 600–750 words). Prefer cutting less relevant bullets over shortening relevant ones.`;
+7. One U.S. Letter page. The user message gives a word target based on how much material the profile actually has; use as much of the profile as is relevant to reach it, and never pad or invent to get there. If you must cut, drop the least relevant bullets whole rather than shortening relevant ones.`;
 
-function buildResumeMessages({ profile, jobText, match, matchText }) {
+// How much the profile has to work with, so the target is honest.
+function countProfileWords(profile) {
+  const wc = (v) => String(v || '').trim().split(/\s+/).filter(Boolean).length;
+  let n = wc(profile.summary);
+  for (const e of profile.education || []) n += wc([e.institution, e.degreeType, e.major, e.minor, e.honors, e.coursework].join(' '));
+  n += wc((profile.skills || []).join(' '));
+  for (const x of [...(profile.experiences || []), ...(profile.projects || [])]) n += wc(x.description) + (x.bullets || []).reduce((a, b) => a + wc(b), 0);
+  for (const x of profile.extras || []) n += wc([x.title, x.organization, x.description].join(' '));
+  return n;
+}
+
+// Target ≈ the material plus headers/labels, capped at what fits a page.
+function resumeBudget(profile, override = {}) {
+  const available = countProfileWords(profile);
+  const max = Math.min(750, override.maxWords || 750);
+  const target = Math.min(max - 50, Math.round(available * 1.15) + 80);
+  return { availableWords: available, targetWords: Math.max(150, target), maxWords: max };
+}
+
+function buildResumeMessages({ profile, jobText, match, matchText, budget }) {
   const roleName = match.role || 'the role';
   const companyName = match.company || 'the company';
   const mustIncludeExperiences = (profile.experiences || []).filter(exp => exp.mustInclude);
@@ -91,6 +110,8 @@ Selection:
 • Experience: 3–4 bullets per role for relevant roles, 1–2 for less relevant ones. Projects: 2–3 bullets each.
 • The summary is one line: the candidate's actual level and specialty in the posting's terms, no adjectives.
 • Rewrite bullets to lead with what the posting asks for, but every fact in a bullet must already be in the profile's version of it.
+
+Length: the profile holds about ${budget.availableWords} words of material. Aim for about ${budget.targetWords} words in total and never exceed ${budget.maxWords}. If the material is thin, a shorter resume is correct; do not stretch it.
 
 JOB POSTING:
 ${jobText}
@@ -124,4 +145,4 @@ ${formatExtras(profile)}`;
   ];
 }
 
-module.exports = { buildResumeMessages, RESUME_SCHEMA };
+module.exports = { buildResumeMessages, RESUME_SCHEMA, resumeBudget, countProfileWords };

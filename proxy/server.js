@@ -4,7 +4,7 @@ const OpenAI = require('openai');
 
 const { GENERATION_MODEL, VERIFY_MODEL, REASONING, MAX_COMPLETION_TOKENS } = require('./config');
 const { analyzeMatch, renderMatchForPrompt } = require('./prompts/matchAnalysis');
-const { buildResumeMessages, RESUME_SCHEMA } = require('./prompts/resume');
+const { buildResumeMessages, RESUME_SCHEMA, resumeBudget } = require('./prompts/resume');
 const { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } = require('./prompts/coverLetter');
 const { researchCompany, briefFromPostingOnly, renderBriefForPrompt } = require('./prompts/companyResearch');
 
@@ -82,45 +82,22 @@ app.post('/verifyKey', requireApiKey, async (req, res) => {
   }
 });
 
-function truncateWords(s, maxWords = 20) {
-  if (!s) return s;
-  const parts = s.split(/\s+/);
-  return parts.length <= maxWords ? s : parts.slice(0, maxWords).join(' ') + '…';
-}
-function capBullets(arr, maxCount, maxWords) {
-  if (!Array.isArray(arr)) return arr;
-  return arr.slice(0, maxCount).map(b => truncateWords(b, maxWords));
-}
-function approxCharCount(obj) {
-  try { return JSON.stringify(obj).length; } catch { return 0; }
-}
-function trimResumeForOnePage(resume) {
-  // Cap bullets per experience/project and bullet length
-  if (Array.isArray(resume.experience)) {
-    resume.experience = resume.experience.map(r => ({
-      ...r,
-      bullets: capBullets(r.bullets, 4, 22) // 3–4 bullets, ~22 words
-    })).slice(0, 4); // cap number of roles (optional)
-  }
-  if (Array.isArray(resume.projects)) {
-    resume.projects = resume.projects.map(p => ({
-      ...p,
-      bullets: capBullets(p.bullets, 3, 20) // 2–3 bullets, ~20 words
-    })).slice(0, 3);
-  }
-  if (Array.isArray(resume.skills)) resume.skills = resume.skills.slice(0, 4); // 3–4 lines
-  // Light global size guard (roughly keeps JSON small ~ one page when rendered)
-  let size = approxCharCount(resume);
-  const limit = 8000; // tune as needed for your renderer
-  if (size > limit && Array.isArray(resume.experience)) {
-    resume.experience = resume.experience.slice(0, 3);
-    size = approxCharCount(resume);
-  }
-  return resume;
+// Words in every string of a generated resume.
+function resumeWordCount(resume) {
+  let n = 0;
+  const walk = (v) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    else if (typeof v === 'string') n += v.trim().split(/\s+/).filter(Boolean).length;
+  };
+  walk(resume);
+  return n;
 }
 
-// profile.education is an array of institutions (older saves may still send
-// a single object); render every entry as one line for the prompts.
+function bulletCount(resume) {
+  return [...(resume.experience || []), ...(resume.projects || [])].reduce((a, e) => a + (e.bullets || []).length, 0);
+}
+
 // Runs one generation call with a strict schema and returns the parsed object.
 async function generateStructured(openai, { messages, schema, schemaName, maxTokens }) {
   const completion = await openai.chat.completions.create({
@@ -141,35 +118,78 @@ async function generateStructured(openai, { messages, schema, schemaName, maxTok
 app.post('/generateResume', requireApiKey, async (req, res) => {
   const startTime = Date.now();
   try {
-    const { profile, jobText } = req.body;
+    const { profile, jobText, budget: budgetOverride = {} } = req.body;
     if (!profile || !jobText) {
       return res.status(400).json({ error: 'Missing required fields: profile and jobText' });
     }
     console.log(`[${new Date().toISOString()}] Resume generation request started`);
+    // The extension may pass budget.maxWords after measuring a rendered page that overflowed.
+    const budget = resumeBudget(profile, budgetOverride);
 
     // Structured read of the posting against the profile; replaces regex guessing.
     const match = await analyzeMatch(req.openai, { profile, jobText });
     const matchText = renderMatchForPrompt(match);
     console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
+    const messages = buildResumeMessages({ profile, jobText, match, matchText, budget });
     let { data: resume } = await generateStructured(req.openai, {
-      messages: buildResumeMessages({ profile, jobText, match, matchText }),
-      schema: RESUME_SCHEMA,
-      schemaName: 'resume',
-      maxTokens: MAX_COMPLETION_TOKENS.resume
+      messages, schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
     });
+
+    // Over the ceiling: one pass asking for whole bullets to be dropped, not truncated.
+    let words = resumeWordCount(resume);
+    let trimmed = false;
+    if (words > budget.maxWords) {
+      console.log(`Resume is ${words} words (max ${budget.maxWords}); requesting a trim`);
+      const repair = await generateStructured(req.openai, {
+        messages: [
+          ...messages,
+          { role: 'assistant', content: JSON.stringify(resume) },
+          { role: 'user', content: `That is ${words} words; the maximum is ${budget.maxWords}. Remove the least relevant whole bullets (and coursework if needed) until it is under ${budget.maxWords} words. Do not shorten bullets mid-sentence and do not change anything else.` }
+        ],
+        schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
+      });
+      resume = repair.data;
+      words = resumeWordCount(resume);
+      trimmed = true;
+    }
+
+    const availableBullets = [...(profile.experiences || []), ...(profile.projects || [])].reduce((a, e) => a + (e.bullets || []).length, 0);
+
+    // Well under target with material left over: one pass asking for more of the profile.
+    let expanded = false;
+    if (!trimmed && words < budget.targetWords * 0.7 && bulletCount(resume) < availableBullets) {
+      console.log(`Resume is ${words} words with ${bulletCount(resume)}/${availableBullets} bullets used (target ${budget.targetWords}); requesting an expansion`);
+      const expand = await generateStructured(req.openai, {
+        messages: [
+          ...messages,
+          { role: 'assistant', content: JSON.stringify(resume) },
+          { role: 'user', content: `That is ${words} words and uses ${bulletCount(resume)} of the profile's ${availableBullets} bullets; the target is about ${budget.targetWords} words. Add the most relevant of the remaining profile bullets, roles, projects, coursework or certifications until you are near the target (never over ${budget.maxWords}). Only material from the profile; do not lengthen existing bullets with new detail.` }
+        ],
+        schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
+      });
+      resume = expand.data;
+      words = resumeWordCount(resume);
+      expanded = true;
+    }
 
     // Never show certifications the profile does not have.
     if (!(Array.isArray(profile.extras) && profile.extras.length)) resume.programs = [];
-    // Enforce one-page heuristics (caps bullets/counts/length)
-    resume = trimResumeForOnePage(resume);
-
     const endTime = Date.now();
-    console.log(`[${new Date().toISOString()}] Resume generated successfully in ${endTime - startTime}ms`);
+    console.log(`[${new Date().toISOString()}] Resume generated successfully in ${endTime - startTime}ms (${words} words, ${bulletCount(resume)}/${availableBullets} bullets)`);
     return res.json({
       resumeContent: resume,
       matchAnalysis: match,
-      metadata: { generatedAt: new Date().toISOString(), processingTime: endTime - startTime }
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        processingTime: endTime - startTime,
+        words,
+        budget,
+        usedBullets: bulletCount(resume),
+        availableBullets,
+        trimmed,
+        expanded
+      }
     });
   } catch (error) {
     console.error('Error generating resume:', safeErrorMessage(error));

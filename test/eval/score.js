@@ -176,8 +176,13 @@ function scoreResume({ resumeContent, profile, jobText, company }) {
   const totalWords = wc(text);
   checks.wordBudget = totalWords <= 750 ? 1 : totalWords <= 850 ? 0.5 : 0;
   if (totalWords > 850) fails.push(`over budget: ${totalWords} words`);
-  // A one-page resume should also *use* the page; a sparse one reads as thin.
-  checks.pageFill = totalWords >= 450 ? 1 : totalWords >= 300 ? 0.5 : 0;
+  // A one-page resume should use the page — but only as far as the profile has
+  // material. Expected length is the material (plus headers) capped at a page.
+  // Tightened bullets come out shorter than the source, so ~90% of it is full use.
+  const available = wc(profileText(profile));
+  const expected = Math.min(650, Math.round(available * 0.9));
+  const fill = totalWords / expected;
+  checks.pageFill = fill >= 0.85 ? 1 : fill >= 0.65 ? 0.5 : 0;
 
   const bullets = [...(r.experience || []), ...(r.projects || [])].flatMap(e => e.bullets || []);
   const longBullets = bullets.filter(b => wc(b) > 30);

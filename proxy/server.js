@@ -1,15 +1,32 @@
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-require('dotenv').config();
+
+const { GENERATION_MODEL, VERIFY_MODEL, REASONING, MAX_COMPLETION_TOKENS } = require('./config');
+const { analyzeMatch, renderMatchForPrompt } = require('./prompts/matchAnalysis');
+const { buildResumeMessages, RESUME_SCHEMA, resumeBudget } = require('./prompts/resume');
+const { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } = require('./prompts/coverLetter');
+const { researchCompany, briefFromPostingOnly, renderBriefForPrompt } = require('./prompts/companyResearch');
 
 const app = express();
 const PORT = 8787;
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// The API key is supplied by the extension on every request as
+// "Authorization: Bearer sk-...". It is never stored, logged or echoed here.
+function requireApiKey(req, res, next) {
+  const header = req.get('authorization') || '';
+  const match = header.match(/^Bearer\s+(\S+)$/i);
+  if (!match) {
+    return res.status(401).json({ error: 'Missing API key. Add your OpenAI key in the extension\'s Settings.' });
+  }
+  req.openai = new OpenAI({ apiKey: match[1] });
+  next();
+}
+
+// OpenAI errors carry the key in some messages' request details; strip anything key-shaped.
+function safeErrorMessage(error) {
+  return String(error && error.message || 'Unknown error').replace(/sk-[A-Za-z0-9_-]{6,}/g, 'sk-***');
+}
 
 // Middleware
 app.use(cors({
@@ -21,7 +38,7 @@ app.use(cors({
     return cb(null, false);
   },
   methods: ['POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false
 }));
 
@@ -43,545 +60,229 @@ app.use(timeout(120000)); // 2 minute timeout for comprehensive resume generatio
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    // Lets the extension's Getting Started checklist confirm setup without exposing the key.
-    keyConfigured: Boolean(process.env.OPENAI_API_KEY && !/your[-_ ]?(openai[-_ ]?)?(api[-_ ]?)?key/i.test(process.env.OPENAI_API_KEY))
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-function truncateWords(s, maxWords = 20) {
-  if (!s) return s;
-  const parts = s.split(/\s+/);
-  return parts.length <= maxWords ? s : parts.slice(0, maxWords).join(' ') + '…';
-}
-function capBullets(arr, maxCount, maxWords) {
-  if (!Array.isArray(arr)) return arr;
-  return arr.slice(0, maxCount).map(b => truncateWords(b, maxWords));
-}
-function approxCharCount(obj) {
-  try { return JSON.stringify(obj).length; } catch { return 0; }
-}
-function trimResumeForOnePage(resume) {
-  // Cap bullets per experience/project and bullet length
-  if (Array.isArray(resume.experience)) {
-    resume.experience = resume.experience.map(r => ({
-      ...r,
-      bullets: capBullets(r.bullets, 4, 22) // 3–4 bullets, ~22 words
-    })).slice(0, 4); // cap number of roles (optional)
+// Confirms a key works with one minimal request. Returns the model that answered.
+app.post('/verifyKey', requireApiKey, async (req, res) => {
+  try {
+    const completion = await req.openai.chat.completions.create({
+      model: VERIFY_MODEL,
+      messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+      max_completion_tokens: MAX_COMPLETION_TOKENS.verify,
+      reasoning_effort: REASONING.verify
+    });
+    res.json({ ok: true, model: completion.model });
+  } catch (error) {
+    const status = error.status === 401 ? 401 : 502;
+    const message = error.status === 401
+      ? 'OpenAI rejected this key. Check it and try again.'
+      : `Could not reach OpenAI: ${safeErrorMessage(error)}`;
+    res.status(status).json({ ok: false, error: message });
   }
-  if (Array.isArray(resume.projects)) {
-    resume.projects = resume.projects.map(p => ({
-      ...p,
-      bullets: capBullets(p.bullets, 3, 20) // 2–3 bullets, ~20 words
-    })).slice(0, 3);
-  }
-  if (Array.isArray(resume.skills)) resume.skills = resume.skills.slice(0, 4); // 3–4 lines
-  // Light global size guard (roughly keeps JSON small ~ one page when rendered)
-  let size = approxCharCount(resume);
-  const limit = 8000; // tune as needed for your renderer
-  if (size > limit && Array.isArray(resume.experience)) {
-    resume.experience = resume.experience.slice(0, 3);
-    size = approxCharCount(resume);
-  }
-  return resume;
+});
+
+// Words in every string of a generated resume.
+function resumeWordCount(resume) {
+  let n = 0;
+  const walk = (v) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    else if (typeof v === 'string') n += v.trim().split(/\s+/).filter(Boolean).length;
+  };
+  walk(resume);
+  return n;
 }
 
-// profile.education is an array of institutions (older saves may still send
-// a single object); render every entry as one line for the prompts.
-function formatEducation(profile) {
-  const list = Array.isArray(profile.education)
-    ? profile.education
-    : (profile.education && typeof profile.education === 'object' ? [profile.education] : []);
-  const lines = list.map(edu => {
-    const school = edu.institution || edu.university || '';
-    const degree = [edu.degreeType, edu.major ? `in ${edu.major}` : ''].filter(Boolean).join(' ');
-    let line = [degree, school].filter(Boolean).join(', ') || 'Not specified';
-    if (edu.location) line += ` (${edu.location})`;
-    if (edu.start && edu.end) line += ` ${edu.start} - ${edu.end}`;
-    else if (edu.end) line += ` ${edu.end}`;
-    if (edu.minor) line += `; Minor: ${edu.minor}`;
-    if (edu.gpa) line += `; GPA: ${edu.gpa}`;
-    if (edu.honors) line += `; Honors: ${edu.honors}`;
-    if (edu.coursework) line += `; Coursework: ${edu.coursework}`;
-    return line;
+function bulletCount(resume) {
+  return [...(resume.experience || []), ...(resume.projects || [])].reduce((a, e) => a + (e.bullets || []).length, 0);
+}
+
+// Runs one generation call with a strict schema and returns the parsed object.
+async function generateStructured(openai, { messages, schema, schemaName, maxTokens }) {
+  const completion = await openai.chat.completions.create({
+    model: GENERATION_MODEL,
+    reasoning_effort: REASONING.generate,
+    max_completion_tokens: maxTokens,
+    messages,
+    response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } }
   });
-  return lines.length ? lines.join('\n') : 'Not specified';
+  const choice = completion.choices[0];
+  if (choice.finish_reason === 'length') {
+    throw Object.assign(new Error('The model ran out of room before finishing. Try again or shorten the job posting.'), { code: 'output_truncated' });
+  }
+  return { data: JSON.parse(choice.message.content), usage: completion.usage };
 }
-
-function formatExtras(profile) {
-  if (!Array.isArray(profile.extras) || !profile.extras.length) return 'None';
-  return profile.extras.map(extra => {
-    let line = `[${extra.type || 'other'}] ${extra.title || ''}`;
-    if (extra.organization) line += ` at ${extra.organization}`;
-    if (extra.start && extra.end) line += ` (${extra.start} - ${extra.end})`;
-    else if (extra.end) line += ` (${extra.end})`;
-    if (extra.description) line += `\nDescription: ${extra.description}`;
-    return line;
-  }).join('\n\n');
-}
-
-
 
 // Resume generation endpoint
-app.post('/generateResume', async (req, res) => {
+app.post('/generateResume', requireApiKey, async (req, res) => {
   const startTime = Date.now();
-  
   try {
-    const { profile, jobText } = req.body;
-    
-    // Validate required fields
+    const { profile, jobText, budget: budgetOverride = {} } = req.body;
     if (!profile || !jobText) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: profile and jobText' 
-      });
+      return res.status(400).json({ error: 'Missing required fields: profile and jobText' });
     }
-    
     console.log(`[${new Date().toISOString()}] Resume generation request started`);
-    
-    // Extract company name and role from job text
-    const companyMatch = jobText.match(/(?:company|organization|at|join)\s*:?\s*([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.|!)/i) ||
-                        jobText.match(/([A-Z][a-zA-Z\s&.,]{2,30})(?:\s+is\s+(?:seeking|looking|hiring))/i) ||
-                        jobText.match(/(?:we|our company)\s+(?:are|is)\s+([A-Z][a-zA-Z\s&.,]+)/i);
-    const companyName = companyMatch ? companyMatch[1].trim().replace(/[.,!]$/, '') : '[COMPANY NAME]';
-    
-    const roleMatch = jobText.match(/(?:position|role|job title|title|hiring)\s*:?\s*([A-Z][a-zA-Z\s-]+?)(?:\s|$|,|\.|!|at)/i) ||
-                     jobText.match(/(?:seeking|looking for|hiring)\s+(?:a|an)?\s*([A-Z][a-zA-Z\s-]+?)(?:\s+to|\s+who|$)/i) ||
-                     jobText.match(/^([A-Z][a-zA-Z\s-]+?)(?:\s+at|\s+position|\s+-)/);
-    const roleName = roleMatch ? roleMatch[1].trim().replace(/[.,!-]$/, '') : '[ROLE]';
+    // The extension may pass budget.maxWords after measuring a rendered page that overflowed.
+    const budget = resumeBudget(profile, budgetOverride);
 
-    console.log('Detected company:', companyName);
-    console.log('Detected role:', roleName);
+    // Structured read of the posting against the profile; replaces regex guessing.
+    const match = await analyzeMatch(req.openai, { profile, jobText });
+    const matchText = renderMatchForPrompt(match);
+    console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
-    // Enhanced prompt with one-page logic and Must Include handling
-    const mustIncludeExperiences = profile.experiences.filter(exp => exp.mustInclude);
-    const mustIncludeProjects = profile.projects.filter(proj => proj.mustInclude);
-    
-const systemPrompt = `You are a resume writer who creates truthful, concise, ATS-friendly
-one-page resumes. Do NOT fabricate experiences, programs, or certifications.
-Only use or lightly rephrase what is provided in the profile or job text.
-Prefer measurable impact, clear verbs, and job-relevant keywords. Keep the
-final result to a single U.S. Letter page when rendered with a typical resume
-template (≈ 600–750 words total).`;
+    const messages = buildResumeMessages({ profile, jobText, match, matchText, budget });
+    let { data: resume } = await generateStructured(req.openai, {
+      messages, schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
+    });
 
-const userPrompt = `Create a targeted, one-page resume for the ${roleName} role at ${companyName}.
-Strict rules:
-• Do NOT invent or hallucinate content (programs, certs, jobs). If data is missing, omit the section.
-• Keep to a single page worth of content (≈ 600–750 words max).
-• Section order for new grads: Header → Skills → Education → Experience → Projects → (optional) Programs/Certifications.
-• Bullet counts (upper bounds): Experience 3–4 bullets per role; Projects 2–3 bullets per project.
-• Bullet length: ~12–22 words; be specific and outcome-oriented.
-• Skills: 3–4 category lines max (Languages, Frameworks/Libs, Data/Databases, Cloud/DevOps/Tools).
-• Education: keep accurate (degree, school, location, dates, GPA if provided); include 3–6 relevant courses if available.
-• Programs/Certifications: include ONLY if provided in profile; otherwise OMIT this section entirely.
-
-Prioritize: “mustInclude” experiences/projects → role relevance → recency → quantified impact.
-
-JOB POSTING:
-${jobText}
-
-CANDIDATE PROFILE:
-Name: ${profile.name}
-Location: ${profile.location || 'Not specified'}
-Summary (adapt to the role; do not copy verbatim): ${profile.summary || 'None provided'}
-Education (one line per institution; include every institution):
-${formatEducation(profile)}
-
-Skills: ${profile.skills ? profile.skills.join(', ') : 'None listed'}
-
-Must-Include Experiences: ${mustIncludeExperiences.map(e => `${e.title} at ${e.company}`).join('; ') || 'None'}
-Experiences:
-${profile.experiences ? profile.experiences.map(exp => {
-  let s = `${exp.title} at ${exp.company} (${exp.start} - ${exp.end}, ${exp.location})`;
-  if (exp.description) s += `\nRole: ${exp.description}`;
-  if (exp.bullets?.length) s += `\nKey Achievements: ${exp.bullets.join('; ')}`;
-  return s;
-}).join('\n\n') : 'None listed'}
-
-Must-Include Projects: ${mustIncludeProjects.map(p => p.name).join('; ') || 'None'}
-Projects:
-${profile.projects ? profile.projects.map(proj => {
-  let s = proj.name;
-  if (proj.description) s += `\nDescription: ${proj.description}`;
-  if (proj.bullets?.length) s += `\nKey Details: ${proj.bullets.join('; ')}`;
-  return s;
-}).join('\n\n') : 'None listed'}
-
-Certifications & achievements (certifications, awards, research, publications, leadership, volunteering, programs):
-${formatExtras(profile)}
-
-OUTPUT JSON (omit a section key if you have no content for it):
-{
-  "summary": "short headline/tagline (one line)",
-  "skills": ["up to 4 categorized lines"],
-  "education": [
-    {
-      "school": "...",
-      "degree": "...",
-      "major": "...",
-      "minor": "optional",
-      "location": "...",
-      "dates": "...",
-      "gpa": "optional",
-      "honors": "optional",
-      "coursework": "optional, 3-6 relevant courses"
-    }
-  ],
-  "experience": [
-    { "title": "...", "company": "...", "dates": "...", "location": "...", "bullets": ["...","...","..."] }
-  ],
-  "projects": [
-    { "name": "...", "link": "optional", "bullets": ["...","..."] }
-  ],
-  "programs": ["only include if the profile lists certifications & achievements; one line each, e.g. 'AWS Solutions Architect – Associate (2024)'"]
-}`;
-
-
-    // Call OpenAI API
-    let completion;
-    try {
-      completion = await openai.chat.completions.create({
-        model: "gpt-4-turbo",
+    // Over the ceiling: one pass asking for whole bullets to be dropped, not truncated.
+    let words = resumeWordCount(resume);
+    let trimmed = false;
+    if (words > budget.maxWords) {
+      console.log(`Resume is ${words} words (max ${budget.maxWords}); requesting a trim`);
+      const repair = await generateStructured(req.openai, {
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
+          ...messages,
+          { role: 'assistant', content: JSON.stringify(resume) },
+          { role: 'user', content: `That is ${words} words; the maximum is ${budget.maxWords}. Remove the least relevant whole bullets (and coursework if needed) until it is under ${budget.maxWords} words. Do not shorten bullets mid-sentence and do not change anything else.` }
         ],
-        response_format: { type: "json_object" },
-        temperature: 0.8,
-        max_tokens: 4000
+        schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
       });
-    } catch (error) {
-      throw error;
+      resume = repair.data;
+      words = resumeWordCount(resume);
+      trimmed = true;
     }
 
-    const responseContent = completion.choices[0].message.content;
-    
-    // Parse and validate JSON response
-    let parsedResponse;
-    try {
-      parsedResponse = JSON.parse(responseContent);
-      // Drop Programs if user didn't provide any certifications/achievements; never fabricate
-      const userProvidedPrograms = Array.isArray(profile.extras) && profile.extras.length > 0;
-      if (!userProvidedPrograms && 'programs' in parsedResponse) {
-        delete parsedResponse.programs;
-      }
+    const availableBullets = [...(profile.experiences || []), ...(profile.projects || [])].reduce((a, e) => a + (e.bullets || []).length, 0);
 
-      // Enforce one-page heuristics (caps bullets/counts/length)
-      parsedResponse = trimResumeForOnePage(parsedResponse);
-
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      return res.status(500).json({ 
-        error: 'Failed to parse resume response as JSON',
-        debugInfo: {
-          response: responseContent,
-          parseError: parseError.message
-        }
+    // Well under target with material left over: one pass asking for more of the profile.
+    let expanded = false;
+    if (!trimmed && words < budget.targetWords * 0.7 && bulletCount(resume) < availableBullets) {
+      console.log(`Resume is ${words} words with ${bulletCount(resume)}/${availableBullets} bullets used (target ${budget.targetWords}); requesting an expansion`);
+      const expand = await generateStructured(req.openai, {
+        messages: [
+          ...messages,
+          { role: 'assistant', content: JSON.stringify(resume) },
+          { role: 'user', content: `That is ${words} words and uses ${bulletCount(resume)} of the profile's ${availableBullets} bullets; the target is about ${budget.targetWords} words. Add the most relevant of the remaining profile bullets, roles, projects, coursework or certifications until you are near the target (never over ${budget.maxWords}). Only material from the profile; do not lengthen existing bullets with new detail.` }
+        ],
+        schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
       });
+      resume = expand.data;
+      words = resumeWordCount(resume);
+      expanded = true;
     }
 
+    // Never show certifications the profile does not have.
+    if (!(Array.isArray(profile.extras) && profile.extras.length)) resume.programs = [];
     const endTime = Date.now();
-    console.log(`[${new Date().toISOString()}] Resume generated successfully in ${endTime - startTime}ms`);
-    
-    // Return the structured response
+    console.log(`[${new Date().toISOString()}] Resume generated successfully in ${endTime - startTime}ms (${words} words, ${bulletCount(resume)}/${availableBullets} bullets)`);
     return res.json({
-      resumeContent: parsedResponse,
+      resumeContent: resume,
+      matchAnalysis: match,
       metadata: {
         generatedAt: new Date().toISOString(),
-        processingTime: endTime - startTime
+        processingTime: endTime - startTime,
+        words,
+        budget,
+        usedBullets: bulletCount(resume),
+        availableBullets,
+        trimmed,
+        expanded
       }
     });
-    
   } catch (error) {
-    console.error('Error generating resume:', error);
-    
+    console.error('Error generating resume:', safeErrorMessage(error));
     if (!res.headersSent) {
-      const errorResponse = {
-        error: 'Failed to generate resume',
-        message: error.message,
-        timestamp: new Date().toISOString()
-      };
-      
-      if (error.code) {
-        errorResponse.code = error.code;
-      }
-      
-      res.status(500).json(errorResponse);
+      res.status(500).json({ error: 'Failed to generate resume', message: safeErrorMessage(error), code: error.code, timestamp: new Date().toISOString() });
     }
   }
 });
 
 // Cover letter generation endpoint
-app.post('/generateCoverLetter', async (req, res) => {
+//
+// Body: { profile, jobText, research?: boolean (default true), briefCache?: { [companyLower]: brief } }
+// The extension caches briefs per company; a cached brief for the matched
+// company is reused instead of searching again.
+app.post('/generateCoverLetter', requireApiKey, async (req, res) => {
   const startTime = Date.now();
-  
   try {
-    const { profile, jobText } = req.body;
-    
-    // Validate required fields
+    const { profile, jobText, research = true, briefCache = {} } = req.body;
     if (!profile || !jobText) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: profile and jobText' 
-      });
+      return res.status(400).json({ error: 'Missing required fields: profile and jobText' });
     }
-    
     console.log(`[${new Date().toISOString()}] Cover letter generation request started`);
-    
-    // Extract company name and role from job text
-    const companyMatch = jobText.match(/(?:company|organization|at|join)\s*:?\s*([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.|!)/i) ||
-                        jobText.match(/([A-Z][a-zA-Z\s&.,]{2,30})(?:\s+is\s+(?:seeking|looking|hiring))/i) ||
-                        jobText.match(/(?:we|our company)\s+(?:are|is)\s+([A-Z][a-zA-Z\s&.,]+)/i);
-    const companyName = companyMatch ? companyMatch[1].trim().replace(/[.,!]$/, '') : '[COMPANY NAME]';
-    
-    const roleMatch = jobText.match(/(?:position|role|job title|title|hiring)\s*:?\s*([A-Z][a-zA-Z\s-]+?)(?:\s|$|,|\.|!|at)/i) ||
-                     jobText.match(/(?:seeking|looking for|hiring)\s+(?:a|an)?\s*([A-Z][a-zA-Z\s-]+?)(?:\s+to|\s+who|$)/i) ||
-                     jobText.match(/^([A-Z][a-zA-Z\s-]+?)(?:\s+at|\s+position|\s+-)/);
-    const roleName = roleMatch ? roleMatch[1].trim().replace(/[.,!-]$/, '') : '[ROLE]';
 
-    console.log('Detected company:', companyName);
-    console.log('Detected role:', roleName);
+    const match = await analyzeMatch(req.openai, { profile, jobText });
+    const matchText = renderMatchForPrompt(match);
+    console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
-    // Construct the enhanced prompt
-    const systemPrompt = `You are an elite executive cover letter consultant. You MUST follow ALL instructions precisely. You write consultant-level pitches that sound like strategic business proposals, NOT job applications. You NEVER use generic phrases, clichés, or beggar language. Every word must demonstrate unique value and insider knowledge.`;
-    
-    const userPrompt = `CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
-
-Write a cover letter for ${companyName} for the ${roleName} role. This is NOT a typical job application - it's a strategic business pitch.
-
-MANDATORY REQUIREMENTS:
-
-1. Research the company first. Look into their culture, values, strategy, current market challenges, leadership statements, and any unique initiatives. Open the letter with an insider-level observation that only someone deeply engaged with the company would know. This should sound like I have studied them carefully, not like a generic compliment.
-
-2. Do not restate my resume. My resume already lists my skills. Instead, the letter should:
-• Identify the problems, bottlenecks, or goals the company is facing.
-• Show how my specific experiences and skills directly solve those problems.
-• Position me not as a candidate filling a role, but as a multiplier who will unlock new value for them.
-
-3. Value proposition focus. Every line must show how I am a unique and confident addition who creates an edge they cannot find elsewhere. Do not use generic phrases like "I am passionate" or "I believe I am qualified." Write with the certainty of someone who already knows they will make a measurable impact.
-
-4. Style and tone. The tone must be confident, professional, and natural. Write like a consultant pitching directly to the CEO — concise, sharp, authoritative, and persuasive. Do not sound like a job seeker begging for an opportunity. Sound like someone who is offering them a rare chance to gain a competitive advantage.
-
-5. CRITICAL: Avoid ALL AI detection patterns.
-• NEVER use em-dashes (—), hyphens (-), semicolons (;), or colons (:) anywhere in the letter body
-• NEVER use phrases like "I am excited to," "I am passionate about," "team player," "fast learner," "I believe," "I feel"
-• NEVER use "furthermore," "moreover," "additionally," "in addition," "consequently," "therefore"
-• NEVER start sentences with "As a," "With my," "Through my," "Having worked"
-• NEVER use superlatives like "extremely," "incredibly," "highly," "very," "really"
-• Write with varied sentence lengths and natural human rhythm
-• Use contractions occasionally (I've, you'll, we're) to sound more human
-• Write like you're speaking directly to a business executive, not writing an essay
-
-6. Structure of the cover letter (EXACTLY 4 paragraphs).
-• Paragraph 1: One insider observation about ${companyName} (3-4 lines max). Show you understand their specific market position or recent developments.
-• Paragraph 2: Get straight to business. Identify ONE specific challenge they face based on the job posting and how you solve it directly.
-• Paragraph 3: Present your relevant experience with specific outcomes. You may enhance or extrapolate from the profile experiences to match job requirements. Add relevant soft skills that demonstrate leadership, problem-solving, or innovation.
-• Paragraph 4: Strong close that positions hiring you as the obvious strategic decision. Sound like you're doing them a favor by considering their opportunity.
-
-7. The final product should feel like the confident pitch of a lifetime. When finished, the reader should feel curious and eager to meet me, as if they would be missing out if they did not.
-
-Use the facts from my profile below as a foundation. You may enhance experiences and add relevant soft skills to better match the job requirements, but keep it realistic and professional.
-
-Job Post:
-${jobText}
-
-My Profile:
-Name: ${profile.name}
-Contact: ${profile.contact}
-Summary: ${profile.summary || 'None provided'}
-Education:
-${formatEducation(profile)}
-Skills: ${profile.skills ? profile.skills.join(', ') : 'None listed'}
-
-Work Experience: ${profile.experiences ? profile.experiences.map(exp => {
-  let expStr = `${exp.title} at ${exp.company} (${exp.start} - ${exp.end}, ${exp.location})`;
-  if (exp.description) expStr += `\nRole: ${exp.description}`;
-  if (exp.bullets && exp.bullets.length > 0) expStr += `\nKey Achievements: ${exp.bullets.join('; ')}`;
-  return expStr;
-}).join('\n\n') : 'None listed'}
-
-Projects: ${profile.projects ? profile.projects.map(proj => {
-  let projStr = proj.name;
-  if (proj.description) projStr += `\nDescription: ${proj.description}`;
-  if (proj.bullets && proj.bullets.length > 0) projStr += `\nKey Details: ${proj.bullets.join('; ')}`;
-  return projStr;
-}).join('\n\n') : 'None listed'}
-
-Certifications & Achievements: ${profile.extras ? profile.extras.map(extra => {
-  let extraStr = `${extra.title} at ${extra.organization}`;
-  if (extra.start && extra.end) extraStr += ` (${extra.start} - ${extra.end})`;
-  if (extra.description) extraStr += `\nDescription: ${extra.description}`;
-  return extraStr;
-}).join('\n\n') : 'None listed'}
-
-CRITICAL OUTPUT REQUIREMENTS:
-- Write EXACTLY 4 paragraphs as specified above
-- Use confident, consultant-level language throughout
-- NO generic phrases like "I am passionate" or "team player"
-- NO dashes, semicolons, or colons in the letter body
-- Sound like you're offering them a rare opportunity, not begging for a job
-- Research-backed insights about ${companyName} specifically
-
-Return your response as JSON with this exact format:
-{
-  "coverLetter": "Your complete cover letter here as a single string with proper paragraph breaks using \\n\\n between paragraphs"
-}
-
-DO NOT include any other text outside the JSON response.`;
-
-    console.log('Full user prompt being sent:');
-    console.log('='.repeat(50));
-    console.log(userPrompt);
-    console.log('='.repeat(50));
-
-    // Define the JSON schema for structured output
-    const responseFormat = {
-      type: "json_schema",
-      json_schema: {
-        name: "cover_letter_response",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            coverLetter: {
-              type: "string"
-            }
-          },
-          required: ["coverLetter"],
-          additionalProperties: false
-        }
-      }
-    };
-
-    let completion;
-    let retryCount = 0;
-    const maxRetries = 1;
-
-    while (retryCount <= maxRetries) {
+    // Company brief: cached → researched → posting-only.
+    let brief;
+    let briefSource = 'posting';
+    const cacheKey = (match.company || '').trim().toLowerCase();
+    if (cacheKey && briefCache && briefCache[cacheKey]) {
+      brief = briefCache[cacheKey];
+      briefSource = 'cache';
+    } else if (research && match.company) {
       try {
-        // Call OpenAI API with structured outputs
-        // Using gpt-4-turbo for better prompt following
-        completion = await openai.chat.completions.create({
-          model: "gpt-4-turbo",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.9,
-          max_tokens: 3000
-        });
-        
-        break; // Success, exit retry loop
-        
+        brief = await researchCompany(req.openai, { company: match.company, role: match.role, aboutCompany: match.about_company, jobText });
+        briefSource = 'research';
+        console.log(`Research: ${match.company} — found=${brief.found}, searches=${brief.searches}`);
       } catch (error) {
-        if (error.code === 'model_not_found' || error.message?.includes('structured outputs')) {
-          // Fallback to json_object mode if strict schema not supported
-          console.log('Falling back to json_object mode');
-          completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt + "\n\nIMPORTANT: Return only valid JSON with a single field 'coverLetter' containing the letter as a string." }
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.7,
-            max_tokens: 1500
-          });
-          break;
-        } else if (retryCount < maxRetries) {
-          retryCount++;
-          console.log(`Retry attempt ${retryCount} due to error:`, error.message);
-          continue;
-        } else {
-          throw error;
-        }
+        console.warn('Research failed, continuing with the posting only:', safeErrorMessage(error));
+        brief = briefFromPostingOnly({ company: match.company, aboutCompany: match.about_company });
       }
+    } else {
+      brief = briefFromPostingOnly({ company: match.company, aboutCompany: match.about_company });
     }
+    const briefText = renderBriefForPrompt(brief);
 
-    const responseContent = completion.choices[0].message.content;
-    
-    // Parse and validate JSON response
-    let parsedResponse;
-    try {
-      parsedResponse = JSON.parse(responseContent);
-      
-      if (!parsedResponse.coverLetter || typeof parsedResponse.coverLetter !== 'string') {
-        throw new Error('Invalid response format: missing or invalid coverLetter field');
-      }
-      
-    } catch (parseError) {
-      if (retryCount === 0) {
-        // Retry once with explicit JSON reminder
-        console.log('JSON parse failed, retrying with explicit instructions');
-        try {
-          const retryCompletion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-              { role: "assistant", content: responseContent },
-              { role: "user", content: "Please return valid JSON with only the coverLetter field. Format: {\"coverLetter\": \"your letter here\"}" }
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.7,
-            max_tokens: 1500
-          });
-          
-          parsedResponse = JSON.parse(retryCompletion.choices[0].message.content);
-          
-          if (!parsedResponse.coverLetter || typeof parsedResponse.coverLetter !== 'string') {
-            throw new Error('Invalid response format after retry');
-          }
-          
-        } catch (retryError) {
-          console.error('Retry also failed:', retryError);
-          return res.status(500).json({ 
-            error: 'Failed to generate valid response format',
-            debugInfo: {
-              originalResponse: responseContent,
-              parseError: parseError.message
-            }
-          });
-        }
-      } else {
-        return res.status(500).json({ 
-          error: 'Failed to parse response as JSON',
-          debugInfo: {
-            response: responseContent,
-            parseError: parseError.message
-          }
-        });
-      }
+    const messages = buildCoverLetterMessages({ profile, jobText, match, matchText, briefText });
+    let { data } = await generateStructured(req.openai, {
+      messages, schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
+    });
+
+    // Every claim must trace to the profile, the posting, or the brief. One
+    // repair pass; whatever is still unsourced is reported, not hidden.
+    let bad = unsourcedClaims(data.claims, profile, brief);
+    let repaired = false;
+    if (bad.length) {
+      console.log(`Cover letter: ${bad.length} unsourced claim(s); requesting a repair`);
+      const repair = await generateStructured(req.openai, {
+        messages: [
+          ...messages,
+          { role: 'assistant', content: JSON.stringify(data) },
+          { role: 'user', content: `These sentences make claims that cannot be traced to the profile, the job posting, or the company brief:\n${bad.map(c => `- "${c.sentence}" (cited: ${c.source || 'nothing'})`).join('\n')}\n\nRewrite the letter so each of them is either removed or replaced with something you can source, keep everything else, and return the full letter and claims again.` }
+        ],
+        schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
+      });
+      data = repair.data;
+      bad = unsourcedClaims(data.claims, profile, brief);
+      repaired = true;
     }
 
     const endTime = Date.now();
     console.log(`[${new Date().toISOString()}] Cover letter generated successfully in ${endTime - startTime}ms`);
-    
-    // Return the structured response
     res.json({
-      coverLetter: parsedResponse.coverLetter,
+      coverLetter: data.coverLetter,
+      claims: data.claims,
+      unsourcedClaims: bad,
+      matchAnalysis: match,
+      companyBrief: brief,
       metadata: {
         generatedAt: new Date().toISOString(),
-        processingTime: endTime - startTime
+        processingTime: endTime - startTime,
+        briefSource,
+        searches: briefSource === 'research' ? brief.searches : 0,
+        repaired
       }
     });
-    
   } catch (error) {
-    console.error('Error generating cover letter:', error);
-    
-    // Don't log PII, just error details
-    const errorResponse = {
-      error: 'Failed to generate cover letter',
-      message: error.message,
-      timestamp: new Date().toISOString()
-    };
-    
-    if (error.code) {
-      errorResponse.code = error.code;
+    console.error('Error generating cover letter:', safeErrorMessage(error));
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate cover letter', message: safeErrorMessage(error), code: error.code, timestamp: new Date().toISOString() });
     }
-    
-    res.status(500).json(errorResponse);
   }
 });
 
@@ -639,10 +340,7 @@ app.post("/pdf/fromHtml", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Cover Letter Proxy server running on http://localhost:${PORT}`);
   console.log(`Health check available at http://localhost:${PORT}/health`);
-  
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('WARNING: OPENAI_API_KEY not found in environment variables');
-  }
+  console.log('API keys are supplied per request by the extension (Settings → OpenAI API key).');
 });
 
 module.exports = app;

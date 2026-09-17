@@ -45,6 +45,13 @@
                     </button>
                 </nav>
 
+                <button class="theme-toggle" id="open-settings" aria-label="Settings" title="Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+
                 <button class="theme-toggle" id="help-tour" aria-label="Replay the guided tour" title="Guided tour">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -91,7 +98,7 @@
                     <ul class="checklist-items">
                         <li data-item="resume"><span class="checklist-mark"></span><span>Upload your current resume</span></li>
                         <li data-item="name"><span class="checklist-mark"></span><span>Add your name to Personal Information</span></li>
-                        <li data-item="proxy"><span class="checklist-mark"></span><span>Start the local server with your OpenAI API key <span class="checklist-hint" id="checklist-proxy-hint"></span></span></li>
+                        <li data-item="key"><span class="checklist-mark"></span><span>Add your OpenAI API key in Settings <span class="checklist-hint" id="checklist-key-hint"></span></span></li>
                         <li data-item="generated"><span class="checklist-mark"></span><span>Generate your first document</span></li>
                     </ul>
                 </section>
@@ -264,6 +271,11 @@
                                 </button>
                             </div>
                             
+                            <label class="research-toggle" for="research-company">
+                                <input type="checkbox" id="research-company" checked>
+                                <span>Research the company for the cover letter <span class="research-hint">(a few web searches, roughly $0.05–0.10)</span></span>
+                            </label>
+
                             <div id="generation-status" class="status-message hidden"></div>
                         </section>
                     </div>
@@ -345,6 +357,43 @@
         <!-- ═══════════════════════════════════════════════════════════════════
              ERROR MODAL
              ═══════════════════════════════════════════════════════════════════ -->
+        <div id="settings-modal" class="modal settings-modal hidden">
+            <div class="modal-content glass-floating">
+                <div class="modal-header">
+                    <h3>Settings</h3>
+                    <button class="modal-close" id="settings-close" aria-label="Close settings">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="api-key-input">OpenAI API key</label>
+
+                        <!-- Shown when a key is saved: masked, never revealed -->
+                        <div id="api-key-saved" class="api-key-saved hidden">
+                            <code id="api-key-masked" class="api-key-masked"></code>
+                            <div id="api-key-status" class="api-key-status"></div>
+                            <div class="modal-actions">
+                                <button id="api-key-replace" class="btn btn-secondary btn-sm btn-ripple">Replace key</button>
+                                <button id="api-key-remove" class="btn btn-danger btn-sm btn-ripple">Remove key</button>
+                            </div>
+                        </div>
+
+                        <!-- Shown when no key is saved, or while replacing one -->
+                        <div id="api-key-entry" class="api-key-entry">
+                            <input type="password" id="api-key-input" placeholder="sk-..." autocomplete="off" spellcheck="false">
+                            <div class="modal-actions">
+                                <button id="api-key-save" class="btn btn-primary btn-sm btn-ripple">Save key</button>
+                                <button id="api-key-cancel" class="btn btn-secondary btn-sm btn-ripple hidden">Cancel</button>
+                            </div>
+                            <p class="api-key-help">
+                                Create a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
+                                It is stored only in this browser and sent to your local server when you generate. Once saved it can be replaced but not viewed.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="error-modal" class="modal hidden">
             <div class="modal-content glass-floating">
                 <div class="modal-header">

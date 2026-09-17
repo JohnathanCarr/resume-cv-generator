@@ -1,0 +1,56 @@
+{
+  "label": "baseline-old-prompts",
+  "stamp": "2026-09-17T00-46-49",
+  "profiles": [
+    "david_analyst_undergrad",
+    "maria_backend_ms",
+    "johnathan"
+  ],
+  "jobs": [
+    "01_senior_backend_vercel",
+    "02_data_analyst_intern_shopify",
+    "03_ml_engineer_lumen_health",
+    "04_mobile_fullstack_northwind",
+    "05_product_analyst_notion"
+  ],
+  "kinds": {
+    "resume": {
+      "n": 15,
+      "meanScore": 0.909,
+      "meanMs": 0,
+      "failures": 0,
+      "checks": {
+        "validShape": 1,
+        "hasCoreSections": 1,
+        "wordBudget": 1,
+        "pageFill": 0.13,
+        "bulletLength": 1,
+        "educationComplete": 1,
+        "mustIncludeHonored": 1,
+        "noFabricatedNumbers": 1,
+        "jdKeywordCoverage": 0.95,
+        "actionVerbBullets": 1
+      }
+    },
+    "cover": {
+      "n": 15,
+      "meanScore": 0.91,
+      "meanMs": 0,
+      "failures": 0,
+      "checks": {
+        "valid": 1,
+        "length": 0.97,
+        "paragraphs": 1,
+        "namesCompany": 0.83,
+        "noBuzzwords": 0.7,
+        "noAiTells": 1,
+        "noFabricatedNumbers": 1,
+        "groundedInProfile": 0.67,
+        "sentenceVariety": 0.93,
+        "punctuationRestraint": 1,
+        "jdKeywordCoverage": 0.91
+      }
+    }
+  },
+  "note": "Rescored with the rubric as of commit 5 (namesCompany gives partial credit for the short company name)."
+}

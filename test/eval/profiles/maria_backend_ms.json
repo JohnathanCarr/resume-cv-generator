@@ -1,0 +1,122 @@
+{
+  "name": "Maria Lopez-Garcia",
+  "contact": "Email: maria.lopez@example.com\nPhone: (512) 555-0199",
+  "location": "Austin, TX",
+  "summary": "Full-stack software engineer with 3+ years building distributed systems in Go and TypeScript.",
+  "education": [
+    {
+      "id": "1",
+      "institution": "University of Texas at Austin",
+      "degreeType": "Master of Science",
+      "major": "Computer Science",
+      "minor": "",
+      "location": "Austin, TX",
+      "start": "",
+      "end": "May 2026",
+      "gpa": "3.9/4.0",
+      "honors": "",
+      "coursework": "Distributed Systems, Machine Learning"
+    },
+    {
+      "id": "2",
+      "institution": "Texas A&M University",
+      "degreeType": "B.S.",
+      "major": "Computer Engineering",
+      "minor": "Mathematics",
+      "location": "College Station, TX",
+      "start": "Aug 2018",
+      "end": "May 2022",
+      "gpa": "",
+      "honors": "Magna Cum Laude",
+      "coursework": ""
+    }
+  ],
+  "skills": [
+    "Go",
+    "TypeScript",
+    "Python",
+    "Rust",
+    "SQL",
+    "React",
+    "Node.js",
+    "gRPC",
+    "Kubernetes",
+    "Terraform",
+    "Docker",
+    "PostgreSQL",
+    "ClickHouse",
+    "CI/CD",
+    "Observability",
+    "TDD"
+  ],
+  "experiences": [
+    {
+      "id": "3",
+      "title": "Software Engineer II",
+      "company": "Stripe",
+      "start": "Jun 2023",
+      "end": "Present",
+      "location": "San Francisco, CA",
+      "description": "",
+      "bullets": [
+        "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
+        "Led migration of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
+        "Mentored two interns who converted to full-time offers."
+      ],
+      "mustInclude": true
+    },
+    {
+      "id": "4",
+      "title": "Software Engineering Intern",
+      "company": "Datadog",
+      "start": "May 2022",
+      "end": "Aug 2022",
+      "location": "New York, NY",
+      "description": "",
+      "bullets": [
+        "Built a Go service to deduplicate log ingestion streams, reducing storage costs by $180K annually."
+      ],
+      "mustInclude": false
+    }
+  ],
+  "projects": [
+    {
+      "id": "5",
+      "name": "Latticework",
+      "description": "Open-source tracing dashboard",
+      "bullets": [
+        "React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars."
+      ],
+      "mustInclude": false
+    },
+    {
+      "id": "7",
+      "name": "Pantry",
+      "description": "Rust CLI for recipe scaling",
+      "bullets": [
+        "Parses 30+ unit formats and handles fractional conversions with property-based tests."
+      ],
+      "mustInclude": false
+    }
+  ],
+  "extras": [
+    {
+      "id": "6",
+      "title": "AWS Certified Solutions Architect \u2013 Associate",
+      "organization": "Amazon Web Services",
+      "type": "certification",
+      "start": "",
+      "end": "Mar 2024",
+      "description": ""
+    },
+    {
+      "id": "8",
+      "title": "President",
+      "organization": "Women in Computing at UT Austin",
+      "type": "leadership",
+      "start": "Sep 2024",
+      "end": "Present",
+      "description": ""
+    }
+  ]
+}

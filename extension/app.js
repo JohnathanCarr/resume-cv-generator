@@ -27,7 +27,10 @@ class CoverLetterApp {
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
         this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
         this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
-        this.proxyStatus = null;    // { reachable, keyConfigured } from /health
+        this.proxyStatus = null;    // { reachable } from /health
+        this.apiKey = null;         // { value, last4, savedAt, verifiedAt?, verifyError? } — value is never rendered
+        this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
+        this.researchEnabled = true;
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -53,8 +56,11 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled']);
         this.onboarding = result.onboarding || null;
+        this.apiKey = result.apiKey || null;
+        this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
+        this.researchEnabled = result.researchEnabled !== false;
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -128,6 +134,30 @@ class CoverLetterApp {
         document.getElementById('help-tour')?.addEventListener('click', () => {
             this.startTour();
         });
+
+        // Company research toggle
+        const researchToggle = document.getElementById('research-company');
+        if (researchToggle) {
+            researchToggle.checked = this.researchEnabled;
+            researchToggle.addEventListener('change', (e) => {
+                this.researchEnabled = e.target.checked;
+                chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
+            });
+        }
+
+        // Settings / API key
+        document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
+        document.getElementById('settings-close')?.addEventListener('click', () => this.closeSettings());
+        document.getElementById('settings-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'settings-modal') this.closeSettings();
+        });
+        document.getElementById('api-key-save')?.addEventListener('click', () => this.saveApiKey());
+        document.getElementById('api-key-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this.saveApiKey(); }
+        });
+        document.getElementById('api-key-replace')?.addEventListener('click', () => this.renderSettings({ replacing: true }));
+        document.getElementById('api-key-cancel')?.addEventListener('click', () => this.renderSettings());
+        document.getElementById('api-key-remove')?.addEventListener('click', () => this.removeApiKey());
 
         document.getElementById('checklist-dismiss')?.addEventListener('click', () => {
             this.saveOnboarding({ checklistDismissed: true });
@@ -811,6 +841,137 @@ class CoverLetterApp {
                 }, 3000);
     }
 
+    // Settings / API key
+    // The key value lives in chrome.storage.local and is only ever read back
+    // to send to the local proxy; the UI shows the last four characters.
+    openSettings() {
+        this.renderSettings();
+        document.getElementById('settings-modal')?.classList.remove('hidden');
+        if (!this.apiKey) document.getElementById('api-key-input')?.focus();
+    }
+
+    closeSettings() {
+        document.getElementById('settings-modal')?.classList.add('hidden');
+        const input = document.getElementById('api-key-input');
+        if (input) input.value = '';
+    }
+
+    renderSettings({ replacing = false } = {}) {
+        const saved = document.getElementById('api-key-saved');
+        const entry = document.getElementById('api-key-entry');
+        const cancel = document.getElementById('api-key-cancel');
+        const input = document.getElementById('api-key-input');
+        if (!saved || !entry) return;
+
+        const hasKey = !!(this.apiKey && this.apiKey.value);
+        saved.classList.toggle('hidden', !hasKey || replacing);
+        entry.classList.toggle('hidden', hasKey && !replacing);
+        cancel?.classList.toggle('hidden', !(hasKey && replacing));
+        if (input) input.value = '';
+        if (replacing) input?.focus();
+
+        if (hasKey) {
+            const masked = document.getElementById('api-key-masked');
+            if (masked) masked.textContent = `sk-••••••••••••${this.apiKey.last4}`;
+            this.renderApiKeyStatus();
+        }
+    }
+
+    renderApiKeyStatus(override) {
+        const el = document.getElementById('api-key-status');
+        if (!el) return;
+        const status = override || this.describeApiKeyStatus();
+        el.textContent = status.text;
+        el.className = `api-key-status${status.kind ? ` ${status.kind}` : ''}`;
+    }
+
+    describeApiKeyStatus() {
+        if (!this.apiKey) return { text: '', kind: '' };
+        if (this.apiKey.verifiedAt) {
+            return { text: `Verified ${new Date(this.apiKey.verifiedAt).toLocaleDateString()}`, kind: 'ok' };
+        }
+        if (this.apiKey.verifyError) return { text: this.apiKey.verifyError, kind: 'error' };
+        if (this.apiKey.verifyNote) return { text: this.apiKey.verifyNote, kind: '' };
+        return { text: `Saved ${new Date(this.apiKey.savedAt).toLocaleDateString()} · not verified yet`, kind: '' };
+    }
+
+    async saveApiKey() {
+        const input = document.getElementById('api-key-input');
+        const value = (input?.value || '').trim();
+        if (!value) { this.showError('Paste your API key first.', false); return; }
+        if (!/^sk-[A-Za-z0-9_-]{10,}$/.test(value)) {
+            this.showError('That does not look like an OpenAI API key (they start with "sk-").', false);
+            return;
+        }
+
+        this.apiKey = { value, last4: value.slice(-4), savedAt: new Date().toISOString() };
+        await this.persistApiKey();
+        if (input) input.value = '';
+        this.renderSettings();
+        this.renderChecklist();
+
+        this.renderApiKeyStatus({ text: 'Verifying…', kind: '' });
+        await this.verifyApiKey();
+        this.renderApiKeyStatus();
+        this.renderChecklist();
+    }
+
+    async removeApiKey() {
+        this.apiKey = null;
+        try {
+            await chrome.storage.local.remove('apiKey');
+        } catch (error) {
+            console.error('Error removing API key:', error);
+        }
+        this.renderSettings();
+        this.renderChecklist();
+    }
+
+    async persistApiKey() {
+        try {
+            await chrome.storage.local.set({ apiKey: this.apiKey });
+        } catch (error) {
+            console.error('Error saving API key:', error);
+        }
+    }
+
+    // Asks the local proxy to make one tiny request with the key. Absence of
+    // the proxy is reported, not treated as an invalid key.
+    async verifyApiKey() {
+        if (!this.apiKey) return;
+        try {
+            const res = await fetch('http://localhost:8787/verifyKey', {
+                method: 'POST',
+                headers: this.apiHeaders()
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.ok) {
+                this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
+            } else if (res.status === 404) {
+                // Proxy is running but predates the verify endpoint.
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Restart the local server to verify.' };
+            } else {
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: data.error || `Could not verify (HTTP ${res.status})` };
+            }
+        } catch (_) {
+            this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Start the local server to verify it.' };
+        }
+        await this.persistApiKey();
+    }
+
+    requireApiKeyForGeneration() {
+        if (this.apiKey?.value) return true;
+        this.showError('Add your OpenAI API key in Settings (gear icon) before generating.', false);
+        return false;
+    }
+
+    // Headers for every proxy call that reaches OpenAI.
+    apiHeaders(extra = {}) {
+        const headers = { 'Content-Type': 'application/json', ...extra };
+        if (this.apiKey?.value) headers['Authorization'] = `Bearer ${this.apiKey.value}`;
+        return headers;
+    }
+
     // Re-check the proxy when the user comes back to the Profile tab so the
     // checklist reflects a server they just started.
     async refreshChecklistFromProxy() {
@@ -844,10 +1005,10 @@ class CoverLetterApp {
     async refreshProxyStatus() {
         try {
             const res = await fetch('http://localhost:8787/health', { cache: 'no-store' });
-            const data = await res.json();
-            this.proxyStatus = { reachable: res.ok, keyConfigured: !!data.keyConfigured };
+            await res.json().catch(() => ({}));
+            this.proxyStatus = { reachable: res.ok };
         } catch (_) {
-            this.proxyStatus = { reachable: false, keyConfigured: false };
+            this.proxyStatus = { reachable: false };
         }
     }
 
@@ -855,7 +1016,7 @@ class CoverLetterApp {
         return {
             resume: !!this.uploadedResume,
             name: !!(this.profile.name && this.profile.name.trim()),
-            proxy: !!(this.proxyStatus && this.proxyStatus.reachable && this.proxyStatus.keyConfigured),
+            key: !!(this.apiKey && this.apiKey.value),
             generated: !!(this.onboarding && this.onboarding.firstGeneratedAt)
         };
     }
@@ -876,11 +1037,10 @@ class CoverLetterApp {
             li.classList.toggle('done', !!state[li.dataset.item]);
         });
 
-        const hint = document.getElementById('checklist-proxy-hint');
+        const hint = document.getElementById('checklist-key-hint');
         if (hint) {
-            if (!this.proxyStatus) hint.textContent = '';
-            else if (!this.proxyStatus.reachable) hint.textContent = '— server not running (run start-proxy)';
-            else if (!this.proxyStatus.keyConfigured) hint.textContent = '— server running, but no API key in proxy/.env';
+            if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
+            else if (!this.apiKey && this.proxyStatus && !this.proxyStatus.reachable) hint.textContent = '— also start the local server (run start-proxy)';
             else hint.textContent = '';
         }
         card.classList.remove('hidden');
@@ -903,7 +1063,13 @@ class CoverLetterApp {
                          <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
                          <li><strong>Paste a job description</strong> and generate.</li>
                        </ol>
-                       <p>Generating needs an OpenAI API key in <code>proxy/.env</code> and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+                       <p>Generating needs an OpenAI API key (added in Settings) and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+            },
+            {
+                target: '#open-settings',
+                title: 'Add your OpenAI API key',
+                placement: 'bottom',
+                body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p>'
             },
             {
                 target: '#upload-resume',
@@ -954,6 +1120,43 @@ class CoverLetterApp {
                 window.scrollTo({ top: 0 });
             }
         });
+    }
+
+    // Company research cache
+    pruneBriefs(briefs) {
+        const maxAge = 30 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const kept = {};
+        for (const [key, brief] of Object.entries(briefs)) {
+            const at = Date.parse(brief.researchedAt || 0);
+            if (at && now - at < maxAge) kept[key] = brief;
+        }
+        return kept;
+    }
+
+    async cacheBrief(brief) {
+        this.companyBriefs[brief.company.trim().toLowerCase()] = brief;
+        try {
+            await chrome.storage.local.set({ companyBriefs: this.companyBriefs });
+        } catch (error) {
+            console.error('Error caching company brief:', error);
+        }
+    }
+
+    describeCoverLetterResult(result) {
+        const meta = result.metadata || {};
+        const parts = ['Cover letter generated'];
+        if (meta.briefSource === 'research') {
+            const n = meta.searches || 0;
+            parts.push(`— researched ${result.companyBrief?.company || 'the company'} with ${n} web search${n === 1 ? '' : 'es'}`);
+            if (result.companyBrief && !result.companyBrief.found) parts.push('(nothing reliable found; letter uses the posting only)');
+        } else if (meta.briefSource === 'cache') {
+            parts.push(`— used saved research for ${result.companyBrief?.company || 'the company'}`);
+        }
+        if (Array.isArray(result.unsourcedClaims) && result.unsourcedClaims.length) {
+            parts.push(`· ${result.unsourcedClaims.length} sentence(s) could not be traced to your profile — check them before sending`);
+        }
+        return parts.join(' ') + '.';
     }
 
     // Resume Upload
@@ -1127,6 +1330,7 @@ class CoverLetterApp {
             this.showError('Please complete your profile first.', false);
             return;
         }
+        if (!this.requireApiKeyForGeneration()) return;
 
         this.showLoading();
         this.showStatus('Generating cover letter...', 'loading');
@@ -1134,7 +1338,9 @@ class CoverLetterApp {
         try {
             const requestData = {
                 profile: this.profile,
-                jobText: jobText
+                jobText: jobText,
+                research: this.researchEnabled,
+                briefCache: this.companyBriefs
             };
 
             this.lastApiCall = {
@@ -1144,9 +1350,7 @@ class CoverLetterApp {
 
             const response = await fetch('http://localhost:8787/generateCoverLetter', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.apiHeaders(),
                 body: JSON.stringify(requestData)
             });
 
@@ -1157,7 +1361,8 @@ class CoverLetterApp {
 
             const result = await response.json();
             this.lastApiCall.response = result;
-
+            this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
+            if (result.companyBrief && result.companyBrief.company) await this.cacheBrief(result.companyBrief);
 
             // Display the cover letter
             this.displayCoverLetter(result.coverLetter);
@@ -1166,7 +1371,7 @@ class CoverLetterApp {
             // Save data
             await this.saveData();
 
-            this.showStatus('Cover letter generated successfully!', 'success');
+            this.showStatus(this.describeCoverLetterResult(result), 'success');
             this.recordFirstGeneration();
             const downloadBtn = document.getElementById('download-pdf');
             if (downloadBtn) downloadBtn.disabled = false;
@@ -1427,53 +1632,33 @@ class CoverLetterApp {
   const jobText = document.getElementById('job-text').value.trim();
   if (!jobText) { this.showError('Please enter a job description.', false); return; }
   if (!this.profile.name) { this.showError('Please complete your profile first.', false); return; }
+  if (!this.requireApiKeyForGeneration()) return;
 
   this.showLoading();
   this.showStatus('Generating resume...', 'loading');
 
   try {
-    const requestData = { profile: this.profile, jobText, type: 'resume' };
+    let result = await this.requestResume({ profile: this.profile, jobText });
 
-    this.lastApiCall = { request: requestData, timestamp: new Date().toISOString() };
-
-    const response = await fetch('http://localhost:8787/generateResume', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestData)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    // DEBUG #2 — raw server result
-    console.log('RAW result from server =', result);
-
-    // DEBUG #3 — parse resumeContent + inspect education
-    let parsedResume;
-    try {
-      parsedResume = typeof result.resumeContent === 'string'
-        ? JSON.parse(result.resumeContent)
-        : result.resumeContent;
-
-      console.log('PARSED.resume.education =', parsedResume?.education,
-        'type =', Array.isArray(parsedResume?.education) ? 'array' : typeof parsedResume?.education);
-    } catch (e) {
-      console.error('Could not parse result.resumeContent as JSON:', e);
+    // The proxy budgets by word count; only the rendered page knows whether it
+    // actually fits. If it overflows, ask once more with a tighter ceiling.
+    let overflow = await this.renderResumeAndMeasure(result.resumeContent);
+    let refit = false;
+    if (overflow > 1.0 && result.metadata?.words) {
+      const maxWords = Math.floor(result.metadata.words / overflow * 0.92);
+      this.showStatus('Trimming to one page…', 'loading');
+      result = await this.requestResume({ profile: this.profile, jobText, budget: { maxWords } });
+      overflow = await this.renderResumeAndMeasure(result.resumeContent);
+      refit = true;
     }
 
     this.lastApiCall.response = result;
-
-    // Render once (no duplicates)
-    this.displayResume(result.resumeContent);
+    this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
     this.switchToResumeView();
 
     await this.saveData();
 
-    this.showStatus('Resume generated successfully!', 'success');
+    this.showStatus(this.describeResumeResult(result, { overflow, refit }), overflow > 1.0 ? 'error' : 'success');
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
@@ -1487,6 +1672,51 @@ class CoverLetterApp {
   }
 }
 
+
+    async requestResume(body) {
+        this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
+        const response = await fetch('http://localhost:8787/generateResume', {
+            method: 'POST',
+            headers: this.apiHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).
+    renderResumeAndMeasure(resumeContent) {
+        return new Promise((resolve) => {
+            const onRendered = () => {
+                document.removeEventListener('resume-rendered', onRendered);
+                const page = document.querySelector('.resume-content .resume-page');
+                if (!page) return resolve(0);
+                // 11in at CSS 96dpi. Padding is inside the page box, so scrollHeight is the whole thing.
+                resolve(page.scrollHeight / 1056);
+            };
+            document.addEventListener('resume-rendered', onRendered);
+            // A display:none container has no height; show the resume view before rendering.
+            this.switchToResumeView();
+            this.displayResume(resumeContent);
+        });
+    }
+
+    describeResumeResult(result, { overflow, refit }) {
+        const meta = result.metadata || {};
+        const parts = [];
+        if (overflow > 1.0) {
+            parts.push(`Resume generated, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
+        } else {
+            parts.push(refit ? 'Resume generated and trimmed to fit one page.' : 'Resume generated.');
+        }
+        if (meta.words && meta.words < 450 && meta.usedBullets >= meta.availableBullets) {
+            parts.push(`It uses everything in your profile (${meta.words} words); a full page is usually 550–700. Add more achievements, coursework, or certifications to your profile to fill it.`);
+        }
+        return parts.join(' ');
+    }
 
     displayResume(resumeContent) {
         // Switch to generate tab to ensure the preview element is visible
@@ -1670,7 +1900,7 @@ class CoverLetterApp {
                                     ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
                                 </span>
                                 <span style="font-size: ${contactFontSize};">
-                                    ${exp.dates}
+                                    ${exp.dates || ''}
                                 </span>
                             </div>
                             <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">

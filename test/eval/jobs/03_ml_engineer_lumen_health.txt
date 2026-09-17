@@ -1,0 +1,22 @@
+Machine Learning Engineer
+Lumen Health · Austin, TX (On-site)
+
+Lumen Health builds clinical decision support tools for regional hospital networks. We're a 40-person company, Series A, and we're hiring our fourth ML engineer to take models from notebooks to production.
+
+You will
+- Build and evaluate supervised models (tabular and text) for triage and risk prediction
+- Own the path to production: feature pipelines, model serving, monitoring, and retraining
+- Work with clinicians to define labels and validate outputs
+- Build RAG-based assistants over clinical documentation with strict grounding requirements
+
+Requirements
+- 2+ years of applied ML in production, or an MS with a strong project record
+- Strong Python; experience with scikit-learn and TensorFlow or PyTorch
+- Experience building retrieval-augmented generation systems (embeddings, vector search, reranking)
+- Familiarity with data engineering: pandas, SQL, batch pipelines
+- Comfort working in a regulated environment (HIPAA); we'll teach the specifics
+
+Nice to have
+- Experience with LangChain, Pinecone, or MongoDB Atlas Vector Search
+- Cloud deployment experience (Azure preferred)
+- Experience with model monitoring and evaluation frameworks

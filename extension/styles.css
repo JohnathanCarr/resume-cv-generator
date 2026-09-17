@@ -1103,6 +1103,25 @@ body {
     margin-top: var(--space-lg);
 }
 
+.research-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.research-toggle input {
+    margin-top: 0.2em;
+    accent-color: var(--accent-primary);
+}
+
+.research-hint {
+    color: var(--text-tertiary);
+}
+
 .generation-buttons .btn {
     flex: 1;
     padding: 1rem 1.5rem;
@@ -1365,6 +1384,55 @@ body {
     display: flex;
     gap: var(--space-md);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 17a: SETTINGS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.settings-modal .modal-header h3 {
+    color: var(--text-primary);
+}
+
+.settings-modal .modal-body .form-group {
+    margin-bottom: 0;
+}
+
+.api-key-masked {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-sm);
+}
+
+.api-key-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-height: 1.2em;
+    margin-bottom: var(--space-md);
+}
+
+.api-key-status.ok { color: var(--status-success); }
+.api-key-status.error { color: var(--status-error); }
+
+.api-key-entry input {
+    margin-bottom: var(--space-md);
+    font-family: var(--font-mono);
+}
+
+.api-key-help {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+    margin: var(--space-md) 0 0 0;
+}
+
+.api-key-help a { color: var(--accent-primary); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SECTION 17b: GUIDED TOUR

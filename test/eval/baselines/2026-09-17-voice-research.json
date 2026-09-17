@@ -1,0 +1,46 @@
+{
+  "label": "voice-research",
+  "stamp": "2026-09-17T01-27-54",
+  "note": "Rescored after the keyword-extractor fix; actionVerbBullets (88%) reflects a present-tense rule reverted in the same commit (spot check after revert: 100%).",
+  "kinds": {
+    "resume": {
+      "n": 15,
+      "meanScore": 0.903,
+      "meanMs": 0,
+      "failures": 0,
+      "checks": {
+        "validShape": 1,
+        "hasCoreSections": 1,
+        "wordBudget": 1,
+        "pageFill": 0.17,
+        "bulletLength": 1,
+        "educationComplete": 1,
+        "mustIncludeHonored": 1,
+        "noFabricatedNumbers": 1,
+        "jdKeywordCoverage": 0.99,
+        "actionVerbBullets": 0.88
+      }
+    },
+    "cover": {
+      "n": 15,
+      "meanScore": 0.97,
+      "meanMs": 0,
+      "failures": 0,
+      "checks": {
+        "valid": 1,
+        "length": 0.9,
+        "paragraphs": 1,
+        "namesCompany": 1,
+        "noBuzzwords": 0.97,
+        "noAiTells": 1,
+        "noFabricatedNumbers": 1,
+        "groundedInProfile": 0.87,
+        "sentenceVariety": 0.9,
+        "punctuationRestraint": 1,
+        "jdKeywordCoverage": 0.98,
+        "claimsSourced": 1,
+        "noDocumentReferences": 1
+      }
+    }
+  }
+}

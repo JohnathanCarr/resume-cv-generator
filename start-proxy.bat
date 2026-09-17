@@ -8,11 +8,8 @@ echo.
 
 cd proxy
 
-REM Check if .env exists
-if not exist .env (
-    echo ❌ ERROR: .env file not found!
-    echo Please rename 'env.example' to '.env' and add your OpenAI API key
-    echo See README.md for detailed instructions
+if not exist node_modules (
+    echo ❌ ERROR: dependencies not installed. Run setup.bat first.
     pause
     exit /b 1
 )

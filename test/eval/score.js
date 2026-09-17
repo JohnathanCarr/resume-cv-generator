@@ -68,7 +68,9 @@ function fabricatedNumbers(outputText, profile, jobText) {
 // Tech-looking tokens: CamelCase, dotted, slashed, or known-style names. Used for
 // both JD keyword extraction and fabricated-tool detection.
 const TECH_TOKEN_RE = /\b(?:[A-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+|[A-Z][a-z]+[A-Z][a-zA-Z0-9]*|[A-Z]{2,}[a-zA-Z0-9]*|[A-Za-z]+\/[A-Za-z]+|[A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)\b/g;
-const STOP = new Set(['I', 'A', 'The', 'We', 'You', 'Our', 'Your', 'And', 'For', 'With', 'In', 'On', 'At', 'To', 'Of', 'As', 'By', 'Or', 'If', 'It', 'Is', 'Be', 'This', 'That', 'What', 'Who', 'How', 'Why', 'When', 'Where', 'Requirements', 'Responsibilities', 'Qualifications', 'About', 'Nice', 'Bonus', 'Summer', 'Fall', 'Spring', 'Winter', 'Remote', 'Hybrid', 'Series', 'North', 'America', 'US', 'USA', 'UK', 'EU', 'CA', 'NY', 'TX', 'WA', 'AL', 'PM', 'PMs', 'VP', 'CEO', 'CTO', 'KPI', 'KPIs', 'GPA', 'MS', 'BS', 'B.S.', 'M.S.']);
+const STOP = new Set(['I', 'A', 'The', 'We', 'You', 'Our', 'Your', 'And', 'For', 'With', 'In', 'On', 'At', 'To', 'Of', 'As', 'By', 'Or', 'If', 'It', 'Is', 'Be', 'This', 'That', 'What', 'Who', 'How', 'Why', 'When', 'Where', 'Requirements', 'Responsibilities', 'Qualifications', 'About', 'Nice', 'Bonus', 'Summer', 'Fall', 'Spring', 'Winter', 'Remote', 'Hybrid', 'Series', 'North', 'America', 'US', 'USA', 'UK', 'EU', 'CA', 'NY', 'TX', 'WA', 'AL', 'PM', 'PMs', 'VP', 'CEO', 'CTO', 'KPI', 'KPIs', 'GPA', 'MS', 'BS', 'B.S.', 'M.S.',
+  // Sentence-initial verbs and generic nouns that look capitalised but are not skills.
+  'Build', 'Design', 'Run', 'Write', 'Support', 'Clean', 'Own', 'Work', 'Define', 'Investigate', 'Partner', 'Lead', 'Manage', 'Help', 'Ship', 'Learn', 'Track', 'Experience', 'Strong', 'Solid', 'Expert', 'Clear', 'Comfort', 'Comfortable', 'Familiarity', 'Proficiency', 'Understanding', 'Currently', 'Prior', 'Track record', 'You', 'Senior', 'Junior', 'Intern', 'Data', 'Product', 'Growth', 'Infrastructure', 'Merchant', 'Analyst', 'Engineer', 'Backend', 'Frontend', 'Full', 'Stack', 'Machine', 'Learning', 'Open', 'Bachelor', 'Master', 'Statistics', 'Informatics', 'Computer', 'Science', 'Economics']);
 
 function techTokens(text) {
   const out = new Set();
@@ -206,7 +208,7 @@ function scoreResume({ resumeContent, profile, jobText, company }) {
   return { score: +score.toFixed(3), checks, fails, info: { totalWords, bullets: bullets.length, jdKeywords: kws.length, missingKeywords: cov.missing.slice(0, 8) } };
 }
 
-function scoreCoverLetter({ coverLetter, profile, jobText, company }) {
+function scoreCoverLetter({ coverLetter, profile, jobText, company, unsourcedClaims }) {
   const checks = {};
   const fails = [];
   const text = String(coverLetter || '');
@@ -253,6 +255,15 @@ function scoreCoverLetter({ coverLetter, profile, jobText, company }) {
   const kws = relevantJdKeywords(jobText, profile);
   const cov = coverage(text, kws);
   checks.jdKeywordCoverage = +Math.min(1, cov.ratio * 2).toFixed(2); // a letter needn't hit all keywords; half is full marks
+
+  // Claim sourcing is reported by the proxy (present only once the prompt returns claims).
+  if (Array.isArray(unsourcedClaims)) {
+    checks.claimsSourced = unsourcedClaims.length === 0 ? 1 : unsourcedClaims.length === 1 ? 0.5 : 0;
+    if (unsourcedClaims.length) fails.push(`${unsourcedClaims.length} unsourced claim(s)`);
+  }
+
+  // Referring to the profile as a document is a tell that the letter was assembled, not written.
+  checks.noDocumentReferences = /\b(?:i list|my profile|my resume (?:shows|lists|includes)|as (?:listed|shown) (?:in|on) my)\b/i.test(text) ? 0 : 1;
 
   const score = Object.values(checks).reduce((a, b) => a + b, 0) / Object.keys(checks).length;
   return { score: +score.toFixed(3), checks, fails, info: { words: n, paragraphs: paras.length, buzzwords: buzz, aiTells: tells, anchors, sentences: st } };

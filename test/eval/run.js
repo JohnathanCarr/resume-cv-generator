@@ -2,7 +2,7 @@
 // Runs the generation endpoints over profiles × job postings and scores the
 // output with score.js. Requires the proxy to be running on :8787.
 //
-//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name]
+//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research]
 //
 // The key may also be read from proxy/.env (OPENAI_API_KEY=...) for local
 // convenience. Outputs go to test/eval/runs/<timestamp>-<label>/ (gitignored);
@@ -83,7 +83,7 @@ function rescore(runDir) {
     const company = (saved.request.jobText.split('\n')[1] || '').split('·')[0].trim();
     const scored = kind === 'resume'
       ? scoreResume({ resumeContent: saved.response.resumeContent, profile: saved.request.profile, jobText: saved.request.jobText, company })
-      : scoreCoverLetter({ coverLetter: saved.response.coverLetter, profile: saved.request.profile, jobText: saved.request.jobText, company });
+      : scoreCoverLetter({ coverLetter: saved.response.coverLetter, profile: saved.request.profile, jobText: saved.request.jobText, company, unsourcedClaims: saved.response.unsourcedClaims });
     results.push({ kind, profile, job, ms: 0, ...scored });
     console.log(`${kind.padEnd(7)} ${fmt(scored.score)}  ${profile} × ${job}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
   }
@@ -125,6 +125,7 @@ async function main() {
 
   const key = readKey();
   const only = arg('only', null);
+  const research = !arg('no-research', false);
   const label = arg('label', 'run');
   const profiles = listProfiles(arg('profiles', null));
   const jobs = listJobs(arg('jobs', null));
@@ -144,7 +145,7 @@ async function main() {
 
   for (const p of profiles) {
     for (const j of jobs) {
-      const body = { profile: p.profile, jobText: j.text };
+      const body = { profile: p.profile, jobText: j.text, research };
       const tag = `${p.id} × ${j.id}`;
 
       if (!only || only === 'resume') {
@@ -157,7 +158,8 @@ async function main() {
 
       if (!only || only === 'cover') {
         const r = await call('generateCoverLetter', key, body);
-        const scored = r.ok ? scoreCoverLetter({ coverLetter: r.data.coverLetter, profile: p.profile, jobText: j.text, company: j.company }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
+        const scored = r.ok ? scoreCoverLetter({ coverLetter: r.data.coverLetter, profile: p.profile, jobText: j.text, company: j.company, unsourcedClaims: r.data.unsourcedClaims }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
+        if (r.ok && r.data.metadata) scored.info.searches = r.data.metadata.searches;
         results.push({ kind: 'cover', profile: p.id, job: j.id, ms: r.ms, ...scored });
         fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__cover.json`), JSON.stringify({ request: body, response: r.data, scored }, null, 2));
         console.log(`cover   ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);

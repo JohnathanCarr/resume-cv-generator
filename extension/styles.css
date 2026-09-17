@@ -1103,6 +1103,25 @@ body {
     margin-top: var(--space-lg);
 }
 
+.research-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.research-toggle input {
+    margin-top: 0.2em;
+    accent-color: var(--accent-primary);
+}
+
+.research-hint {
+    color: var(--text-tertiary);
+}
+
 .generation-buttons .btn {
     flex: 1;
     padding: 1rem 1.5rem;

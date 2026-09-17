@@ -5,7 +5,8 @@ const OpenAI = require('openai');
 const { GENERATION_MODEL, VERIFY_MODEL, REASONING, MAX_COMPLETION_TOKENS } = require('./config');
 const { analyzeMatch, renderMatchForPrompt } = require('./prompts/matchAnalysis');
 const { buildResumeMessages, RESUME_SCHEMA } = require('./prompts/resume');
-const { buildCoverLetterMessages, COVER_LETTER_SCHEMA } = require('./prompts/coverLetter');
+const { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } = require('./prompts/coverLetter');
+const { researchCompany, briefFromPostingOnly, renderBriefForPrompt } = require('./prompts/companyResearch');
 
 const app = express();
 const PORT = 8787;
@@ -179,10 +180,14 @@ app.post('/generateResume', requireApiKey, async (req, res) => {
 });
 
 // Cover letter generation endpoint
+//
+// Body: { profile, jobText, research?: boolean (default true), briefCache?: { [companyLower]: brief } }
+// The extension caches briefs per company; a cached brief for the matched
+// company is reused instead of searching again.
 app.post('/generateCoverLetter', requireApiKey, async (req, res) => {
   const startTime = Date.now();
   try {
-    const { profile, jobText } = req.body;
+    const { profile, jobText, research = true, briefCache = {} } = req.body;
     if (!profile || !jobText) {
       return res.status(400).json({ error: 'Missing required fields: profile and jobText' });
     }
@@ -192,19 +197,66 @@ app.post('/generateCoverLetter', requireApiKey, async (req, res) => {
     const matchText = renderMatchForPrompt(match);
     console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
-    const { data } = await generateStructured(req.openai, {
-      messages: buildCoverLetterMessages({ profile, jobText, match, matchText }),
-      schema: COVER_LETTER_SCHEMA,
-      schemaName: 'cover_letter',
-      maxTokens: MAX_COMPLETION_TOKENS.coverLetter
+    // Company brief: cached → researched → posting-only.
+    let brief;
+    let briefSource = 'posting';
+    const cacheKey = (match.company || '').trim().toLowerCase();
+    if (cacheKey && briefCache && briefCache[cacheKey]) {
+      brief = briefCache[cacheKey];
+      briefSource = 'cache';
+    } else if (research && match.company) {
+      try {
+        brief = await researchCompany(req.openai, { company: match.company, role: match.role, aboutCompany: match.about_company, jobText });
+        briefSource = 'research';
+        console.log(`Research: ${match.company} — found=${brief.found}, searches=${brief.searches}`);
+      } catch (error) {
+        console.warn('Research failed, continuing with the posting only:', safeErrorMessage(error));
+        brief = briefFromPostingOnly({ company: match.company, aboutCompany: match.about_company });
+      }
+    } else {
+      brief = briefFromPostingOnly({ company: match.company, aboutCompany: match.about_company });
+    }
+    const briefText = renderBriefForPrompt(brief);
+
+    const messages = buildCoverLetterMessages({ profile, jobText, match, matchText, briefText });
+    let { data } = await generateStructured(req.openai, {
+      messages, schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
     });
+
+    // Every claim must trace to the profile, the posting, or the brief. One
+    // repair pass; whatever is still unsourced is reported, not hidden.
+    let bad = unsourcedClaims(data.claims, profile, brief);
+    let repaired = false;
+    if (bad.length) {
+      console.log(`Cover letter: ${bad.length} unsourced claim(s); requesting a repair`);
+      const repair = await generateStructured(req.openai, {
+        messages: [
+          ...messages,
+          { role: 'assistant', content: JSON.stringify(data) },
+          { role: 'user', content: `These sentences make claims that cannot be traced to the profile, the job posting, or the company brief:\n${bad.map(c => `- "${c.sentence}" (cited: ${c.source || 'nothing'})`).join('\n')}\n\nRewrite the letter so each of them is either removed or replaced with something you can source, keep everything else, and return the full letter and claims again.` }
+        ],
+        schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
+      });
+      data = repair.data;
+      bad = unsourcedClaims(data.claims, profile, brief);
+      repaired = true;
+    }
 
     const endTime = Date.now();
     console.log(`[${new Date().toISOString()}] Cover letter generated successfully in ${endTime - startTime}ms`);
     res.json({
       coverLetter: data.coverLetter,
+      claims: data.claims,
+      unsourcedClaims: bad,
       matchAnalysis: match,
-      metadata: { generatedAt: new Date().toISOString(), processingTime: endTime - startTime }
+      companyBrief: brief,
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        processingTime: endTime - startTime,
+        briefSource,
+        searches: briefSource === 'research' ? brief.searches : 0,
+        repaired
+      }
     });
   } catch (error) {
     console.error('Error generating cover letter:', safeErrorMessage(error));

@@ -1,92 +1,81 @@
 // Cover letter generation prompt and output schema.
+//
+// The letter is grounded three ways: the match analysis says which
+// requirements the candidate can honestly speak to; the company brief says
+// what may be said about the employer; and every sentence that makes a
+// claim must name its source so the server can check it.
 
 'use strict';
 
-const { formatEducation, formatExperiences, formatProjects, formatExtras } = require('./profileText');
+const { renderProfileWithIds } = require('./matchAnalysis');
 
 const COVER_LETTER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    coverLetter: { type: 'string', description: 'The complete letter as a single string with paragraphs separated by blank lines.' }
+    coverLetter: { type: 'string', description: 'The complete letter as one string. Paragraphs separated by a blank line. No salutation block or signature — just the body paragraphs.' },
+    claims: {
+      type: 'array',
+      description: 'Every sentence that states something about the candidate or the company, with where it came from.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sentence: { type: 'string', description: 'The sentence exactly as it appears in the letter.' },
+          source: { type: 'string', description: 'A profile id (exp:3, proj:5, edu:1, extra:6, skill:Go), "job posting", or a URL from the company brief.' }
+        },
+        required: ['sentence', 'source']
+      }
+    }
   },
-  required: ['coverLetter']
+  required: ['coverLetter', 'claims']
 };
 
-const SYSTEM = `You are an elite executive cover letter consultant. You MUST follow ALL instructions precisely. You write consultant-level pitches that sound like strategic business proposals, NOT job applications. You NEVER use generic phrases, clichés, or beggar language. Every word must demonstrate unique value and insider knowledge.`;
+const SYSTEM = `You write cover letters for a specific person applying to a specific job. The letter must read as if that person wrote it on a good day: plain, direct, concrete, and honest.
 
-function buildCoverLetterMessages({ profile, jobText, match, matchText }) {
+Hard rules:
+1. Nothing about the candidate that is not in their profile. No new metrics, tools, responsibilities, outcomes, or soft skills. You may rephrase and select; you may not add.
+2. Nothing about the company that is not in the company brief or the job posting. If the brief is thin, say less about the company rather than guessing.
+3. Only claim requirements the match analysis marks strong or partial, and describe partial ones honestly (related experience, coursework, a project) rather than as full experience.
+4. Every sentence that says something about the candidate or the company goes in "claims" with its source. Sentences of pure transition or intent ("I'd like to talk about the role") need no claim.
+5. Use the company's full name at least once.
+6. The profile is your source, not a subject. Never write "I list", "my profile", "my resume shows", or otherwise refer to the document. Skills are mentioned the way people mention them: "I've worked mostly in Python and SQL", "most of my Kubernetes time has been on upgrades".
+
+Voice — write like these, not like a press release:
+
+  "I've spent the last two years on the payments API at Stripe, mostly on the unglamorous parts: idempotency, retries, and the on-call rotation that follows from getting those wrong. The idempotency layer I built cut duplicate charges by 94%. I'm proud of that number, but I'm prouder that the pager went quiet."
+
+  "Your posting mentions the dashboards should be ones people actually open. That's the part of analytics I care about most. At Boeing I replaced a weekly manual report with a Tableau dashboard; the test I used for whether it worked was whether the ops leads stopped asking me for the numbers. They did."
+
+Notice: short and long sentences mixed, specific nouns, first person, one idea per paragraph, no adjectives doing the work of evidence, and nothing the reader would have to take on faith.
+
+Avoid: buzzwords (passionate, leverage, synergy, dynamic, robust, seamless, spearheaded, impactful, results-driven, cutting-edge), consultant framing (multiplier, unlock value, competitive advantage, inflection point, operating rhythm), stacked triples ("fast, reliable, and scalable"), rhetorical questions, "I am writing to express", "I am excited to", "I believe I would be", and any sentence that could be pasted into a letter for a different company.`;
+
+function buildCoverLetterMessages({ profile, jobText, match, matchText, briefText }) {
   const roleName = match.role || 'the role';
-  const companyName = match.company || 'the company';
+  const companyName = match.company || 'the company (unnamed in the posting)';
 
-  const user = `CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
+  const user = `Write a cover letter from ${profile.name} for the ${roleName} position at ${companyName}.
 
-Write a cover letter for ${companyName} for the ${roleName} role. This is NOT a typical job application - it's a strategic business pitch.
+Shape:
+- About 300 words (never under 250 or over 350), three or four paragraphs, body only (no address block, greeting, or sign-off).
+- Paragraph 1: which role, and one specific reason this company or this problem — drawn from the brief or the posting. Not a compliment; a reason.
+- Middle paragraph(s): two or three of the posting's requirements that the candidate genuinely meets, each backed by a concrete example from the profile. Where the match is partial, say what the actual experience is.
+- Last paragraph: what the candidate would want to work on first, and a plain ask for a conversation. No "doing you a favor" posture, no hard sell.
 
-MANDATORY REQUIREMENTS:
+The posting's exact wording matters to screening software: where the candidate genuinely has a listed skill or tool, use the posting's term for it.
 
-1. Research the company first. Look into their culture, values, strategy, current market challenges, leadership statements, and any unique initiatives. Open the letter with an insider-level observation that only someone deeply engaged with the company would know. This should sound like I have studied them carefully, not like a generic compliment.
-
-2. Do not restate my resume. My resume already lists my skills. Instead, the letter should:
-• Identify the problems, bottlenecks, or goals the company is facing.
-• Show how my specific experiences and skills directly solve those problems.
-• Position me not as a candidate filling a role, but as a multiplier who will unlock new value for them.
-
-3. Value proposition focus. Every line must show how I am a unique and confident addition who creates an edge they cannot find elsewhere. Do not use generic phrases like "I am passionate" or "I believe I am qualified." Write with the certainty of someone who already knows they will make a measurable impact.
-
-4. Style and tone. The tone must be confident, professional, and natural. Write like a consultant pitching directly to the CEO — concise, sharp, authoritative, and persuasive. Do not sound like a job seeker begging for an opportunity. Sound like someone who is offering them a rare chance to gain a competitive advantage.
-
-5. CRITICAL: Avoid ALL AI detection patterns.
-• NEVER use em-dashes (—), hyphens (-), semicolons (;), or colons (:) anywhere in the letter body
-• NEVER use phrases like "I am excited to," "I am passionate about," "team player," "fast learner," "I believe," "I feel"
-• NEVER use "furthermore," "moreover," "additionally," "in addition," "consequently," "therefore"
-• NEVER start sentences with "As a," "With my," "Through my," "Having worked"
-• NEVER use superlatives like "extremely," "incredibly," "highly," "very," "really"
-• Write with varied sentence lengths and natural human rhythm
-• Use contractions occasionally (I've, you'll, we're) to sound more human
-• Write like you're speaking directly to a business executive, not writing an essay
-
-6. Structure of the cover letter (EXACTLY 4 paragraphs).
-• Paragraph 1: One insider observation about ${companyName} (3-4 lines max). Show you understand their specific market position or recent developments.
-• Paragraph 2: Get straight to business. Identify ONE specific challenge they face based on the job posting and how you solve it directly.
-• Paragraph 3: Present your relevant experience with specific outcomes. You may enhance or extrapolate from the profile experiences to match job requirements. Add relevant soft skills that demonstrate leadership, problem-solving, or innovation.
-• Paragraph 4: Strong close that positions hiring you as the obvious strategic decision. Sound like you're doing them a favor by considering their opportunity.
-
-7. The final product should feel like the confident pitch of a lifetime. When finished, the reader should feel curious and eager to meet me, as if they would be missing out if they did not.
-
-Use the facts from my profile below as a foundation. You may enhance experiences and add relevant soft skills to better match the job requirements, but keep it realistic and professional.
-
-Job Post:
+JOB POSTING:
 ${jobText}
 
-Match analysis (requirements and which of my profile items support each):
+MATCH ANALYSIS:
 ${matchText}
 
-My Profile:
-Name: ${profile.name}
-Contact: ${profile.contact}
-Summary: ${profile.summary || 'None provided'}
-Education:
-${formatEducation(profile)}
-Skills: ${profile.skills ? profile.skills.join(', ') : 'None listed'}
+COMPANY BRIEF:
+${briefText}
 
-Work Experience:
-${formatExperiences(profile)}
-
-Projects:
-${formatProjects(profile)}
-
-Certifications & Achievements:
-${formatExtras(profile)}
-
-CRITICAL OUTPUT REQUIREMENTS:
-- Write EXACTLY 4 paragraphs as specified above
-- Use confident, consultant-level language throughout
-- NO generic phrases like "I am passionate" or "team player"
-- NO dashes, semicolons, or colons in the letter body
-- Sound like you're offering them a rare opportunity, not begging for a job
-- Research-backed insights about ${companyName} specifically
-- Separate paragraphs with a blank line`;
+CANDIDATE PROFILE (cite these ids in claims):
+${renderProfileWithIds(profile)}`;
 
   return [
     { role: 'system', content: SYSTEM },
@@ -94,4 +83,39 @@ CRITICAL OUTPUT REQUIREMENTS:
   ];
 }
 
-module.exports = { buildCoverLetterMessages, COVER_LETTER_SCHEMA };
+// Which sources a claim may cite. Profile ids, "job posting", and any URL that
+// appears in the brief.
+function allowedSources(profile, brief) {
+  const ids = new Set(['job posting']);
+  for (const e of profile.education || []) ids.add(`edu:${e.id}`);
+  for (const x of profile.experiences || []) ids.add(`exp:${x.id}`);
+  for (const p of profile.projects || []) ids.add(`proj:${p.id}`);
+  for (const x of profile.extras || []) ids.add(`extra:${x.id}`);
+  for (const s of profile.skills || []) ids.add(`skill:${s}`);
+  const urls = new Set();
+  for (const key of ['what_they_care_about', 'current_priorities', 'challenges_or_context']) {
+    for (const it of (brief && brief[key]) || []) if (it.source_url) urls.add(it.source_url);
+  }
+  return { ids, urls };
+}
+
+function normaliseSource(s) {
+  return String(s || '').trim().toLowerCase().replace(/\/$/, '');
+}
+
+// Returns the claims whose source is not something we can trace.
+function unsourcedClaims(claims, profile, brief) {
+  const { ids, urls } = allowedSources(profile, brief);
+  const idSet = new Set([...ids].map(normaliseSource));
+  const urlSet = new Set([...urls].map(normaliseSource));
+  const bad = [];
+  for (const c of claims || []) {
+    const parts = String(c.source || '').split(/\s*[,;]\s*/).map(normaliseSource).filter(Boolean);
+    if (!parts.length) { bad.push(c); continue; }
+    const ok = parts.every(p => idSet.has(p) || urlSet.has(p) || p === 'job posting');
+    if (!ok) bad.push(c);
+  }
+  return bad;
+}
+
+module.exports = { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims };

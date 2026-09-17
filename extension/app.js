@@ -29,6 +29,8 @@ class CoverLetterApp {
         this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
         this.proxyStatus = null;    // { reachable } from /health
         this.apiKey = null;         // { value, last4, savedAt, verifiedAt?, verifyError? } — value is never rendered
+        this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
+        this.researchEnabled = true;
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -54,9 +56,11 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled']);
         this.onboarding = result.onboarding || null;
         this.apiKey = result.apiKey || null;
+        this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
+        this.researchEnabled = result.researchEnabled !== false;
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -130,6 +134,16 @@ class CoverLetterApp {
         document.getElementById('help-tour')?.addEventListener('click', () => {
             this.startTour();
         });
+
+        // Company research toggle
+        const researchToggle = document.getElementById('research-company');
+        if (researchToggle) {
+            researchToggle.checked = this.researchEnabled;
+            researchToggle.addEventListener('change', (e) => {
+                this.researchEnabled = e.target.checked;
+                chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
+            });
+        }
 
         // Settings / API key
         document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
@@ -1108,6 +1122,43 @@ class CoverLetterApp {
         });
     }
 
+    // Company research cache
+    pruneBriefs(briefs) {
+        const maxAge = 30 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const kept = {};
+        for (const [key, brief] of Object.entries(briefs)) {
+            const at = Date.parse(brief.researchedAt || 0);
+            if (at && now - at < maxAge) kept[key] = brief;
+        }
+        return kept;
+    }
+
+    async cacheBrief(brief) {
+        this.companyBriefs[brief.company.trim().toLowerCase()] = brief;
+        try {
+            await chrome.storage.local.set({ companyBriefs: this.companyBriefs });
+        } catch (error) {
+            console.error('Error caching company brief:', error);
+        }
+    }
+
+    describeCoverLetterResult(result) {
+        const meta = result.metadata || {};
+        const parts = ['Cover letter generated'];
+        if (meta.briefSource === 'research') {
+            const n = meta.searches || 0;
+            parts.push(`— researched ${result.companyBrief?.company || 'the company'} with ${n} web search${n === 1 ? '' : 'es'}`);
+            if (result.companyBrief && !result.companyBrief.found) parts.push('(nothing reliable found; letter uses the posting only)');
+        } else if (meta.briefSource === 'cache') {
+            parts.push(`— used saved research for ${result.companyBrief?.company || 'the company'}`);
+        }
+        if (Array.isArray(result.unsourcedClaims) && result.unsourcedClaims.length) {
+            parts.push(`· ${result.unsourcedClaims.length} sentence(s) could not be traced to your profile — check them before sending`);
+        }
+        return parts.join(' ') + '.';
+    }
+
     // Resume Upload
     async handleResumeUpload(file) {
         if (!file) return;
@@ -1287,7 +1338,9 @@ class CoverLetterApp {
         try {
             const requestData = {
                 profile: this.profile,
-                jobText: jobText
+                jobText: jobText,
+                research: this.researchEnabled,
+                briefCache: this.companyBriefs
             };
 
             this.lastApiCall = {
@@ -1309,6 +1362,7 @@ class CoverLetterApp {
             const result = await response.json();
             this.lastApiCall.response = result;
             this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
+            if (result.companyBrief && result.companyBrief.company) await this.cacheBrief(result.companyBrief);
 
             // Display the cover letter
             this.displayCoverLetter(result.coverLetter);
@@ -1317,7 +1371,7 @@ class CoverLetterApp {
             // Save data
             await this.saveData();
 
-            this.showStatus('Cover letter generated successfully!', 'success');
+            this.showStatus(this.describeCoverLetterResult(result), 'success');
             this.recordFirstGeneration();
             const downloadBtn = document.getElementById('download-pdf');
             if (downloadBtn) downloadBtn.disabled = false;

@@ -67,12 +67,16 @@ const RESUME_SCHEMA = {
   required: ['summary', 'skills', 'education', 'experience', 'projects', 'programs']
 };
 
-const SYSTEM = `You are a resume writer who creates truthful, concise, ATS-friendly
-one-page resumes. Do NOT fabricate experiences, programs, or certifications.
-Only use or lightly rephrase what is provided in the profile or job text.
-Prefer measurable impact, clear verbs, and job-relevant keywords. Keep the
-final result to a single U.S. Letter page when rendered with a typical resume
-template (≈ 600–750 words total).`;
+const SYSTEM = `You write one-page, ATS-friendly resumes for a specific person applying to a specific job.
+
+Hard rules:
+1. Nothing that is not in the profile. No new metrics, tools, employers, dates, responsibilities or outcomes. You may select, reorder, tighten and rephrase the candidate's own bullets; you may not add to them. If a number is not in the profile, the bullet has no number.
+2. Applicant tracking systems match literal terms. Where the candidate genuinely has a skill or tool the posting names, use the posting's exact wording for it (and the profile's variant in parentheses if they differ, e.g. "CI/CD (GitHub Actions)"). Never add a term the candidate does not have.
+3. Bullets: start with a past-tense action verb (past tense throughout, including the current role — it reads consistently and parses reliably), say what was done and what it produced, one line or two at most, no pronouns.
+4. Skills: 3–4 category lines, most relevant to the posting first, using the posting's spelling of each term. Only skills from the profile.
+5. Education: every institution in the profile, with the details given. Coursework only if the profile lists it; keep the 3–6 most relevant.
+6. Programs/certifications: only what the profile lists under certifications & achievements; otherwise an empty list.
+7. Keep to a single U.S. Letter page (≈ 600–750 words). Prefer cutting less relevant bullets over shortening relevant ones.`;
 
 function buildResumeMessages({ profile, jobText, match, matchText }) {
   const roleName = match.role || 'the role';
@@ -81,17 +85,12 @@ function buildResumeMessages({ profile, jobText, match, matchText }) {
   const mustIncludeProjects = (profile.projects || []).filter(proj => proj.mustInclude);
 
   const user = `Create a targeted, one-page resume for the ${roleName} role at ${companyName}.
-Strict rules:
-• Do NOT invent or hallucinate content (programs, certs, jobs). If data is missing, omit the section.
-• Keep to a single page worth of content (≈ 600–750 words max).
-• Section order for new grads: Header → Skills → Education → Experience → Projects → (optional) Programs/Certifications.
-• Bullet counts (upper bounds): Experience 3–4 bullets per role; Projects 2–3 bullets per project.
-• Bullet length: ~12–22 words; be specific and outcome-oriented.
-• Skills: 3–4 category lines max (Languages, Frameworks/Libs, Data/Databases, Cloud/DevOps/Tools).
-• Education: keep accurate (degree, school, location, dates, GPA if provided); include 3–6 relevant courses if available.
-• Programs/Certifications: include ONLY if provided in profile; otherwise leave the list empty.
 
-Prioritize: “mustInclude” experiences/projects → role relevance → recency → quantified impact.
+Selection:
+• Include every experience and project marked mustInclude. Then rank the rest by how many of the posting's requirements they evidence (see the match analysis), then recency.
+• Experience: 3–4 bullets per role for relevant roles, 1–2 for less relevant ones. Projects: 2–3 bullets each.
+• The summary is one line: the candidate's actual level and specialty in the posting's terms, no adjectives.
+• Rewrite bullets to lead with what the posting asks for, but every fact in a bullet must already be in the profile's version of it.
 
 JOB POSTING:
 ${jobText}

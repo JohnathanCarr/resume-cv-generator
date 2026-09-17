@@ -32,7 +32,7 @@
 1. **Upload your resume** (PDF) to autofill your profile, then review it
 2. **Paste job description** in Generate tab
 3. **Choose document type**:
-   - **Generate Cover Letter** → Strategic business pitch
+   - **Generate Cover Letter** → grounded in your profile; tick **Research the company** for sourced facts about the employer
    - **Generate Resume** → ATS-optimized, one-page format
 4. **Download PDF** instantly!
 

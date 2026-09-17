@@ -1,14 +1,15 @@
 # 🚀 AI Cover Letter & Resume Generator
 
-**Generate hyper-personalized cover letters and resumes that bypass AI detection and land interviews.**
+**Tailored, honest resumes and cover letters for every job you apply to — built only from your own experience.**
 
-Transform your job applications with AI-powered documents that sound like strategic business pitches, not typical applications. This Chrome extension creates sophisticated, tailored content that makes you stand out from the crowd.
+A Chrome extension plus a small local server. You upload your resume once, keep a complete profile, paste a job posting, and get a one-page ATS-friendly resume and a plainly written cover letter that match the posting's actual requirements. Nothing is invented: every claim traces back to your profile, and everything said about the company comes from the posting or from cited research.
 
 ## ✨ What This Does
 
-- 🎯 **Hyper-Tailored Cover Letters**: Research companies and craft insider observations
-- 📄 **Professional Resumes**: ATS-optimized, one-page layouts that fill completely  
-- 🧠 **AI Detection Proof**: Avoids all telltale AI writing patterns
+- 🎯 **Reads the posting properly**: extracts every requirement and checks which parts of your profile support it before writing a word
+- 🔍 **Researches the company** (optional, cover letters): a few web searches for what they build and what they care about, every fact with its source; if nothing reliable turns up, the letter sticks to the posting
+- 📄 **ATS-friendly resumes**: one page, standard sections, the posting's exact terms where you genuinely have the skill, no invented numbers
+- ✍️ **Cover letters that sound like a person**: 250–350 words, specific, no buzzwords, no "I am excited to apply"
 - ⚡ **Instant PDF Downloads**: One-click download straight to Downloads folder
 - 💾 **Smart Profile Management**: Upload your existing resume to autofill your profile, autosave, comprehensive data tracking
 - 🔒 **100% Private**: All data stays on your device, secure local proxy
@@ -19,8 +20,10 @@ Transform your job applications with AI-powered documents that sound like strate
 **Traditional applications sound like this:**
 > "I am excited to apply for this position. I am passionate about your company and believe I would be a great fit..."
 
-**Our AI-generated content sounds like this:**
-> "Your recent Series C funding and expansion into enterprise automation signals a critical inflection point where technical debt could either accelerate or constrain growth. My experience architecting scalable systems positions me to help you navigate this transition..."
+**This sounds like this:**
+> "At Stripe I designed the idempotency layer for the payments API, which cut duplicate charges by 94% across 40 million daily requests. I also led the migration of 12 services from Kubernetes 1.21 to 1.28 with zero downtime. My observability work has been through a tracing dashboard and an open-source project rather than an on-call ownership role, which is the part of this job I'd want to grow into first."
+
+Every sentence there came from the candidate's profile, and the letter says so where the match is partial.
 
 ## 🚀 Quick Start (Any Operating System)
 
@@ -96,9 +99,11 @@ Your key is stored only in this browser's extension storage and sent to the loca
 1. **Go to Generate tab**
 2. **Paste any job description**
 3. **Choose your document**:
-   - **Generate Cover Letter** → Strategic business pitch
-   - **Generate Resume** → ATS-optimized, one-page format
+   - **Generate Cover Letter** → 250–350 words, grounded in your profile and the posting. Leave **Research the company** ticked for a few web searches about the employer (roughly $0.05–0.10 per letter, cached per company for 30 days); untick it to use the posting only.
+   - **Generate Resume** → one page, ATS-friendly, sized to how much material your profile actually has
 4. **Download PDF** → Instant download to Downloads folder
+
+The status line under the buttons tells you what happened: how many searches the research used, whether any sentence couldn't be traced to your profile, and whether your profile is what's keeping the resume short.
 
 ### Pro Tips
 - **Mark items "Must Include"** to guarantee they appear on resumes
@@ -160,8 +165,8 @@ Chrome Extension ──→ Local Proxy ──→ OpenAI (model pinned in proxy/c
 ```
 
 - **Extension**: Handles UI, data storage, and user interactions
-- **Local Proxy**: Secures API key and manages OpenAI communications
-- **Advanced AI**: Sophisticated prompting for consultant-level output
+- **Local Proxy**: Receives your key with each request, runs the match analysis, company research and generation calls, and renders resume PDFs
+- **Model**: One pinned OpenAI model (`proxy/config.js`). Each document is two or three calls: a structured read of the posting against your profile, optional company research, then the document itself with a strict output schema
 
 ## 📊 Data Privacy & Security
 
@@ -176,7 +181,7 @@ Chrome Extension ──→ Local Proxy ──→ OpenAI (model pinned in proxy/c
 - **Job seekers** who want professional, tailored documents
 - **Students** applying for internships and entry-level roles
 - **Career changers** who need to reposition their experience
-- **Professionals** who want consultant-level application materials
+- **Professionals** who want application materials that hold up in the interview
 - **Anyone** tired of generic, AI-detected cover letters and resumes
 
 ## 📈 Results You Can Expect
@@ -189,10 +194,10 @@ Chrome Extension ──→ Local Proxy ──→ OpenAI (model pinned in proxy/c
 
 ## 🔧 Advanced Configuration
 
-### Custom API Settings
-- Edit `proxy/server.js` to modify AI models or parameters
-- Adjust timeout settings for different generation speeds
-- Customize prompts for different writing styles
+### Model and prompts
+- The model, reasoning effort per call and research limits live in `proxy/config.js`
+- Prompts live in `proxy/prompts/` — `matchAnalysis.js`, `companyResearch.js`, `resume.js`, `coverLetter.js`
+- Before changing a prompt, run the eval set (`test/eval/README.md`) so you can compare before and after
 
 ### Extension Customization
 - Modify `extension/styles.css` for different UI themes

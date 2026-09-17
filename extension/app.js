@@ -27,7 +27,8 @@ class CoverLetterApp {
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
         this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
         this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
-        this.proxyStatus = null;    // { reachable, keyConfigured } from /health
+        this.proxyStatus = null;    // { reachable } from /health
+        this.apiKey = null;         // { value, last4, savedAt, verifiedAt?, verifyError? } — value is never rendered
         this.lastApiCall = null;
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -53,8 +54,9 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey']);
         this.onboarding = result.onboarding || null;
+        this.apiKey = result.apiKey || null;
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -128,6 +130,20 @@ class CoverLetterApp {
         document.getElementById('help-tour')?.addEventListener('click', () => {
             this.startTour();
         });
+
+        // Settings / API key
+        document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
+        document.getElementById('settings-close')?.addEventListener('click', () => this.closeSettings());
+        document.getElementById('settings-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'settings-modal') this.closeSettings();
+        });
+        document.getElementById('api-key-save')?.addEventListener('click', () => this.saveApiKey());
+        document.getElementById('api-key-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this.saveApiKey(); }
+        });
+        document.getElementById('api-key-replace')?.addEventListener('click', () => this.renderSettings({ replacing: true }));
+        document.getElementById('api-key-cancel')?.addEventListener('click', () => this.renderSettings());
+        document.getElementById('api-key-remove')?.addEventListener('click', () => this.removeApiKey());
 
         document.getElementById('checklist-dismiss')?.addEventListener('click', () => {
             this.saveOnboarding({ checklistDismissed: true });
@@ -811,6 +827,131 @@ class CoverLetterApp {
                 }, 3000);
     }
 
+    // Settings / API key
+    // The key value lives in chrome.storage.local and is only ever read back
+    // to send to the local proxy; the UI shows the last four characters.
+    openSettings() {
+        this.renderSettings();
+        document.getElementById('settings-modal')?.classList.remove('hidden');
+        if (!this.apiKey) document.getElementById('api-key-input')?.focus();
+    }
+
+    closeSettings() {
+        document.getElementById('settings-modal')?.classList.add('hidden');
+        const input = document.getElementById('api-key-input');
+        if (input) input.value = '';
+    }
+
+    renderSettings({ replacing = false } = {}) {
+        const saved = document.getElementById('api-key-saved');
+        const entry = document.getElementById('api-key-entry');
+        const cancel = document.getElementById('api-key-cancel');
+        const input = document.getElementById('api-key-input');
+        if (!saved || !entry) return;
+
+        const hasKey = !!(this.apiKey && this.apiKey.value);
+        saved.classList.toggle('hidden', !hasKey || replacing);
+        entry.classList.toggle('hidden', hasKey && !replacing);
+        cancel?.classList.toggle('hidden', !(hasKey && replacing));
+        if (input) input.value = '';
+        if (replacing) input?.focus();
+
+        if (hasKey) {
+            const masked = document.getElementById('api-key-masked');
+            if (masked) masked.textContent = `sk-••••••••••••${this.apiKey.last4}`;
+            this.renderApiKeyStatus();
+        }
+    }
+
+    renderApiKeyStatus(override) {
+        const el = document.getElementById('api-key-status');
+        if (!el) return;
+        const status = override || this.describeApiKeyStatus();
+        el.textContent = status.text;
+        el.className = `api-key-status${status.kind ? ` ${status.kind}` : ''}`;
+    }
+
+    describeApiKeyStatus() {
+        if (!this.apiKey) return { text: '', kind: '' };
+        if (this.apiKey.verifiedAt) {
+            return { text: `Verified ${new Date(this.apiKey.verifiedAt).toLocaleDateString()}`, kind: 'ok' };
+        }
+        if (this.apiKey.verifyError) return { text: this.apiKey.verifyError, kind: 'error' };
+        if (this.apiKey.verifyNote) return { text: this.apiKey.verifyNote, kind: '' };
+        return { text: `Saved ${new Date(this.apiKey.savedAt).toLocaleDateString()} · not verified yet`, kind: '' };
+    }
+
+    async saveApiKey() {
+        const input = document.getElementById('api-key-input');
+        const value = (input?.value || '').trim();
+        if (!value) { this.showError('Paste your API key first.', false); return; }
+        if (!/^sk-[A-Za-z0-9_-]{10,}$/.test(value)) {
+            this.showError('That does not look like an OpenAI API key (they start with "sk-").', false);
+            return;
+        }
+
+        this.apiKey = { value, last4: value.slice(-4), savedAt: new Date().toISOString() };
+        await this.persistApiKey();
+        if (input) input.value = '';
+        this.renderSettings();
+        this.renderChecklist();
+
+        this.renderApiKeyStatus({ text: 'Verifying…', kind: '' });
+        await this.verifyApiKey();
+        this.renderApiKeyStatus();
+        this.renderChecklist();
+    }
+
+    async removeApiKey() {
+        this.apiKey = null;
+        try {
+            await chrome.storage.local.remove('apiKey');
+        } catch (error) {
+            console.error('Error removing API key:', error);
+        }
+        this.renderSettings();
+        this.renderChecklist();
+    }
+
+    async persistApiKey() {
+        try {
+            await chrome.storage.local.set({ apiKey: this.apiKey });
+        } catch (error) {
+            console.error('Error saving API key:', error);
+        }
+    }
+
+    // Asks the local proxy to make one tiny request with the key. Absence of
+    // the proxy is reported, not treated as an invalid key.
+    async verifyApiKey() {
+        if (!this.apiKey) return;
+        try {
+            const res = await fetch('http://localhost:8787/verifyKey', {
+                method: 'POST',
+                headers: this.apiHeaders()
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.ok) {
+                this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
+            } else if (res.status === 404) {
+                // Proxy is running but predates the verify endpoint.
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Restart the local server to verify.' };
+            } else {
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: data.error || `Could not verify (HTTP ${res.status})` };
+            }
+        } catch (_) {
+            this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Start the local server to verify it.' };
+        }
+        await this.persistApiKey();
+    }
+
+    // Headers for every proxy call that reaches OpenAI.
+    apiHeaders(extra = {}) {
+        const headers = { 'Content-Type': 'application/json', ...extra };
+        if (this.apiKey?.value) headers['Authorization'] = `Bearer ${this.apiKey.value}`;
+        return headers;
+    }
+
     // Re-check the proxy when the user comes back to the Profile tab so the
     // checklist reflects a server they just started.
     async refreshChecklistFromProxy() {
@@ -844,10 +985,10 @@ class CoverLetterApp {
     async refreshProxyStatus() {
         try {
             const res = await fetch('http://localhost:8787/health', { cache: 'no-store' });
-            const data = await res.json();
-            this.proxyStatus = { reachable: res.ok, keyConfigured: !!data.keyConfigured };
+            await res.json().catch(() => ({}));
+            this.proxyStatus = { reachable: res.ok };
         } catch (_) {
-            this.proxyStatus = { reachable: false, keyConfigured: false };
+            this.proxyStatus = { reachable: false };
         }
     }
 
@@ -855,7 +996,7 @@ class CoverLetterApp {
         return {
             resume: !!this.uploadedResume,
             name: !!(this.profile.name && this.profile.name.trim()),
-            proxy: !!(this.proxyStatus && this.proxyStatus.reachable && this.proxyStatus.keyConfigured),
+            key: !!(this.apiKey && this.apiKey.value),
             generated: !!(this.onboarding && this.onboarding.firstGeneratedAt)
         };
     }
@@ -876,11 +1017,10 @@ class CoverLetterApp {
             li.classList.toggle('done', !!state[li.dataset.item]);
         });
 
-        const hint = document.getElementById('checklist-proxy-hint');
+        const hint = document.getElementById('checklist-key-hint');
         if (hint) {
-            if (!this.proxyStatus) hint.textContent = '';
-            else if (!this.proxyStatus.reachable) hint.textContent = '— server not running (run start-proxy)';
-            else if (!this.proxyStatus.keyConfigured) hint.textContent = '— server running, but no API key in proxy/.env';
+            if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
+            else if (!this.apiKey && this.proxyStatus && !this.proxyStatus.reachable) hint.textContent = '— also start the local server (run start-proxy)';
             else hint.textContent = '';
         }
         card.classList.remove('hidden');
@@ -903,7 +1043,13 @@ class CoverLetterApp {
                          <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
                          <li><strong>Paste a job description</strong> and generate.</li>
                        </ol>
-                       <p>Generating needs an OpenAI API key in <code>proxy/.env</code> and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+                       <p>Generating needs an OpenAI API key (added in Settings) and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+            },
+            {
+                target: '#open-settings',
+                title: 'Add your OpenAI API key',
+                placement: 'bottom',
+                body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p>'
             },
             {
                 target: '#upload-resume',

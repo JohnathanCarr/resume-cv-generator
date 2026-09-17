@@ -59,7 +59,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 - Unknown all-caps bold headings become kind `unknown`; `looksLikeEntryList()` decides whether to file them as extras of type `other` or skip with a warning. Add new heading variants to `SECTION_SYNONYMS` rather than widening the fallback.
 - Skills sections are either lists or prose; `parseSkills()` joins wrapped bullets first, then in prose mode keeps only fragments that pass `looksLikeSkill()` (capitalised/acronym, single token with `./+/#/-`, or in `KNOWN_SKILLS`).
 
-**Generation.** The proxy builds prompts by string interpolation (`formatEducation()` / `formatExtras()` helpers) and calls `gpt-4-turbo` in `json_object` mode. The resume response is post-processed by `trimResumeForOnePage()`. The extension renders resume JSON in `formatResume()` with **inline styles and hardcoded pt sizes** because the same HTML is POSTed to `/pdf/fromHtml` for Puppeteer; resume output styling is edited there, not in `styles.css`. Model output and profile fields are inserted into `innerHTML` unescaped.
+**Generation.** The proxy builds prompts by string interpolation (`formatEducation()` / `formatExtras()` helpers) and calls the model pinned in `proxy/config.js` (`gpt-5.6-terra`; a GPT-5 reasoning model, so calls use `reasoning_effort` and `max_completion_tokens` — `temperature`/`max_tokens` are rejected) in `json_object` mode. The resume response is post-processed by `trimResumeForOnePage()`. The extension renders resume JSON in `formatResume()` with **inline styles and hardcoded pt sizes** because the same HTML is POSTed to `/pdf/fromHtml` for Puppeteer; resume output styling is edited there, not in `styles.css`. Model output and profile fields are inserted into `innerHTML` unescaped.
 
 **Styling.** `styles.css` Section 1 defines spacing/radius/font tokens and light/dark colour tokens (`[data-theme="dark"]`). Form controls (`input`, `textarea`, `select`) do not inherit `color` or `font-family` — any rule that themes a control's background must also set those, or it renders Chrome's black-on-monospace defaults in dark mode. The four "+ Add ___" buttons are the only `.btn-secondary` that are direct children of `.section`; target them with `.section > .btn-secondary`.
 
@@ -83,7 +83,7 @@ refactor(proxy): read API key from request header; drop .env and add key verific
 chore(proxy): pin model in config and update SDK
 test(prompts): add eval set of profiles × job postings with a scoring rubric
 refactor(prompts): structured job-posting extraction replaces regex company/role detection
-refactor(prompts): strict JSON schemas and lower temperatures for both endpoints
+refactor(prompts): strict JSON schemas and per-call reasoning effort for both endpoints
 feat(prompts): no-fabrication rules and few-shot voice guidance for cover letters
 feat(prompts): word-budget loop for one-page resumes
 docs: settings, key storage, and model choice
@@ -95,4 +95,4 @@ Output requirements agreed for the rewrite: a first **match-analysis** call turn
 
 **Deferred: Match panel.** The match-analysis JSON is stored with each generation but not yet shown. Next phase: a panel beside the preview listing each requirement with ✓/◐/✗ and the profile evidence, so users can see coverage and fix their profile rather than the output.
 
-Prompt-side problems this sequence addresses: company/role are extracted from job text with fragile regexes that fall back to literal `[COMPANY NAME]`; the cover-letter prompt licenses the model to "enhance or extrapolate" experiences; a strict `json_schema` is defined in `server.js` but never used; temperatures are 0.8/0.9; "AI detection avoidance" is a phrase ban-list rather than few-shot voice guidance; one-page fit is enforced by truncating bullets after the fact. Build the eval set before changing prompts and run it before/after every change. Phase 2 (uploaded resume as layout reference) depends on a vision-capable model, which the mid-tier choice preserves.
+Prompt-side problems this sequence addresses: company/role are extracted from job text with fragile regexes that fall back to literal `[COMPANY NAME]`; the cover-letter prompt licenses the model to "enhance or extrapolate" experiences; a strict `json_schema` is defined in `server.js` but never used; the model was called with temperature 0.8/0.9 (now reasoning_effort per call); "AI detection avoidance" is a phrase ban-list rather than few-shot voice guidance; one-page fit is enforced by truncating bullets after the fact. Build the eval set before changing prompts and run it before/after every change. Phase 2 (uploaded resume as layout reference) depends on a vision-capable model, which the mid-tier choice preserves.

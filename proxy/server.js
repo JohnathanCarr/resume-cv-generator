@@ -2,9 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 
+const { GENERATION_MODEL, VERIFY_MODEL, REASONING, MAX_COMPLETION_TOKENS } = require('./config');
+
 const app = express();
 const PORT = 8787;
-const VERIFY_MODEL = 'gpt-4o-mini';
 
 // The API key is supplied by the extension on every request as
 // "Authorization: Bearer sk-...". It is never stored, logged or echoed here.
@@ -64,8 +65,8 @@ app.post('/verifyKey', requireApiKey, async (req, res) => {
     const completion = await req.openai.chat.completions.create({
       model: VERIFY_MODEL,
       messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
-      max_tokens: 2,
-      temperature: 0
+      max_completion_tokens: MAX_COMPLETION_TOKENS.verify,
+      reasoning_effort: REASONING.verify
     });
     res.json({ ok: true, model: completion.model });
   } catch (error) {
@@ -268,14 +269,14 @@ OUTPUT JSON (omit a section key if you have no content for it):
     let completion;
     try {
       completion = await req.openai.chat.completions.create({
-        model: "gpt-4-turbo",
+        model: GENERATION_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.8,
-        max_tokens: 4000
+        reasoning_effort: REASONING.generate,
+        max_completion_tokens: MAX_COMPLETION_TOKENS.resume
       });
     } catch (error) {
       throw error;
@@ -481,16 +482,15 @@ DO NOT include any other text outside the JSON response.`;
     while (retryCount <= maxRetries) {
       try {
         // Call OpenAI API with structured outputs
-        // Using gpt-4-turbo for better prompt following
         completion = await req.openai.chat.completions.create({
-          model: "gpt-4-turbo",
+          model: GENERATION_MODEL,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.9,
-          max_tokens: 3000
+          reasoning_effort: REASONING.generate,
+          max_completion_tokens: MAX_COMPLETION_TOKENS.coverLetter
         });
         
         break; // Success, exit retry loop
@@ -500,14 +500,14 @@ DO NOT include any other text outside the JSON response.`;
           // Fallback to json_object mode if strict schema not supported
           console.log('Falling back to json_object mode');
           completion = await req.openai.chat.completions.create({
-            model: "gpt-4o",
+            model: GENERATION_MODEL,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt + "\n\nIMPORTANT: Return only valid JSON with a single field 'coverLetter' containing the letter as a string." }
             ],
             response_format: { type: "json_object" },
-            temperature: 0.7,
-            max_tokens: 1500
+            reasoning_effort: REASONING.generate,
+            max_completion_tokens: MAX_COMPLETION_TOKENS.coverLetter
           });
           break;
         } else if (retryCount < maxRetries) {
@@ -537,7 +537,7 @@ DO NOT include any other text outside the JSON response.`;
         console.log('JSON parse failed, retrying with explicit instructions');
         try {
           const retryCompletion = await req.openai.chat.completions.create({
-            model: "gpt-4o",
+            model: GENERATION_MODEL,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt },
@@ -545,8 +545,8 @@ DO NOT include any other text outside the JSON response.`;
               { role: "user", content: "Please return valid JSON with only the coverLetter field. Format: {\"coverLetter\": \"your letter here\"}" }
             ],
             response_format: { type: "json_object" },
-            temperature: 0.7,
-            max_tokens: 1500
+            reasoning_effort: REASONING.generate,
+            max_completion_tokens: MAX_COMPLETION_TOKENS.coverLetter
           });
           
           parsedResponse = JSON.parse(retryCompletion.choices[0].message.content);

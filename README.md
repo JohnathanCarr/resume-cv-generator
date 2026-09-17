@@ -155,8 +155,8 @@ Your key is stored only in this browser's extension storage and sent to the loca
 ## 🏗️ Architecture
 
 ```
-Chrome Extension ──→ Local Proxy ──→ OpenAI GPT-4-Turbo
-     (UI)           (localhost:8787)     (Advanced AI)
+Chrome Extension ──→ Local Proxy ──→ OpenAI (model pinned in proxy/config.js)
+     (UI)           (localhost:8787)
 ```
 
 - **Extension**: Handles UI, data storage, and user interactions

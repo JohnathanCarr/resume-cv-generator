@@ -1,0 +1,22 @@
+Senior Backend Engineer — Infrastructure
+Vercel · San Francisco, CA (Hybrid)
+
+About the role
+Vercel is seeking a Senior Backend Engineer to join our Infrastructure team. You will design and operate the distributed systems behind our edge network and build the APIs used by millions of developers every day. You'll own services end to end: design, rollout, on-call, and the observability that keeps them honest.
+
+What you'll do
+- Design and operate high-throughput backend services in Go and TypeScript
+- Run production workloads on Kubernetes, including upgrades and capacity planning
+- Build observability (metrics, tracing, alerting) and lead incident response
+- Partner with product engineering on API design and platform reliability
+
+Requirements
+- 3+ years building backend services in Go or TypeScript
+- Experience operating Kubernetes in production
+- Strong understanding of observability and incident response
+- Track record of shipping reliable APIs at scale
+
+Nice to have
+- Experience with PostgreSQL or ClickHouse
+- Open-source contributions
+- Experience with edge or CDN infrastructure

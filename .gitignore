@@ -54,3 +54,5 @@ debug.log
 
 # Local resume fixtures with real contact details (never commit)
 test/fixtures/local/
+test/eval/profiles/local/
+test/eval/runs/

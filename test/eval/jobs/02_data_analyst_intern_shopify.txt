@@ -1,0 +1,18 @@
+Data Analyst Intern (Summer 2027)
+Shopify · Remote (North America)
+
+Shopify's Merchant Analytics team turns billions of commerce events into decisions for millions of merchants. As a Data Analyst Intern you'll work with analysts and data scientists to answer real business questions, build dashboards that teams actually use, and learn how experimentation works at scale.
+
+Responsibilities
+- Write SQL against large event datasets to answer product and business questions
+- Build and maintain dashboards (we use Looker and Tableau) for merchant-facing teams
+- Support A/B test analysis and communicate results to non-technical stakeholders
+- Clean and validate data pipelines; flag data quality issues early
+
+Qualifications
+- Currently pursuing a Bachelor's degree in Statistics, Informatics, Computer Science, Economics or a related field, graduating 2027 or later
+- Proficiency in SQL and Python (pandas)
+- Experience with a data visualization tool (Tableau, Looker, Power BI)
+- Understanding of basic statistics and A/B testing
+- Clear written communication
+- Bonus: experience with R, dbt, or a prior analytics internship

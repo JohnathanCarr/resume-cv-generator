@@ -1,0 +1,119 @@
+{
+  "name": "David Chen",
+  "contact": "Email: david.chen@example.com\nPhone: 206-555-0147\nLinkedIn: linkedin.com/in/davidchen",
+  "location": "Seattle, WA",
+  "summary": "Informatics student seeking a data analyst internship applying statistical modeling and SQL to real business problems.",
+  "education": [
+    {
+      "id": "1",
+      "institution": "University of Washington",
+      "degreeType": "Bachelor of Science",
+      "major": "Informatics \u2013 Data Science track",
+      "minor": "",
+      "location": "Seattle, WA",
+      "start": "Sep 2023",
+      "end": "Jun 2027",
+      "gpa": "3.6",
+      "honors": "Dean's List (Fall 2024, Spring 2025)",
+      "coursework": ""
+    }
+  ],
+  "skills": [
+    "Python",
+    "pandas",
+    "scikit-learn",
+    "SQL",
+    "R",
+    "Tableau",
+    "Excel",
+    "Git",
+    "Statistics",
+    "A/B testing",
+    "Data visualization",
+    "Streamlit"
+  ],
+  "experiences": [
+    {
+      "id": "2",
+      "title": "Data Analytics Intern",
+      "company": "Boeing",
+      "start": "June 2025",
+      "end": "September 2025",
+      "location": "Everett, WA",
+      "description": "",
+      "bullets": [
+        "Built Tableau dashboards tracking 14 supply-chain KPIs for a 200-person manufacturing organization, replacing a weekly manual report and saving roughly six analyst hours per week.",
+        "Automated data validation with Python and pandas, catching 3 upstream schema changes before they reached production reports."
+      ],
+      "mustInclude": true
+    },
+    {
+      "id": "3",
+      "title": "Undergraduate Research Assistant",
+      "company": "UW Information School",
+      "start": "Jan 2024",
+      "end": "Present",
+      "location": "Seattle, WA",
+      "description": "",
+      "bullets": [
+        "Cleaned and labeled 40,000 social media posts for a misinformation study under Dr. A. Patel.",
+        "Co-authored a poster accepted to the 2025 iConference."
+      ],
+      "mustInclude": false
+    },
+    {
+      "id": "4",
+      "title": "Barista",
+      "company": "Starbucks",
+      "start": "2022",
+      "end": "2023",
+      "location": "Seattle, WA",
+      "description": "",
+      "bullets": [
+        "Trained 5 new hires; recognized as Partner of the Quarter."
+      ],
+      "mustInclude": false
+    }
+  ],
+  "projects": [
+    {
+      "id": "5",
+      "name": "Seattle Housing Price Model",
+      "description": "",
+      "bullets": [
+        "Trained gradient-boosted regression on 90K King County listings; RMSE 8% below the Zillow baseline.",
+        "Published an interactive Streamlit app used by 300+ visitors."
+      ],
+      "mustInclude": false
+    },
+    {
+      "id": "6",
+      "name": "Campus Bike Share Analysis",
+      "description": "Python, SQL",
+      "bullets": [
+        "Identified 3 underserved dock locations from 1.1M trip records; proposal adopted by campus transportation."
+      ],
+      "mustInclude": false
+    }
+  ],
+  "extras": [
+    {
+      "id": "7",
+      "title": "Warehouse Volunteer",
+      "organization": "Food Lifeline",
+      "type": "volunteer",
+      "start": "2023",
+      "end": "Present",
+      "description": ""
+    },
+    {
+      "id": "8",
+      "title": "Hour of Code Facilitator",
+      "organization": "Code.org",
+      "type": "volunteer",
+      "start": "",
+      "end": "Dec 2024",
+      "description": ""
+    }
+  ]
+}

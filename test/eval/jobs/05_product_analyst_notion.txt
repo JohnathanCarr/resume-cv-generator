@@ -1,0 +1,21 @@
+Product Analyst
+Notion · New York, NY or Remote
+
+Notion is looking for a Product Analyst to partner with our Growth team. You'll define metrics, run experiments, and turn messy product data into decisions about onboarding, activation, and retention.
+
+Responsibilities
+- Define and instrument product metrics with engineering and PMs
+- Design and analyze experiments; write up results for leadership
+- Build self-serve dashboards and maintain metric definitions in dbt
+- Investigate anomalies in usage data and explain what happened
+
+Requirements
+- 2+ years in product analytics, data analysis, or a related role
+- Expert SQL; comfortable with Python for analysis
+- Experience with experimentation (A/B testing, causal inference basics)
+- Experience with a BI tool (Mode, Looker, Tableau) and with dbt
+- Strong written communication; you can explain a result to a VP in one page
+
+Nice to have
+- Experience at a product-led growth company
+- Experience mentoring or onboarding analysts

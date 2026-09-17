@@ -1,0 +1,22 @@
+Full-Stack Engineer (React Native)
+Northwind Analytics · Remote (US)
+
+Northwind Analytics is a 25-person startup building a field-operations app for utility crews. We are hiring a full-stack engineer to own our React Native mobile app and the Node.js services behind it.
+
+What you'll own
+- The React Native app (iOS and Android): new features, performance, release process
+- Node.js/Express backend services and MongoDB data models
+- Authentication and role-based access control across mobile and web
+- CI/CD on GitHub Actions; you'll help keep releases boring
+
+Requirements
+- 1–3 years of professional experience shipping React Native or React applications
+- Solid JavaScript/TypeScript and Node.js
+- Experience with MongoDB or another document database
+- Experience implementing authentication (token-based) and access control
+- Comfortable working across mobile, web, and backend in a small team
+
+Nice to have
+- FastAPI or Python services experience
+- Experience with automated data ingestion or web scraping
+- Prior startup experience

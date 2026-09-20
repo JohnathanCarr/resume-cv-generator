@@ -27,7 +27,6 @@ class CoverLetterApp {
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
         this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
         this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
-        this.proxyStatus = null;    // { reachable } from /health
         this.apiKey = null;         // { value, last4, savedAt, verifiedAt?, verifyError? } — value is never rendered
         this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
         this.researchEnabled = true;
@@ -50,7 +49,7 @@ class CoverLetterApp {
         this.setupAutosave();
         this.renderProfile();
         this.maybeStartOnboarding();
-        this.refreshProxyStatus().then(() => this.renderChecklist());
+        this.renderChecklist();
     }
 
     // Data Management
@@ -274,7 +273,7 @@ class CoverLetterApp {
             const activeTabContent = document.getElementById(`${tabName}-tab`);
             if (activeTabContent) activeTabContent.classList.add('active');
 
-            if (tabName === 'profile') this.refreshChecklistFromProxy();
+            if (tabName === 'profile') this.renderChecklist();
         } catch (error) {
             console.error('Error switching tabs:', error);
         }
@@ -935,26 +934,27 @@ class CoverLetterApp {
         }
     }
 
-    // Asks the local proxy to make one tiny request with the key. Absence of
-    // the proxy is reported, not treated as an invalid key.
+    // The generation pipeline (extension/generation/) is an ES module; app.js is
+    // a classic script, so it is imported on first use and cached.
+    generation() {
+        if (!this._generation) this._generation = import('./generation/pipeline.js');
+        return this._generation;
+    }
+
+    // Makes one tiny OpenAI request with the key. A network failure is
+    // reported as such, not treated as an invalid key.
     async verifyApiKey() {
         if (!this.apiKey) return;
         try {
-            const res = await fetch('http://localhost:8787/verifyKey', {
-                method: 'POST',
-                headers: this.apiHeaders()
-            });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.ok) {
-                this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
-            } else if (res.status === 404) {
-                // Proxy is running but predates the verify endpoint.
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Restart the local server to verify.' };
+            const { verifyKey } = await this.generation();
+            const data = await verifyKey(this.apiKey.value);
+            this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
+        } catch (error) {
+            if (error.status === 401) {
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: error.message };
             } else {
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: data.error || `Could not verify (HTTP ${res.status})` };
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: `Saved, not verified: ${error.message}` };
             }
-        } catch (_) {
-            this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Start the local server to verify it.' };
         }
         await this.persistApiKey();
     }
@@ -963,20 +963,6 @@ class CoverLetterApp {
         if (this.apiKey?.value) return true;
         this.showError('Add your OpenAI API key in Settings (gear icon) before generating.', false);
         return false;
-    }
-
-    // Headers for every proxy call that reaches OpenAI.
-    apiHeaders(extra = {}) {
-        const headers = { 'Content-Type': 'application/json', ...extra };
-        if (this.apiKey?.value) headers['Authorization'] = `Bearer ${this.apiKey.value}`;
-        return headers;
-    }
-
-    // Re-check the proxy when the user comes back to the Profile tab so the
-    // checklist reflects a server they just started.
-    async refreshChecklistFromProxy() {
-        await this.refreshProxyStatus();
-        this.renderChecklist();
     }
 
     // Onboarding
@@ -1002,16 +988,6 @@ class CoverLetterApp {
 
     // Getting Started checklist: ticks itself from live state and hides once
     // everything is done or the user dismisses it.
-    async refreshProxyStatus() {
-        try {
-            const res = await fetch('http://localhost:8787/health', { cache: 'no-store' });
-            await res.json().catch(() => ({}));
-            this.proxyStatus = { reachable: res.ok };
-        } catch (_) {
-            this.proxyStatus = { reachable: false };
-        }
-    }
-
     checklistState() {
         return {
             resume: !!this.uploadedResume,
@@ -1039,8 +1015,8 @@ class CoverLetterApp {
 
         const hint = document.getElementById('checklist-key-hint');
         if (hint) {
-            if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
-            else if (!this.apiKey && this.proxyStatus && !this.proxyStatus.reachable) hint.textContent = '— also start the local server (run start-proxy)';
+            if (this.apiKey && this.apiKey.verifyError) hint.textContent = `— ${this.apiKey.verifyError}`;
+            else if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
             else hint.textContent = '';
         }
         card.classList.remove('hidden');
@@ -1063,7 +1039,7 @@ class CoverLetterApp {
                          <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
                          <li><strong>Paste a job description</strong> and generate.</li>
                        </ol>
-                       <p>Generating needs an OpenAI API key (added in Settings) and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+                       <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
             },
             {
                 target: '#open-settings',
@@ -1348,18 +1324,8 @@ class CoverLetterApp {
                 timestamp: new Date().toISOString()
             };
 
-            const response = await fetch('http://localhost:8787/generateCoverLetter', {
-                method: 'POST',
-                headers: this.apiHeaders(),
-                body: JSON.stringify(requestData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
-
-            const result = await response.json();
+            const { generateCoverLetter } = await this.generation();
+            const result = await generateCoverLetter(this.apiKey.value, requestData);
             this.lastApiCall.response = result;
             this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
             if (result.companyBrief && result.companyBrief.company) await this.cacheBrief(result.companyBrief);
@@ -1675,16 +1641,8 @@ class CoverLetterApp {
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
-        const response = await fetch('http://localhost:8787/generateResume', {
-            method: 'POST',
-            headers: this.apiHeaders(),
-            body: JSON.stringify(body)
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP ${response.status}`);
-        }
-        return response.json();
+        const { generateResume } = await this.generation();
+        return generateResume(this.apiKey.value, body);
     }
 
     // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).

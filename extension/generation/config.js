@@ -4,7 +4,7 @@
 // output, image input (needed for the Phase 2 layout-from-PDF work), and
 // reasoning_effort in place of temperature (GPT-5 models reject temperature
 // and use max_completion_tokens rather than max_tokens).
-module.exports = {
+export const CONFIG = {
   GENERATION_MODEL: 'gpt-5.6-terra',
   // Cheapest sibling, used only to confirm a key works.
   VERIFY_MODEL: 'gpt-5.6-luna',

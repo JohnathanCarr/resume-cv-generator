@@ -5,9 +5,7 @@
 // what may be said about the employer; and every sentence that makes a
 // claim must name its source so the server can check it.
 
-'use strict';
-
-const { renderProfileWithIds } = require('./matchAnalysis');
+import { renderProfileWithIds } from './matchAnalysis.js';
 
 const COVER_LETTER_SCHEMA = {
   type: 'object',
@@ -118,4 +116,4 @@ function unsourcedClaims(claims, profile, brief) {
   return bad;
 }
 
-module.exports = { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims };
+export { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims };

@@ -1,7 +1,7 @@
 {
   "name": "cover-letter-proxy",
   "version": "1.0.0",
-  "description": "Local proxy for Cover Letter Generator Chrome Extension",
+  "description": "Local PDF renderer for the Resume Studio Chrome extension",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,7 +10,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "openai": "^7.17.0",
     "puppeteer": "^24.31.0"
   },
   "devDependencies": {

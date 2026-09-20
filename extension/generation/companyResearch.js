@@ -3,9 +3,8 @@
 // posting"); if nothing credible is found the brief says so and the letter
 // falls back to what the posting itself says. Nothing here may be invented.
 
-'use strict';
-
-const { GENERATION_MODEL, REASONING, RESEARCH } = require('../config');
+import { CONFIG } from './config.js';
+const { GENERATION_MODEL, REASONING, RESEARCH } = CONFIG;
 
 const fact = {
   type: 'object',
@@ -107,4 +106,4 @@ function renderBriefForPrompt(brief) {
   return lines.join('\n');
 }
 
-module.exports = { researchCompany, briefFromPostingOnly, renderBriefForPrompt, BRIEF_SCHEMA };
+export { researchCompany, briefFromPostingOnly, renderBriefForPrompt, BRIEF_SCHEMA };

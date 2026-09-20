@@ -70,6 +70,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 - Conventional Commits, small focused commits on a feature branch, one PR per phase. Scopes in use: `profile`, `parser`, `generation`, `extension`, `onboarding`, `settings`, `prompts`, `eval`, `docs`. CSS that changes what users see is `fix`, not `style`.
 - Merge PRs with "Create a merge commit" or "Rebase and merge" so individual commits stay in history.
 - The project directory path contains a colon (`RS:CV_Generator`), which breaks `npx`; run any CLI via `node node_modules/...` instead.
+- `.claude/launch.json` (the `extension-static` preview server on :8790) lives in the parent folder, outside this repo; edit it in place, it cannot be committed.
 
 ## Onboarding
 
@@ -77,7 +78,7 @@ First run is detected two ways: `chrome.runtime.onInstalled` (reason `install`) 
 
 ## Generation pipeline (current)
 
-Key handling: the extension stores the OpenAI key in `chrome.storage.local` (`apiKey`; masked in Settings, replace-only) and passes it to the pipeline functions, which send it as `Authorization: Bearer` to `api.openai.com` only (the manifest's sole non-local host permission). `createClient(apiKey)` builds a per-call client and `safeErrorMessage` scrubs key-shaped strings from errors; `verifyKey()` makes one tiny call so Settings can show Verified. Errors carry `.status` (401 = rejected key) and `.code` (`timeout`, `network`, `output_truncated`).
+Key handling: the extension stores the OpenAI key in `chrome.storage.local` (`apiKey`; masked in Settings, replace-only) and passes it to the pipeline functions, which send it as `Authorization: Bearer` to `api.openai.com` only (the manifest's sole host permission). `createClient(apiKey)` builds a per-call client and `safeErrorMessage` scrubs key-shaped strings from errors; `verifyKey()` makes one tiny call so Settings can show Verified. Errors carry `.status` (401 = rejected key) and `.code` (`timeout`, `network`, `output_truncated`).
 
 Model: one pinned model in `extension/generation/config.js` (`gpt-5.6-terra`; verification uses `gpt-5.6-luna`). GPT-5 models reject `temperature`/`max_tokens` — use `reasoning_effort` and `max_completion_tokens`. All generation goes through `generateStructured()` with strict `json_schema` output; a `finish_reason: length` is surfaced as an error.
 
@@ -87,6 +88,22 @@ Per document, in `extension/generation/` (orchestrated by `pipeline.js`):
 3. `resume.js` — no-fabrication rules (select/rephrase only, no number not in the profile), ATS rules (posting's exact term where the skill exists, relevance-ordered skill lines, past-tense verb-led bullets), and a **material-relative budget**: target ≈ 115% of the profile's words + headers, capped at a page. `pipeline.js` adds one trim pass if over `maxWords` and one expand pass if well under target with bullets unused. `trimResumeForOnePage()` (which truncated bullets mid-sentence) is gone. The extension measures the rendered `.resume-page` against 1056px and re-requests once with a tighter `budget.maxWords` on overflow.
 4. `coverLetter.js` — hard rules (nothing about the candidate outside the profile, nothing about the company outside the brief/posting, partial matches described as such, never refer to the profile as a document), two exemplar paragraphs for voice, ~300 words in 3–4 paragraphs, and a `claims[]` output where every claim names its source; `unsourcedClaims()` validates, `pipeline.js` does one repair pass, and any remaining unsourced claims are returned and shown in the status line.
 
-Evals: `test/eval/` (see its README). Run before and after any prompt change; `--rescore` re-applies a changed rubric to saved outputs without API calls. Baselines in `test/eval/baselines/`. Known rubric limits: it cannot check whether company facts are true, and `pageFill` is relative to the profile's material, so thin profiles score full marks for short resumes.
+Evals: `test/eval/` (see its README). Run before and after any prompt change (current baseline: `2026-09-20-in-extension.json`); `--rescore` re-applies a changed rubric to saved outputs without API calls. Baselines in `test/eval/baselines/`. Known rubric limits: it cannot check whether company facts are true, and `pageFill` is relative to the profile's material, so thin profiles score full marks for short resumes.
 
-**Deferred: Match panel.** `matchAnalysis` is stored but not shown. Next: a panel beside the preview listing each requirement with ✓/◐/✗ and the profile evidence, so users fix their profile rather than the output. Also worth doing: run match analysis and company research concurrently (research only needs the company name, which a cheap first pass could extract) to cut cover-letter latency from ~50s.
+**Known issue.** About 1 in 15 cover letters fails with `output_truncated`: the model spends the 4000-token `MAX_COMPLETION_TOKENS.coverLetter` on reasoning before writing. Transient (re-run passes). Fix options: raise the cap to 6000 like the resume, or retry once on that code in `pipeline.js`.
+
+## Status and roadmap
+
+The extension became standalone on 2026-09-20 in three PRs: #6 `generation-in-extension` (OpenAI calls moved from the proxy into `extension/generation/`, evals in-process), #7 `resume-pdf-client-side` (Puppeteer replaced by `print.html` + `window.print()`), #8 `remove-proxy` (server, setup scripts and old deploy docs deleted; README/Quick Start rewritten). Nothing runs outside the browser; `https://api.openai.com/*` is the only host permission.
+
+**Next: Phase 4, `web-store-release`** — make it submittable to the Chrome Web Store:
+1. `fix(extension)`: manifest cleanup for review — a real `description` (the current one says "iOS 26 Liquid Glass design"), drop `tabs`/`activeTab` if `background.js` can do without them, remove the empty `default_popup`, add an `icons` block, set `version` to `1.0.0`.
+2. `docs`: `PRIVACY.md` — required because the extension handles personal data (resume contents) and an API key; data stays in `chrome.storage.local`, goes only to OpenAI, no telemetry. Host it (GitHub Pages or the raw file URL) and link it from the listing.
+3. `chore`: `scripts/package.sh` zipping the contents of `extension/` (not the folder).
+4. `docs`: `store/` with the 128×128 icon, 1280×800 screenshots, listing copy, single-purpose statement and per-permission justifications. Open question for the user: supply icon/screenshots or generate placeholders.
+Then: register the developer account ($5), upload as **Unlisted** first, test the store install, flip to Public. Say in the listing that users need their own OpenAI key and pay per use.
+
+**After that (deferred features):**
+- **Match panel.** `matchAnalysis` is stored on `lastMatchAnalysis` but not shown. A panel beside the preview listing each requirement with ✓/◐/✗ and the profile evidence, so users fix their profile rather than the output.
+- **Cover-letter latency** (~45–60s): run match analysis and company research concurrently; research only needs the company name, which a cheap first pass could extract.
+- **One-click resume PDF**, if the print dialog proves annoying: `chrome.debugger` + `Page.printToPDF`. Costs a permission reviewers scrutinise and a "debugging this tab" banner, so not before the store listing is approved.

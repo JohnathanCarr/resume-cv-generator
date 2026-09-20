@@ -27,7 +27,6 @@ class CoverLetterApp {
         this.currentView = 'cover-letter'; // 'cover-letter' or 'resume'
         this.uploadedResume = null; // { name, size, uploadedAt, dataBase64 }
         this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
-        this.proxyStatus = null;    // { reachable } from /health
         this.apiKey = null;         // { value, last4, savedAt, verifiedAt?, verifyError? } — value is never rendered
         this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
         this.researchEnabled = true;
@@ -50,7 +49,7 @@ class CoverLetterApp {
         this.setupAutosave();
         this.renderProfile();
         this.maybeStartOnboarding();
-        this.refreshProxyStatus().then(() => this.renderChecklist());
+        this.renderChecklist();
     }
 
     // Data Management
@@ -274,7 +273,7 @@ class CoverLetterApp {
             const activeTabContent = document.getElementById(`${tabName}-tab`);
             if (activeTabContent) activeTabContent.classList.add('active');
 
-            if (tabName === 'profile') this.refreshChecklistFromProxy();
+            if (tabName === 'profile') this.renderChecklist();
         } catch (error) {
             console.error('Error switching tabs:', error);
         }
@@ -966,13 +965,6 @@ class CoverLetterApp {
         return false;
     }
 
-    // Re-check the proxy when the user comes back to the Profile tab so the
-    // checklist reflects a server they just started.
-    async refreshChecklistFromProxy() {
-        await this.refreshProxyStatus();
-        this.renderChecklist();
-    }
-
     // Onboarding
     // First run = no onboarding record yet (installed before this feature) or
     // the background script seeded { seen: false } on install.
@@ -996,16 +988,6 @@ class CoverLetterApp {
 
     // Getting Started checklist: ticks itself from live state and hides once
     // everything is done or the user dismisses it.
-    async refreshProxyStatus() {
-        try {
-            const res = await fetch('http://localhost:8787/health', { cache: 'no-store' });
-            await res.json().catch(() => ({}));
-            this.proxyStatus = { reachable: res.ok };
-        } catch (_) {
-            this.proxyStatus = { reachable: false };
-        }
-    }
-
     checklistState() {
         return {
             resume: !!this.uploadedResume,
@@ -1033,8 +1015,8 @@ class CoverLetterApp {
 
         const hint = document.getElementById('checklist-key-hint');
         if (hint) {
-            if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
-            else if (!this.apiKey && this.proxyStatus && !this.proxyStatus.reachable) hint.textContent = '— also start the local server (run start-proxy)';
+            if (this.apiKey && this.apiKey.verifyError) hint.textContent = `— ${this.apiKey.verifyError}`;
+            else if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
             else hint.textContent = '';
         }
         card.classList.remove('hidden');
@@ -1057,7 +1039,7 @@ class CoverLetterApp {
                          <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
                          <li><strong>Paste a job description</strong> and generate.</li>
                        </ol>
-                       <p>Generating needs an OpenAI API key (added in Settings) and the local server running — see the README. Everything else works offline and stays on your device.</p>`
+                       <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
             },
             {
                 target: '#open-settings',

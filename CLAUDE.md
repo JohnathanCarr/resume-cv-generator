@@ -4,20 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Chrome extension (MV3, no build step) plus a local Node/Express proxy that generates tailored resumes and cover letters from a saved profile and a pasted job description via the OpenAI API. Users seed their profile by uploading their existing resume PDF, which is parsed entirely in the browser with no LLM call.
+A Chrome extension (MV3, no build step) that generates tailored resumes and cover letters from a saved profile and a pasted job description by calling the OpenAI API directly with the user's own key. Users seed their profile by uploading their existing resume PDF, which is parsed entirely in the browser with no LLM call. A small local Node server (`proxy/`) remains only to render resume PDFs with Puppeteer; it is slated for removal once that moves client-side.
 
 ## Commands
 
 There is no bundler, linter, or test runner. Files in `extension/` are loaded straight from disk.
 
 ```bash
-# Proxy (needed only for Generate and resume-PDF download)
+# PDF server (needed only for resume-PDF download; generation runs in the extension)
 cd proxy && npm install          # first time; Puppeteer downloads Chromium (allowScripts is set in package.json)
-cd proxy && npm start            # http://localhost:8787; the API key arrives per request from the extension
+cd proxy && npm start            # http://localhost:8787
 curl -s http://localhost:8787/health
 
-# Syntax-check the proxy without starting it
-node --check proxy/server.js
+# Syntax-check without running
+node --check extension/app.js && node --check proxy/server.js
+node --input-type=module -e "import('./extension/generation/pipeline.js').then(m => console.log(Object.keys(m)))"
+
+# Prompt evals (in-process, no server; ~$1 for the full set, key from OPENAI_API_KEY or test/eval/.env)
+node test/eval/run.js --profiles david --jobs 02   # one pair
+node test/eval/run.js --label my-change --baseline # full set, summary copied to test/eval/baselines/
 
 # Extension: chrome://extensions → Developer mode → Load unpacked → select extension/
 # After editing app.js/manifest.json click ↻ on the extension card; app.html/styles.css only need a tab refresh.
@@ -41,9 +46,11 @@ Real resumes for regression testing go in `test/fixtures/local/` (gitignored). N
 ```
 extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.storage.local
         │                     │  ├─ resumeParser.js  (PDF → profile, pure functions, pdf.js)
-        │                     │  └─ profileMerge.js  (additive dedup merge)
-        │                     └─ fetch localhost:8787 ──► proxy/server.js ──► OpenAI
-        │                                                       └─ /pdf/fromHtml (Puppeteer)
+        │                     │  ├─ profileMerge.js  (additive dedup merge)
+        │                     │  └─ generation/      (ES modules, lazily imported)
+        │                     │       ├─ pipeline.js  ──► openai.js (fetch) ──► api.openai.com
+        │                     │       └─ matchAnalysis / companyResearch / resume / coverLetter / config
+        │                     └─ fetch localhost:8787/pdf/fromHtml ──► proxy/server.js (Puppeteer, resume PDF only)
         └─ extension/styles.css (25 numbered sections; tokens in Section 1)
 ```
 
@@ -59,7 +66,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 - Unknown all-caps bold headings become kind `unknown`; `looksLikeEntryList()` decides whether to file them as extras of type `other` or skip with a warning. Add new heading variants to `SECTION_SYNONYMS` rather than widening the fallback.
 - Skills sections are either lists or prose; `parseSkills()` joins wrapped bullets first, then in prose mode keeps only fragments that pass `looksLikeSkill()` (capitalised/acronym, single token with `./+/#/-`, or in `KNOWN_SKILLS`).
 
-**Generation.** The proxy builds prompts by string interpolation (`formatEducation()` / `formatExtras()` helpers) and calls the model pinned in `proxy/config.js` (`gpt-5.6-terra`; a GPT-5 reasoning model, so calls use `reasoning_effort` and `max_completion_tokens` — `temperature`/`max_tokens` are rejected) in `json_object` mode. The resume response is post-processed by `trimResumeForOnePage()`. The extension renders resume JSON in `formatResume()` with **inline styles and hardcoded pt sizes** because the same HTML is POSTed to `/pdf/fromHtml` for Puppeteer; resume output styling is edited there, not in `styles.css`. Model output and profile fields are inserted into `innerHTML` unescaped.
+**Generation.** `extension/generation/` is plain ES modules with no Node or DOM dependency, so the same files run in the extension page and under Node for evals. `app.js` is a classic script and reaches them through `this.generation()`, a cached dynamic `import()`. `openai.js` is a fetch wrapper with the SDK's call shape (`chat.completions.create`, `responses.create`); there is no `openai` npm dependency anywhere. Prompts are string interpolation (`formatEducation()` / `formatExtras()` helpers in `profileText.js`) against the model pinned in `generation/config.js`. The extension renders resume JSON in `formatResume()` with **inline styles and hardcoded pt sizes** because the same HTML is POSTed to `/pdf/fromHtml` for Puppeteer; resume output styling is edited there, not in `styles.css`. Model output and profile fields are inserted into `innerHTML` unescaped.
 
 **Styling.** `styles.css` Section 1 defines spacing/radius/font tokens and light/dark colour tokens (`[data-theme="dark"]`). Form controls (`input`, `textarea`, `select`) do not inherit `color` or `font-family` — any rule that themes a control's background must also set those, or it renders Chrome's black-on-monospace defaults in dark mode. The four "+ Add ___" buttons are the only `.btn-secondary` that are direct children of `.section`; target them with `.section > .btn-secondary`.
 
@@ -71,19 +78,19 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 
 ## Onboarding
 
-First run is detected two ways: `chrome.runtime.onInstalled` (reason `install`) in `background.js` opens the app tab and seeds `onboarding` in `chrome.storage.local`; `app.js` `init()` treats a missing/false `onboarding.seen` as first run and starts the tour. Dev reloads of an unpacked extension do not fire `onInstalled`; reset by deleting the `onboarding` storage key or use the header "?" button, which replays the tour on demand. The tour (`extension/onboarding.js`) is a spotlight + tooltip sequence over real elements, switching tabs and scrolling as it goes; Skip and Escape always exit. The Getting Started checklist card on the Profile tab ticks itself from live state (resume uploaded, name set, proxy reachable with a key via `/health`, first document generated) and hides when complete.
+First run is detected two ways: `chrome.runtime.onInstalled` (reason `install`) in `background.js` opens the app tab and seeds `onboarding` in `chrome.storage.local`; `app.js` `init()` treats a missing/false `onboarding.seen` as first run and starts the tour. Dev reloads of an unpacked extension do not fire `onInstalled`; reset by deleting the `onboarding` storage key or use the header "?" button, which replays the tour on demand. The tour (`extension/onboarding.js`) is a spotlight + tooltip sequence over real elements, switching tabs and scrolling as it goes; Skip and Escape always exit. The Getting Started checklist card on the Profile tab ticks itself from live state (resume uploaded, name set, key saved, first document generated; the key line shows OpenAI's verification result) and hides when complete.
 
 ## Generation pipeline (current)
 
-Key handling: the extension stores the OpenAI key in `chrome.storage.local` (`apiKey`; masked in Settings, replace-only) and sends it as `Authorization: Bearer` on every proxy call; `requireApiKey` builds a per-request client and `safeErrorMessage` scrubs key-shaped strings from errors. `/verifyKey` makes one tiny call so Settings can show Verified. The proxy reads no `.env`.
+Key handling: the extension stores the OpenAI key in `chrome.storage.local` (`apiKey`; masked in Settings, replace-only) and passes it to the pipeline functions, which send it as `Authorization: Bearer` to `api.openai.com` only (the manifest's sole non-local host permission). `createClient(apiKey)` builds a per-call client and `safeErrorMessage` scrubs key-shaped strings from errors; `verifyKey()` makes one tiny call so Settings can show Verified. Errors carry `.status` (401 = rejected key) and `.code` (`timeout`, `network`, `output_truncated`).
 
-Model: one pinned model in `proxy/config.js` (`gpt-5.6-terra`; verification uses `gpt-5.6-luna`). GPT-5 models reject `temperature`/`max_tokens` — use `reasoning_effort` and `max_completion_tokens`. All generation goes through `generateStructured()` with strict `json_schema` output; a `finish_reason: length` is surfaced as an error.
+Model: one pinned model in `extension/generation/config.js` (`gpt-5.6-terra`; verification uses `gpt-5.6-luna`). GPT-5 models reject `temperature`/`max_tokens` — use `reasoning_effort` and `max_completion_tokens`. All generation goes through `generateStructured()` with strict `json_schema` output; a `finish_reason: length` is surfaced as an error.
 
-Per document, in `proxy/prompts/`:
+Per document, in `extension/generation/` (orchestrated by `pipeline.js`):
 1. `matchAnalysis.js` — reads the posting against the profile (rendered with stable ids `exp:3`, `proj:5`, `edu:1`, `extra:6`, `skill:Go`) and returns company, role, seniority, `about_company` (posting-only), every requirement with supporting ids and strength (strong/partial/none), and the posting's exact ATS keywords. Replaces the old regexes, which had reported companies like "a Analyst" and "ions". Returned as `matchAnalysis`; the extension keeps it on `lastMatchAnalysis` for the deferred Match panel.
 2. `companyResearch.js` (cover letters, when `research` is on) — Responses API with the hosted `web_search` tool, at most `RESEARCH.maxSearches` searches at `low` context; produces a brief (what they build / care about / current priorities / context) with a URL per fact, or `found:false` and a note. The extension caches briefs per company for 30 days in `companyBriefs` and sends the cache as `briefCache`. Each search bills a tool call plus ~13K input tokens; research roughly quadruples a cover letter's cost.
-3. `resume.js` — no-fabrication rules (select/rephrase only, no number not in the profile), ATS rules (posting's exact term where the skill exists, relevance-ordered skill lines, past-tense verb-led bullets), and a **material-relative budget**: target ≈ 115% of the profile's words + headers, capped at a page. The server adds one trim pass if over `maxWords` and one expand pass if well under target with bullets unused. `trimResumeForOnePage()` (which truncated bullets mid-sentence) is gone. The extension measures the rendered `.resume-page` against 1056px and re-requests once with a tighter `budget.maxWords` on overflow.
-4. `coverLetter.js` — hard rules (nothing about the candidate outside the profile, nothing about the company outside the brief/posting, partial matches described as such, never refer to the profile as a document), two exemplar paragraphs for voice, ~300 words in 3–4 paragraphs, and a `claims[]` output where every claim names its source; `unsourcedClaims()` validates, the server does one repair pass, and any remaining unsourced claims are returned and shown in the status line.
+3. `resume.js` — no-fabrication rules (select/rephrase only, no number not in the profile), ATS rules (posting's exact term where the skill exists, relevance-ordered skill lines, past-tense verb-led bullets), and a **material-relative budget**: target ≈ 115% of the profile's words + headers, capped at a page. `pipeline.js` adds one trim pass if over `maxWords` and one expand pass if well under target with bullets unused. `trimResumeForOnePage()` (which truncated bullets mid-sentence) is gone. The extension measures the rendered `.resume-page` against 1056px and re-requests once with a tighter `budget.maxWords` on overflow.
+4. `coverLetter.js` — hard rules (nothing about the candidate outside the profile, nothing about the company outside the brief/posting, partial matches described as such, never refer to the profile as a document), two exemplar paragraphs for voice, ~300 words in 3–4 paragraphs, and a `claims[]` output where every claim names its source; `unsourcedClaims()` validates, `pipeline.js` does one repair pass, and any remaining unsourced claims are returned and shown in the status line.
 
 Evals: `test/eval/` (see its README). Run before and after any prompt change; `--rescore` re-applies a changed rubric to saved outputs without API calls. Baselines in `test/eval/baselines/`. Known rubric limits: it cannot check whether company facts are true, and `pageFill` is relative to the profile's material, so thin profiles score full marks for short resumes.
 

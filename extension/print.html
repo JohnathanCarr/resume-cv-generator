@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Resume</title>
+    <style>
+        /* Zero page margins: the .resume-page markup carries its own 0.5in
+           padding, and Chrome omits its header/footer text when there is no
+           margin to draw it in. */
+        @page { size: letter; margin: 0; }
+        html, body { margin: 0; padding: 0; background: white; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+        /* On screen: a grey desk with the page floating on it, plus a toolbar. */
+        @media screen {
+            body { background: #e5e7eb; padding: 72px 24px 48px; font-family: -apple-system, system-ui, sans-serif; }
+            .resume-page { box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18); }
+            .toolbar {
+                position: fixed; top: 0; left: 0; right: 0; z-index: 1;
+                display: flex; align-items: center; gap: 12px;
+                padding: 12px 24px; background: #111827; color: #f9fafb; font-size: 14px;
+            }
+            .toolbar .hint { flex: 1; opacity: 0.85; }
+            .toolbar button {
+                font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid #4b5563;
+                background: #1f2937; color: inherit; cursor: pointer;
+            }
+            .toolbar button.primary { background: #2563eb; border-color: #2563eb; }
+            .toolbar button:hover { filter: brightness(1.15); }
+        }
+        @media print {
+            .toolbar { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="hint">In the print dialog, set the destination to <strong>Save as PDF</strong>. This tab closes itself once you have saved.</span>
+        <button id="print-again" class="primary">Save as PDF</button>
+        <button id="close">Close</button>
+    </div>
+    <div id="page"></div>
+    <script src="print.js"></script>
+</body>
+</html>

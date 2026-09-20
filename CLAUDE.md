@@ -4,20 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Chrome extension (MV3, no build step) that generates tailored resumes and cover letters from a saved profile and a pasted job description by calling the OpenAI API directly with the user's own key. Users seed their profile by uploading their existing resume PDF, which is parsed entirely in the browser with no LLM call. A small local Node server (`proxy/`) remains only to render resume PDFs with Puppeteer; it is slated for removal once that moves client-side.
+A Chrome extension (MV3, no build step) that generates tailored resumes and cover letters from a saved profile and a pasted job description by calling the OpenAI API directly with the user's own key. Users seed their profile by uploading their existing resume PDF, which is parsed entirely in the browser with no LLM call. Nothing runs outside the browser; `proxy/` is dead code awaiting removal.
 
 ## Commands
 
 There is no bundler, linter, or test runner. Files in `extension/` are loaded straight from disk.
 
 ```bash
-# PDF server (needed only for resume-PDF download; generation runs in the extension)
-cd proxy && npm install          # first time; Puppeteer downloads Chromium (allowScripts is set in package.json)
-cd proxy && npm start            # http://localhost:8787
-curl -s http://localhost:8787/health
-
 # Syntax-check without running
-node --check extension/app.js && node --check proxy/server.js
+node --check extension/app.js extension/print.js
 node --input-type=module -e "import('./extension/generation/pipeline.js').then(m => console.log(Object.keys(m)))"
 
 # Prompt evals (in-process, no server; ~$1 for the full set, key from OPENAI_API_KEY or test/eval/.env)
@@ -50,7 +45,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
         │                     │  └─ generation/      (ES modules, lazily imported)
         │                     │       ├─ pipeline.js  ──► openai.js (fetch) ──► api.openai.com
         │                     │       └─ matchAnalysis / companyResearch / resume / coverLetter / config
-        │                     └─ fetch localhost:8787/pdf/fromHtml ──► proxy/server.js (Puppeteer, resume PDF only)
+        │                     └─ chrome.storage.session.printJob ──► extension/print.html (window.print → Save as PDF)
         └─ extension/styles.css (25 numbered sections; tokens in Section 1)
 ```
 
@@ -66,7 +61,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 - Unknown all-caps bold headings become kind `unknown`; `looksLikeEntryList()` decides whether to file them as extras of type `other` or skip with a warning. Add new heading variants to `SECTION_SYNONYMS` rather than widening the fallback.
 - Skills sections are either lists or prose; `parseSkills()` joins wrapped bullets first, then in prose mode keeps only fragments that pass `looksLikeSkill()` (capitalised/acronym, single token with `./+/#/-`, or in `KNOWN_SKILLS`).
 
-**Generation.** `extension/generation/` is plain ES modules with no Node or DOM dependency, so the same files run in the extension page and under Node for evals. `app.js` is a classic script and reaches them through `this.generation()`, a cached dynamic `import()`. `openai.js` is a fetch wrapper with the SDK's call shape (`chat.completions.create`, `responses.create`); there is no `openai` npm dependency anywhere. Prompts are string interpolation (`formatEducation()` / `formatExtras()` helpers in `profileText.js`) against the model pinned in `generation/config.js`. The extension renders resume JSON in `formatResume()` with **inline styles and hardcoded pt sizes** because the same HTML is POSTed to `/pdf/fromHtml` for Puppeteer; resume output styling is edited there, not in `styles.css`. Model output and profile fields are inserted into `innerHTML` unescaped.
+**Generation.** `extension/generation/` is plain ES modules with no Node or DOM dependency, so the same files run in the extension page and under Node for evals. `app.js` is a classic script and reaches them through `this.generation()`, a cached dynamic `import()`. `openai.js` is a fetch wrapper with the SDK's call shape (`chat.completions.create`, `responses.create`); there is no `openai` npm dependency anywhere. Prompts are string interpolation (`formatEducation()` / `formatExtras()` helpers in `profileText.js`) against the model pinned in `generation/config.js`. The extension renders resume JSON in `formatResume()` with **inline styles and hardcoded pt sizes** because the same `.resume-page` markup is copied into `print.html`, which does not load `styles.css`; resume output styling is edited in `formatResume()`, page geometry (`@page`, margins) in `print.html`. `downloadResumePDF()` stores the markup in `chrome.storage.session` and opens `print.html`, whose `print.js` consumes it once, sets `document.title` (Chrome's proposed filename) and calls `window.print()`. Model output and profile fields are inserted into `innerHTML` unescaped.
 
 **Styling.** `styles.css` Section 1 defines spacing/radius/font tokens and light/dark colour tokens (`[data-theme="dark"]`). Form controls (`input`, `textarea`, `select`) do not inherit `color` or `font-family` — any rule that themes a control's background must also set those, or it renders Chrome's black-on-monospace defaults in dark mode. The four "+ Add ___" buttons are the only `.btn-secondary` that are direct children of `.section`; target them with `.section > .btn-secondary`.
 
@@ -74,7 +69,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 
 - Conventional Commits, small focused commits on a feature branch, one PR per phase. Scopes in use: `profile`, `parser`, `proxy`, `extension`, `settings`, `prompts`, `docs`. CSS that changes what users see is `fix`, not `style`.
 - Merge PRs with "Create a merge commit" or "Rebase and merge" so individual commits stay in history.
-- The project directory path contains a colon (`RS:CV_Generator`), which breaks `npx`; run Puppeteer/other CLIs via `node node_modules/...` instead.
+- The project directory path contains a colon (`RS:CV_Generator`), which breaks `npx`; run any CLI via `node node_modules/...` instead.
 
 ## Onboarding
 

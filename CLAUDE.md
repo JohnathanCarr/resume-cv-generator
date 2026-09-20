@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Chrome extension (MV3, no build step) that generates tailored resumes and cover letters from a saved profile and a pasted job description by calling the OpenAI API directly with the user's own key. Users seed their profile by uploading their existing resume PDF, which is parsed entirely in the browser with no LLM call. Nothing runs outside the browser; `proxy/` is dead code awaiting removal.
+A Chrome extension (MV3, no build step) that generates tailored resumes and cover letters from a saved profile and a pasted job description by calling the OpenAI API directly with the user's own key. Users seed their profile by uploading their existing resume PDF, which is parsed entirely in the browser with no LLM call. Nothing runs outside the browser.
 
 ## Commands
 
@@ -34,7 +34,7 @@ Regenerate a synthetic fixture PDF from its HTML source with headless Chrome:
   --print-to-pdf="$PWD/test/fixtures/<name>.pdf" "file://$PWD/test/fixtures/<name>.html"
 ```
 
-Real resumes for regression testing go in `test/fixtures/local/` (gitignored). Never commit a PDF with real contact details; `proxy/_debug_server_resume.pdf` is a tracked legacy exception that should eventually be `git rm --cached`.
+Real resumes for regression testing go in `test/fixtures/local/` (gitignored). Never commit a PDF with real contact details.
 
 ## Architecture
 
@@ -67,7 +67,7 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 
 ## Conventions
 
-- Conventional Commits, small focused commits on a feature branch, one PR per phase. Scopes in use: `profile`, `parser`, `proxy`, `extension`, `settings`, `prompts`, `docs`. CSS that changes what users see is `fix`, not `style`.
+- Conventional Commits, small focused commits on a feature branch, one PR per phase. Scopes in use: `profile`, `parser`, `generation`, `extension`, `onboarding`, `settings`, `prompts`, `eval`, `docs`. CSS that changes what users see is `fix`, not `style`.
 - Merge PRs with "Create a merge commit" or "Rebase and merge" so individual commits stay in history.
 - The project directory path contains a colon (`RS:CV_Generator`), which breaks `npx`; run any CLI via `node node_modules/...` instead.
 

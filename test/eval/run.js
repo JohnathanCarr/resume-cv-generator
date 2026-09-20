@@ -61,7 +61,7 @@ function listJobs(filter) {
   });
 }
 
-// Same result shape the proxy used to return, so saved runs stay rescoreable.
+// Wraps a pipeline call in the {ok, status, ms, data} shape saved runs use, so they stay rescoreable.
 async function call(fn, key, body) {
   const t0 = Date.now();
   try {

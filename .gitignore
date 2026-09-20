@@ -6,7 +6,6 @@ package-lock.json
 .env
 .env.local
 .env.production
-proxy/.env
 test/eval/.env
 **/.env
 

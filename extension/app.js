@@ -2023,101 +2023,24 @@ class CoverLetterApp {
         if (previewTitle) previewTitle.textContent = 'Cover Letter Preview';
     }
 
+// Opens the rendered resume in print.html, where Chrome's print dialog saves
+// it as a text-based PDF. The markup is passed through session storage (an
+// extension page cannot be handed a document directly).
 async downloadResumePDF() {
   try {
-    const container = document.querySelector('.resume-content');
-    if (!container) throw new Error('No resume preview found.');
+    const page = document.querySelector('.resume-content .resume-page');
+    if (!page) throw new Error('No resume preview found.');
 
-    // Capture head styles but skip extension-only URLs (Puppeteer cannot fetch chrome-extension://)
-    const headHTML = Array.from(
-      document.head.querySelectorAll('style,link[rel="stylesheet"]')
-    ).filter(el => !(el.tagName === 'LINK' && /^chrome-extension:\/\//i.test(el.href || '')))
-     .map(el => el.outerHTML)
-     .join('\n');
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8"/>
-          ${headHTML}
-          <style> body { margin: 0; background: white; } </style>
-        </head>
-        <body>
-          ${container.outerHTML}
-        </body>
-      </html>`;
-
-    const resp = await fetch('http://localhost:8787/pdf/fromHtml', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html }),
+    const name = (this.profile.name || '').trim().replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ');
+    await chrome.storage.session.set({
+      printJob: { html: page.outerHTML, title: name ? `${name} - Resume` : 'Resume' }
     });
+    await chrome.tabs.create({ url: chrome.runtime.getURL('print.html'), active: true });
 
-    // Status + content-type guard
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      throw new Error(`Server responded ${resp.status}: ${errText.slice(0, 150)}`);
-    }
-    const contentType = (resp.headers.get('content-type') || '').toLowerCase();
-    if (!contentType.includes('application/pdf')) {
-      const errText = await resp.text().catch(() => '');
-      throw new Error(`Expected PDF, got ${contentType || 'unknown'}: ${errText.slice(0, 150)}`);
-    }
-
-    // Read once → ArrayBuffer
-    const buf = await resp.arrayBuffer();
-
-    // Rich diagnostics to pinpoint non-PDF bodies
-    const headAscii = String.fromCharCode(...new Uint8Array(buf.slice(0, 8)));
-    const headHex = [...new Uint8Array(buf.slice(0, 16))]
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join(' ');
-    const sniffText = new TextDecoder('utf-8', { fatal: false }).decode(buf.slice(0, 200));
-    console.log('HEAD(ascii)=', JSON.stringify(headAscii));
-    console.log('HEAD(hex)=', headHex);
-    console.log('SNIFF(text)=', sniffText);
-
-    // Validate PDF magic
-    if (!headAscii.startsWith('%PDF-')) {
-      // Save exactly what we received so we can inspect it
-      const dbgUrl = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
-      const dbgA = document.createElement('a');
-      dbgA.href = dbgUrl;
-      dbgA.download = 'resume_debug.bin';
-      document.body.appendChild(dbgA);
-      dbgA.click();
-      document.body.removeChild(dbgA);
-      setTimeout(() => URL.revokeObjectURL(dbgUrl), 2000);
-
-      throw new Error('Response body is not a valid PDF (missing %PDF- header)');
-    }
-
-    // One blob only, from validated bytes
-    const blob = new Blob([buf], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-
-    // Prefer Chrome downloads API (reliable in extensions); delay revoke to avoid truncation
-    if (chrome?.downloads?.download) {
-      chrome.downloads.download(
-        { url, filename: 'Resume.pdf', saveAs: false },
-        () => setTimeout(() => URL.revokeObjectURL(url), 2000)
-      );
-    } else {
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'Resume.pdf';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }
-
-    this.showStatus('Resume PDF downloaded successfully!', 'success');
+    this.showStatus('Print view opened — choose "Save as PDF" as the destination.', 'success');
   } catch (err) {
-    console.error('Resume PDF generation error:', err);
-    this.showError('Failed to download resume PDF: ' + err.message);
+    console.error('Resume PDF error:', err);
+    this.showError('Failed to open the resume for printing: ' + err.message);
   }
 }
 

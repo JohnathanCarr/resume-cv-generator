@@ -1,0 +1,58 @@
+{
+  "label": "in-extension",
+  "kinds": {
+    "resume": {
+      "n": 15,
+      "meanScore": 1,
+      "meanMs": 23318,
+      "failures": 0,
+      "checks": {
+        "validShape": 1,
+        "hasCoreSections": 1,
+        "wordBudget": 1,
+        "pageFill": 1,
+        "bulletLength": 1,
+        "educationComplete": 1,
+        "mustIncludeHonored": 1,
+        "noFabricatedNumbers": 1,
+        "jdKeywordCoverage": 1,
+        "actionVerbBullets": 1
+      }
+    },
+    "cover": {
+      "n": 15,
+      "meanScore": 0.918,
+      "meanMs": 45254,
+      "failures": 1,
+      "checks": {
+        "valid": 1,
+        "length": 0.93,
+        "paragraphs": 1,
+        "namesCompany": 1,
+        "noBuzzwords": 0.96,
+        "noAiTells": 1,
+        "noFabricatedNumbers": 1,
+        "groundedInProfile": 0.96,
+        "sentenceVariety": 0.93,
+        "punctuationRestraint": 1,
+        "jdKeywordCoverage": 1,
+        "claimsSourced": 1,
+        "noDocumentReferences": 1
+      }
+    }
+  },
+  "stamp": "2026-09-20T21-41-42",
+  "profiles": [
+    "david_analyst_undergrad",
+    "maria_backend_ms",
+    "johnathan"
+  ],
+  "jobs": [
+    "01_senior_backend_vercel",
+    "02_data_analyst_intern_shopify",
+    "03_ml_engineer_lumen_health",
+    "04_mobile_fullstack_northwind",
+    "05_product_analyst_notion"
+  ],
+  "note": "First run through extension/generation/ (in-process, no proxy). Prompts and calls are unchanged from voice-research/word-budget. The one cover failure (david \u00d7 05, output_truncated: reasoning consumed the 4000-token completion cap) was transient; the pair scored 96% on immediate re-run."
+}

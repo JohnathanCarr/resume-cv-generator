@@ -842,7 +842,7 @@ class CoverLetterApp {
 
     // Settings / API key
     // The key value lives in chrome.storage.local and is only ever read back
-    // to send to the local proxy; the UI shows the last four characters.
+    // to send to OpenAI; the UI shows the last four characters.
     openSettings() {
         this.renderSettings();
         document.getElementById('settings-modal')?.classList.remove('hidden');
@@ -1606,7 +1606,7 @@ class CoverLetterApp {
   try {
     let result = await this.requestResume({ profile: this.profile, jobText });
 
-    // The proxy budgets by word count; only the rendered page knows whether it
+    // The pipeline budgets by word count; only the rendered page knows whether it
     // actually fits. If it overflows, ask once more with a tighter ceiling.
     let overflow = await this.renderResumeAndMeasure(result.resumeContent);
     let refit = false;

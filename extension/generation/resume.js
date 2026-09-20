@@ -1,8 +1,6 @@
 // Resume generation prompt and output schema.
 
-'use strict';
-
-const { formatEducation, formatExperiences, formatProjects, formatExtras } = require('./profileText');
+import { formatEducation, formatExperiences, formatProjects, formatExtras } from './profileText.js';
 
 // Strict mode requires every property to be listed in `required`; optional
 // text fields are typed as string-or-null. The extension's formatResume()
@@ -145,4 +143,4 @@ ${formatExtras(profile)}`;
   ];
 }
 
-module.exports = { buildResumeMessages, RESUME_SCHEMA, resumeBudget, countProfileWords };
+export { buildResumeMessages, RESUME_SCHEMA, resumeBudget, countProfileWords };

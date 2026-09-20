@@ -1,7 +1,5 @@
 // Plain-text renderings of profile sections shared by the generation prompts.
 
-'use strict';
-
 function formatEducation(profile) {
   const list = Array.isArray(profile.education)
     ? profile.education
@@ -54,4 +52,4 @@ function formatExtras(profile) {
   }).join('\n\n');
 }
 
-module.exports = { formatEducation, formatExperiences, formatProjects, formatExtras };
+export { formatEducation, formatExperiences, formatProjects, formatExtras };

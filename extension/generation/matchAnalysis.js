@@ -6,9 +6,8 @@
 // (exp:<id>, proj:<id>, edu:<id>, extra:<id>, skill:<name>). A requirement
 // with strength "none" has no evidence and must not be claimed downstream.
 
-'use strict';
-
-const { GENERATION_MODEL, REASONING } = require('../config');
+import { CONFIG } from './config.js';
+const { GENERATION_MODEL, REASONING } = CONFIG;
 
 // Renders the profile with stable ids so the model can cite items.
 function renderProfileWithIds(profile) {
@@ -137,4 +136,4 @@ function renderMatchForPrompt(match) {
   return lines.join('\n');
 }
 
-module.exports = { analyzeMatch, renderProfileWithIds, renderMatchForPrompt, MATCH_SCHEMA };
+export { analyzeMatch, renderProfileWithIds, renderMatchForPrompt, MATCH_SCHEMA };

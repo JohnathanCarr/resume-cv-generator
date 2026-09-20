@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Runs the generation endpoints over profiles × job postings and scores the
-// output with score.js. Requires the proxy to be running on :8787.
+// Runs the generation pipeline (extension/generation/) over profiles × job
+// postings in-process and scores the output with score.js. No server needed.
 //
 //   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research]
 //
-// The key may also be read from proxy/.env (OPENAI_API_KEY=...) for local
+// The key may also be read from test/eval/.env (OPENAI_API_KEY=...) for local
 // convenience. Outputs go to test/eval/runs/<timestamp>-<label>/ (gitignored);
 // a summary is printed and, with --baseline, copied to test/eval/baselines/.
 
@@ -12,10 +12,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { scoreResume, scoreCoverLetter } = require('./score');
 
 const ROOT = path.resolve(__dirname);
-const PROXY = process.env.PROXY_URL || 'http://localhost:8787';
+const PIPELINE = path.resolve(ROOT, '../../extension/generation/pipeline.js');
 
 function arg(name, def) {
   const i = process.argv.indexOf(`--${name}`);
@@ -26,12 +27,12 @@ function arg(name, def) {
 
 function readKey() {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-  const envPath = path.resolve(ROOT, '../../proxy/.env');
+  const envPath = path.join(ROOT, '.env');
   if (fs.existsSync(envPath)) {
     const m = fs.readFileSync(envPath, 'utf8').match(/^OPENAI_API_KEY=(.+)$/m);
     if (m) return m[1].trim();
   }
-  console.error('No API key. Set OPENAI_API_KEY or put it in proxy/.env');
+  console.error('No API key. Set OPENAI_API_KEY or put it in test/eval/.env');
   process.exit(1);
 }
 
@@ -60,15 +61,15 @@ function listJobs(filter) {
   });
 }
 
-async function call(endpoint, key, body) {
+// Same result shape the proxy used to return, so saved runs stay rescoreable.
+async function call(fn, key, body) {
   const t0 = Date.now();
-  const res = await fetch(`${PROXY}/${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({ error: `non-JSON response (${res.status})` }));
-  return { ok: res.ok, status: res.status, ms: Date.now() - t0, data };
+  try {
+    const data = await fn(key, body);
+    return { ok: true, status: 200, ms: Date.now() - t0, data };
+  } catch (error) {
+    return { ok: false, status: error.status || 500, ms: Date.now() - t0, data: { error: error.message, code: error.code } };
+  }
 }
 
 function fmt(n) { return (n * 100).toFixed(0).padStart(3) + '%'; }
@@ -131,10 +132,14 @@ async function main() {
   const jobs = listJobs(arg('jobs', null));
   if (!profiles.length || !jobs.length) { console.error('Nothing to run.'); process.exit(1); }
 
-  try {
-    const h = await fetch(`${PROXY}/health`);
-    if (!h.ok) throw new Error();
-  } catch { console.error(`Proxy not reachable at ${PROXY}. Start it with ./start-proxy.sh`); process.exit(1); }
+  // The pipeline is an ES module; the extension page logs progress to the
+  // console, which is noise here.
+  const { generateResume, generateCoverLetter } = await import(pathToFileURL(PIPELINE).href);
+  const quiet = (fn) => async (...args) => {
+    const { log, warn } = console;
+    console.log = () => {}; console.warn = () => {};
+    try { return await fn(...args); } finally { console.log = log; console.warn = warn; }
+  };
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const outDir = path.join(ROOT, 'runs', `${stamp}-${label}`);
@@ -149,7 +154,7 @@ async function main() {
       const tag = `${p.id} × ${j.id}`;
 
       if (!only || only === 'resume') {
-        const r = await call('generateResume', key, body);
+        const r = await call(quiet(generateResume), key, body);
         const scored = r.ok ? scoreResume({ resumeContent: r.data.resumeContent, profile: p.profile, jobText: j.text, company: j.company }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
         results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
         fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: body, response: r.data, scored }, null, 2));
@@ -157,7 +162,7 @@ async function main() {
       }
 
       if (!only || only === 'cover') {
-        const r = await call('generateCoverLetter', key, body);
+        const r = await call(quiet(generateCoverLetter), key, body);
         const scored = r.ok ? scoreCoverLetter({ coverLetter: r.data.coverLetter, profile: p.profile, jobText: j.text, company: j.company, unsourcedClaims: r.data.unsourcedClaims }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
         if (r.ok && r.data.metadata) scored.info.searches = r.data.metadata.searches;
         results.push({ kind: 'cover', profile: p.id, job: j.id, ms: r.ms, ...scored });

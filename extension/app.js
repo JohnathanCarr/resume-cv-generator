@@ -935,26 +935,27 @@ class CoverLetterApp {
         }
     }
 
-    // Asks the local proxy to make one tiny request with the key. Absence of
-    // the proxy is reported, not treated as an invalid key.
+    // The generation pipeline (extension/generation/) is an ES module; app.js is
+    // a classic script, so it is imported on first use and cached.
+    generation() {
+        if (!this._generation) this._generation = import('./generation/pipeline.js');
+        return this._generation;
+    }
+
+    // Makes one tiny OpenAI request with the key. A network failure is
+    // reported as such, not treated as an invalid key.
     async verifyApiKey() {
         if (!this.apiKey) return;
         try {
-            const res = await fetch('http://localhost:8787/verifyKey', {
-                method: 'POST',
-                headers: this.apiHeaders()
-            });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.ok) {
-                this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
-            } else if (res.status === 404) {
-                // Proxy is running but predates the verify endpoint.
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Restart the local server to verify.' };
+            const { verifyKey } = await this.generation();
+            const data = await verifyKey(this.apiKey.value);
+            this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
+        } catch (error) {
+            if (error.status === 401) {
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: error.message };
             } else {
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: data.error || `Could not verify (HTTP ${res.status})` };
+                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: `Saved, not verified: ${error.message}` };
             }
-        } catch (_) {
-            this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: 'Saved. Start the local server to verify it.' };
         }
         await this.persistApiKey();
     }
@@ -963,13 +964,6 @@ class CoverLetterApp {
         if (this.apiKey?.value) return true;
         this.showError('Add your OpenAI API key in Settings (gear icon) before generating.', false);
         return false;
-    }
-
-    // Headers for every proxy call that reaches OpenAI.
-    apiHeaders(extra = {}) {
-        const headers = { 'Content-Type': 'application/json', ...extra };
-        if (this.apiKey?.value) headers['Authorization'] = `Bearer ${this.apiKey.value}`;
-        return headers;
     }
 
     // Re-check the proxy when the user comes back to the Profile tab so the
@@ -1348,18 +1342,8 @@ class CoverLetterApp {
                 timestamp: new Date().toISOString()
             };
 
-            const response = await fetch('http://localhost:8787/generateCoverLetter', {
-                method: 'POST',
-                headers: this.apiHeaders(),
-                body: JSON.stringify(requestData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP ${response.status}`);
-            }
-
-            const result = await response.json();
+            const { generateCoverLetter } = await this.generation();
+            const result = await generateCoverLetter(this.apiKey.value, requestData);
             this.lastApiCall.response = result;
             this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
             if (result.companyBrief && result.companyBrief.company) await this.cacheBrief(result.companyBrief);
@@ -1675,16 +1659,8 @@ class CoverLetterApp {
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
-        const response = await fetch('http://localhost:8787/generateResume', {
-            method: 'POST',
-            headers: this.apiHeaders(),
-            body: JSON.stringify(body)
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP ${response.status}`);
-        }
-        return response.json();
+        const { generateResume } = await this.generation();
+        return generateResume(this.apiKey.value, body);
     }
 
     // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).

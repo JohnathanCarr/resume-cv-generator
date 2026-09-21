@@ -11,6 +11,8 @@ It uses your own OpenAI API key, so you pay OpenAI directly for what you generat
 - 🎯 **Reads the posting properly**: extracts every requirement and checks which parts of your profile support it before writing a word
 - 🔍 **Researches the company** (optional, cover letters): a few web searches for what they build and what they care about, every fact with its source; if nothing reliable turns up, the letter sticks to the posting
 - 📄 **ATS-friendly resumes**: one page, standard sections, the posting's exact terms where you genuinely have the skill, no invented numbers
+- 🔑 **Keyword check before writing**: terms the posting's ATS would look for that your profile never mentions are listed for you to confirm; the ones you tick join your skills, the rest are never asked about again
+- ♻️ **Revises instead of rewriting**: the next resume starts from the last one and changes only what the new posting needs, so wording you liked stays put
 - ✍️ **Cover letters that sound like a person**: 250–350 words, specific, no buzzwords, no "I am excited to apply"
 - 💾 **Smart profile management**: upload your existing resume to autofill your profile, autosave, everything editable
 - 🔒 **Private by construction**: your profile lives in this browser's extension storage; the only outside service it ever talks to is OpenAI, with your key
@@ -64,14 +66,14 @@ Your key is stored only in this browser's extension storage and sent directly to
 ### Generate Documents
 1. **Go to the Generate tab**
 2. **Paste any job description**
-3. **Choose your document**:
+3. **Choose your document**. Before either is written, the posting is read against your profile; if it names skills or tools your profile does not mention anywhere, a dialog lists them — tick the ones you actually have (they are added to your skills so the document can use the posting's wording), leave the rest, **Continue**. Unticked terms are remembered and not asked about again (reset in Settings).
    - **Generate Cover Letter** → 250–350 words, grounded in your profile and the posting. Leave **Research the company** ticked for a few web searches about the employer (roughly $0.05–0.10 per letter, cached per company for 30 days); untick it to use the posting only.
-   - **Generate Resume** → one page, ATS-friendly, sized to how much material your profile actually has
+   - **Generate Resume** → one page, ATS-friendly, sized to how much material your profile actually has. After the first one, **Revise the last resume instead of starting over** is ticked by default: the new resume keeps every bullet and line that still fits and changes only what the posting needs. Untick it for a fresh draft.
 4. **Save it**:
    - **Cover Letter PDF** downloads straight to your Downloads folder
    - **Resume PDF** opens a print view; choose **Save as PDF** as the destination. The result is a real text PDF (not an image), so applicant tracking systems can read it.
 
-The status line under the buttons tells you what happened: how many searches the research used, whether any sentence couldn't be traced to your profile, and whether your profile is what's keeping the resume short.
+The status line under the buttons tells you what happened: how many searches the research used, whether any sentence couldn't be traced to your profile, how many bullets a revision kept, which keywords were added to your skills, and whether your profile is what's keeping the resume short.
 
 ### Pro Tips
 - **Mark items "Must Include"** to guarantee they appear on resumes

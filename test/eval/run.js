@@ -2,7 +2,11 @@
 // Runs the generation pipeline (extension/generation/) over profiles × job
 // postings in-process and scores the output with score.js. No server needed.
 //
-//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research]
+//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research] [--revise]
+//
+// --revise chains the jobs per profile: the first resume is generated fresh
+// and each later one revises the previous result (as the extension does), so
+// the run measures whether revision keeps quality and how much it reuses.
 //
 // The key may also be read from test/eval/.env (OPENAI_API_KEY=...) for local
 // convenience. Outputs go to test/eval/runs/<timestamp>-<label>/ (gitignored);
@@ -127,6 +131,7 @@ async function main() {
   const key = readKey();
   const only = arg('only', null);
   const research = !arg('no-research', false);
+  const revise = Boolean(arg('revise', false));
   const label = arg('label', 'run');
   const profiles = listProfiles(arg('profiles', null));
   const jobs = listJobs(arg('jobs', null));
@@ -149,16 +154,25 @@ async function main() {
   console.log(`Running ${profiles.length} profile(s) × ${jobs.length} job(s)${only ? ` (${only} only)` : ''} → ${path.relative(process.cwd(), outDir)}\n`);
 
   for (const p of profiles) {
+    let baseResume = null;
     for (const j of jobs) {
       const body = { profile: p.profile, jobText: j.text, research };
       const tag = `${p.id} × ${j.id}`;
 
       if (!only || only === 'resume') {
-        const r = await call(quiet(generateResume), key, body);
+        const resumeBody = revise && baseResume ? { ...body, baseResume } : body;
+        const r = await call(quiet(generateResume), key, resumeBody);
         const scored = r.ok ? scoreResume({ resumeContent: r.data.resumeContent, profile: p.profile, jobText: j.text, company: j.company }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
+        let reuse = '';
+        if (r.ok && r.data.metadata?.revised) {
+          scored.info.keptBullets = r.data.metadata.keptBullets;
+          scored.info.baseBullets = r.data.metadata.baseBullets;
+          reuse = `  kept ${r.data.metadata.keptBullets}/${r.data.metadata.baseBullets}`;
+        }
+        if (r.ok) baseResume = r.data.resumeContent;
         results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
-        fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: body, response: r.data, scored }, null, 2));
-        console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
+        fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored }, null, 2));
+        console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
       }
 
       if (!only || only === 'cover') {

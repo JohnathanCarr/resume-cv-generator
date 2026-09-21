@@ -31,6 +31,9 @@ class CoverLetterApp {
         this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
         this.researchEnabled = true;
         this.lastApiCall = null;
+        this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — base for the next revision
+        this.reuseResume = true;     // "Revise the last resume" toggle
+        this.ignoredKeywords = [];   // posting terms the user said do not apply; never asked about again
         
         // Initialize after a brief delay to ensure DOM is ready
         setTimeout(() => this.init(), 100);
@@ -48,6 +51,7 @@ class CoverLetterApp {
         this.setupEventListeners();
         this.setupAutosave();
         this.renderProfile();
+        this.restoreLastResume();
         this.maybeStartOnboarding();
         this.renderChecklist();
     }
@@ -55,11 +59,14 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'reuseResume', 'ignoredKeywords']);
         this.onboarding = result.onboarding || null;
         this.apiKey = result.apiKey || null;
         this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
         this.researchEnabled = result.researchEnabled !== false;
+        this.lastResume = result.lastResume && result.lastResume.resumeContent ? result.lastResume : null;
+        this.reuseResume = result.reuseResume !== false;
+        this.ignoredKeywords = Array.isArray(result.ignoredKeywords) ? result.ignoredKeywords : [];
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -143,6 +150,30 @@ class CoverLetterApp {
                 chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
             });
         }
+
+        // Revise-the-last-resume toggle (row is hidden until a resume exists)
+        const reuseToggle = document.getElementById('reuse-resume');
+        if (reuseToggle) {
+            reuseToggle.checked = this.reuseResume;
+            reuseToggle.addEventListener('change', (e) => {
+                this.reuseResume = e.target.checked;
+                chrome.storage.local.set({ reuseResume: this.reuseResume }).catch?.(() => {});
+            });
+        }
+        this.renderReuseRow();
+
+        // Keyword check modal: resolved by promptForKeywords()
+        document.getElementById('keywords-close')?.addEventListener('click', () => this.resolveKeywords(null));
+        document.getElementById('keywords-cancel')?.addEventListener('click', () => this.resolveKeywords(null));
+        document.getElementById('keywords-continue')?.addEventListener('click', () => this.resolveKeywords(this.readKeywordChoices()));
+        document.getElementById('keywords-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'keywords-modal') this.resolveKeywords(null);
+        });
+        document.getElementById('ignored-keywords-reset')?.addEventListener('click', async () => {
+            this.ignoredKeywords = [];
+            await chrome.storage.local.set({ ignoredKeywords: [] });
+            this.renderSettings();
+        });
 
         // Settings / API key
         document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
@@ -277,6 +308,117 @@ class CoverLetterApp {
         } catch (error) {
             console.error('Error switching tabs:', error);
         }
+    }
+
+    // ---- ATS keyword check ----------------------------------------------------
+
+    // Reads the posting, then asks about any ATS terms the profile does not
+    // mention. Returns { match, profile, added } to generate with, or null if
+    // the user cancelled. Accepted terms are saved to the profile's skills.
+    async checkKeywords(jobText) {
+        this.showStatus('Reading the posting…', 'loading');
+        const { analyzeJob, missingKeywords, applyKeywords } = await this.generation();
+        const match = await analyzeJob(this.apiKey.value, { profile: this.profile, jobText });
+        const missing = missingKeywords(match, this.profile, { ignored: this.ignoredKeywords });
+        if (!missing.length) return { match, profile: this.profile, added: [] };
+
+        this.hideLoading();
+        const choice = await this.promptForKeywords(missing);
+        this.showLoading();
+        if (!choice) return null;
+
+        const applied = applyKeywords(match, this.profile, choice.accepted);
+        if (applied.added.length) {
+            this.profile = applied.profile;
+            this.renderSkills();
+            await this.saveData();
+        }
+        if (choice.remember) {
+            const rejected = missing.filter(kw => !choice.accepted.includes(kw));
+            if (rejected.length) {
+                this.ignoredKeywords = [...new Set([...this.ignoredKeywords, ...rejected])];
+                await chrome.storage.local.set({ ignoredKeywords: this.ignoredKeywords });
+            }
+        }
+        return { match: applied.match, profile: this.profile, added: applied.added };
+    }
+
+    promptForKeywords(keywords) {
+        const list = document.getElementById('keywords-list');
+        const modal = document.getElementById('keywords-modal');
+        if (!list || !modal) return Promise.resolve({ accepted: [], remember: false });
+        list.innerHTML = '';
+        keywords.forEach((kw, i) => {
+            const label = document.createElement('label');
+            label.className = 'keyword-chip';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.dataset.index = String(i);
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(kw));
+            list.appendChild(label);
+        });
+        this._keywordOptions = keywords;
+        const remember = document.getElementById('keywords-remember');
+        if (remember) remember.checked = true;
+        modal.classList.remove('hidden');
+        return new Promise((resolve) => { this._keywordResolve = resolve; });
+    }
+
+    readKeywordChoices() {
+        const accepted = [...document.querySelectorAll('#keywords-list input:checked')]
+            .map(el => this._keywordOptions[Number(el.dataset.index)]).filter(Boolean);
+        return { accepted, remember: Boolean(document.getElementById('keywords-remember')?.checked) };
+    }
+
+    resolveKeywords(choice) {
+        document.getElementById('keywords-modal')?.classList.add('hidden');
+        const resolve = this._keywordResolve;
+        this._keywordResolve = null;
+        if (resolve) resolve(choice);
+    }
+
+    // ---- Last resume (base for revisions) --------------------------------------
+
+    renderReuseRow() {
+        const row = document.getElementById('reuse-resume-row');
+        const hint = document.getElementById('reuse-resume-hint');
+        if (!row) return;
+        row.classList.toggle('hidden', !this.lastResume);
+        if (hint && this.lastResume) {
+            const target = [this.lastResume.role, this.lastResume.company].filter(Boolean).join(' at ');
+            hint.textContent = target ? `(last: ${target})` : '';
+        }
+    }
+
+    async rememberResume(result, jobText) {
+        this.lastResume = {
+            resumeContent: result.resumeContent,
+            jobText,
+            company: result.matchAnalysis?.company || '',
+            role: result.matchAnalysis?.role || '',
+            generatedAt: result.metadata?.generatedAt || new Date().toISOString()
+        };
+        this.renderReuseRow();
+        try {
+            await chrome.storage.local.set({ lastResume: this.lastResume });
+        } catch (error) {
+            console.error('Error saving last resume:', error);
+        }
+    }
+
+    // Puts the last resume back in the preview after a reload, without
+    // switching tabs, so it can be downloaded or revised straight away.
+    restoreLastResume() {
+        if (!this.lastResume) return;
+        const previewEl = document.querySelector('.resume-content');
+        if (!previewEl) return;
+        previewEl.innerHTML = this.formatResume(this.lastResume.resumeContent);
+        this.lastRenderedResumeHTML = previewEl.innerHTML;
+        this.lastApiCall = { request: { jobText: this.lastResume.jobText }, response: { resumeContent: this.lastResume.resumeContent }, timestamp: this.lastResume.generatedAt };
+        this.switchToResumeView();
+        const downloadBtn = document.getElementById('download-resume-pdf');
+        if (downloadBtn) downloadBtn.disabled = false;
     }
 
     showLoading() {
@@ -856,6 +998,12 @@ class CoverLetterApp {
     }
 
     renderSettings({ replacing = false } = {}) {
+        const resetBtn = document.getElementById('ignored-keywords-reset');
+        if (resetBtn) {
+            const n = this.ignoredKeywords.length;
+            resetBtn.disabled = n === 0;
+            resetBtn.textContent = n ? `Ask again about ${n} skipped term${n === 1 ? '' : 's'}` : 'No skipped terms';
+        }
         const saved = document.getElementById('api-key-saved');
         const entry = document.getElementById('api-key-entry');
         const cancel = document.getElementById('api-key-cancel');
@@ -1309,14 +1457,18 @@ class CoverLetterApp {
         if (!this.requireApiKeyForGeneration()) return;
 
         this.showLoading();
-        this.showStatus('Generating cover letter...', 'loading');
 
         try {
+            const checked = await this.checkKeywords(jobText);
+            if (!checked) { this.showStatus('Cancelled.', 'error'); return; }
+            this.showStatus('Generating cover letter...', 'loading');
+
             const requestData = {
-                profile: this.profile,
+                profile: checked.profile,
                 jobText: jobText,
                 research: this.researchEnabled,
-                briefCache: this.companyBriefs
+                briefCache: this.companyBriefs,
+                match: checked.match
             };
 
             this.lastApiCall = {
@@ -1601,19 +1753,28 @@ class CoverLetterApp {
   if (!this.requireApiKeyForGeneration()) return;
 
   this.showLoading();
-  this.showStatus('Generating resume...', 'loading');
 
   try {
-    let result = await this.requestResume({ profile: this.profile, jobText });
+    const checked = await this.checkKeywords(jobText);
+    if (!checked) { this.showStatus('Cancelled.', 'error'); return; }
+    const { match, profile } = checked;
+
+    // Revise the last resume rather than starting over, unless the user opted out.
+    const baseResume = this.reuseResume && this.lastResume ? this.lastResume.resumeContent : null;
+    this.showStatus(baseResume ? 'Revising your resume…' : 'Generating resume...', 'loading');
+    let result = await this.requestResume({ profile, jobText, match, baseResume });
 
     // The pipeline budgets by word count; only the rendered page knows whether it
-    // actually fits. If it overflows, ask once more with a tighter ceiling.
+    // actually fits. If it overflows, ask once more with a tighter ceiling — as a
+    // revision of what it just produced, so the wording does not churn.
     let overflow = await this.renderResumeAndMeasure(result.resumeContent);
     let refit = false;
     if (overflow > 1.0 && result.metadata?.words) {
       const maxWords = Math.floor(result.metadata.words / overflow * 0.92);
       this.showStatus('Trimming to one page…', 'loading');
-      result = await this.requestResume({ profile: this.profile, jobText, budget: { maxWords } });
+      const first = result.metadata;
+      result = await this.requestResume({ profile, jobText, match, baseResume: result.resumeContent, budget: { maxWords } });
+      result.metadata = { ...result.metadata, revised: first.revised, keptBullets: first.keptBullets, baseBullets: first.baseBullets };
       overflow = await this.renderResumeAndMeasure(result.resumeContent);
       refit = true;
     }
@@ -1623,8 +1784,9 @@ class CoverLetterApp {
     this.switchToResumeView();
 
     await this.saveData();
+    await this.rememberResume(result, jobText);
 
-    this.showStatus(this.describeResumeResult(result, { overflow, refit }), overflow > 1.0 ? 'error' : 'success');
+    this.showStatus(this.describeResumeResult(result, { overflow, refit, added: checked.added }), overflow > 1.0 ? 'error' : 'success');
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
@@ -1662,13 +1824,20 @@ class CoverLetterApp {
         });
     }
 
-    describeResumeResult(result, { overflow, refit }) {
+    describeResumeResult(result, { overflow, refit, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
+        const verb = meta.revised ? 'revised' : 'generated';
         if (overflow > 1.0) {
-            parts.push(`Resume generated, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
+            parts.push(`Resume ${verb}, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
         } else {
-            parts.push(refit ? 'Resume generated and trimmed to fit one page.' : 'Resume generated.');
+            parts.push(refit ? `Resume ${verb} and trimmed to fit one page.` : `Resume ${verb}.`);
+        }
+        if (meta.revised && meta.baseBullets) {
+            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from the previous version.`);
+        }
+        if (added.length) {
+            parts.push(`Added to your skills: ${added.join(', ')}.`);
         }
         if (meta.words && meta.words < 450 && meta.usedBullets >= meta.availableBullets) {
             parts.push(`It uses everything in your profile (${meta.words} words); a full page is usually 550–700. Add more achievements, coursework, or certifications to your profile to fill it.`);

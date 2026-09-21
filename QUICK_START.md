@@ -16,6 +16,8 @@ Click the **gear icon**, paste your OpenAI key, **Save key**. It shows **Verifie
 1. **Upload your resume** (PDF) to autofill your profile, then review and complete it
 2. **Paste a job description** in the Generate tab
 3. **Generate Cover Letter** (tick **Research the company** for sourced facts about the employer) or **Generate Resume**
+   - If the posting names skills your profile doesn't mention, a dialog lists them: tick the ones you have, then **Continue**
+   - Later resumes revise the last one rather than starting over; untick **Revise the last resume** for a fresh draft
 4. **Cover Letter PDF** downloads directly; **Resume PDF** opens a print view — choose **Save as PDF**
 
 ## Pro tips

@@ -1389,11 +1389,46 @@ body {
    SECTION 17a: SETTINGS
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.settings-modal .modal-header h3 {
+/* Keyword check modal: the posting's terms as toggleable chips */
+.keywords-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: var(--space-md) 0;
+}
+
+.keyword-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--glass-bg-elevated);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition-medium);
+}
+
+.keyword-chip input {
+    accent-color: var(--accent-primary);
+    margin: 0;
+}
+
+.keyword-chip:has(input:checked) {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary-glow);
+}
+
+.settings-modal .modal-header h3,
+#keywords-modal .modal-header h3 {
     color: var(--text-primary);
 }
 
-.settings-modal .modal-body .form-group {
+.settings-modal .modal-body .form-group:last-child {
     margin-bottom: 0;
 }
 

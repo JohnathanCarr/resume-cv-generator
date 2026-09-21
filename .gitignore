@@ -56,3 +56,6 @@ debug.log
 test/fixtures/local/
 test/eval/profiles/local/
 test/eval/runs/
+
+# Store upload zips
+dist/

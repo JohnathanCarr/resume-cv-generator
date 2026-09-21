@@ -26,6 +26,11 @@ node test/eval/run.js --profiles maria --only resume --revise  # chain jobs: eac
 # Extension: chrome://extensions → Developer mode → Load unpacked → select extension/
 # After editing app.js/manifest.json click ↻ on the extension card; app.html/styles.css only need a tab refresh.
 
+# Store upload zip → dist/resume-studio-<version>.zip (version read from the manifest)
+./scripts/package.sh
+# Store screenshots (1280×800) from the harness in store/, needs the :8790 static server running
+./scripts/screenshots.sh
+
 # Parser harness (exercise resumeParser.js against fixtures without the extension)
 python3 -m http.server 8790      # from repo root
 # open http://localhost:8790/test/parser.html — pick a fixture or upload any PDF
@@ -76,6 +81,10 @@ extension/app.html ──► extension/app.js (CoverLetterApp) ──► chrome.
 - The project directory path contains a colon (`RS:CV_Generator`), which breaks `npx`; run any CLI via `node node_modules/...` instead.
 - `.claude/launch.json` (the `extension-static` preview server on :8790) lives in the parent folder, outside this repo; edit it in place, it cannot be committed.
 
+## Background worker and permissions
+
+`background.js` opens the app tab on install and on toolbar click, focusing an existing one instead of opening a second. It does this **without the `tabs` permission**: `app.js` `connectToBackground()` holds a `chrome.runtime.connect({ name: 'app' })` port while the page is open, the worker reads the tab id from `port.sender.tab` and keeps it in `chrome.storage.session` (the worker is unloaded when idle and would forget it), and the port closing clears it. The page reconnects when the worker restarts and stops once `chrome.runtime.id` is gone (extension reloaded/removed). Manifest permissions are exactly `storage`, `unlimitedStorage` (uploaded PDF can exceed the 10 MB quota), `downloads` (cover letter PDF) and the `api.openai.com` host; each has a justification in `store/listing.md` and `PRIVACY.md` — keep all three in step if a permission changes.
+
 ## Onboarding
 
 First run is detected two ways: `chrome.runtime.onInstalled` (reason `install`) in `background.js` opens the app tab and seeds `onboarding` in `chrome.storage.local`; `app.js` `init()` treats a missing/false `onboarding.seen` as first run and starts the tour. Dev reloads of an unpacked extension do not fire `onInstalled`; reset by deleting the `onboarding` storage key or use the header "?" button, which replays the tour on demand. The tour (`extension/onboarding.js`) is a spotlight + tooltip sequence over real elements, switching tabs and scrolling as it goes; Skip and Escape always exit. The Getting Started checklist card on the Profile tab ticks itself from live state (resume uploaded, name set, key saved, first document generated; the key line shows OpenAI's verification result) and hides when complete.
@@ -102,14 +111,12 @@ Evals: `test/eval/` (see its README). Run before and after any prompt change (cu
 
 The extension became standalone on 2026-09-20 in three PRs: #6 `generation-in-extension` (OpenAI calls moved from the proxy into `extension/generation/`, evals in-process), #7 `resume-pdf-client-side` (Puppeteer replaced by `print.html` + `window.print()`), #8 `remove-proxy` (server, setup scripts and old deploy docs deleted; README/Quick Start rewritten). Nothing runs outside the browser; `https://api.openai.com/*` is the only host permission.
 
-**Next: Phase 4, `web-store-release`** — make it submittable to the Chrome Web Store:
-1. `fix(extension)`: manifest cleanup for review — a real `description` (the current one says "iOS 26 Liquid Glass design"), drop `tabs`/`activeTab` if `background.js` can do without them, remove the empty `default_popup`, add an `icons` block, set `version` to `1.0.0`.
-2. `docs`: `PRIVACY.md` — required because the extension handles personal data (resume contents) and an API key; data stays in `chrome.storage.local`, goes only to OpenAI, no telemetry. Host it (GitHub Pages or the raw file URL) and link it from the listing.
-3. `chore`: `scripts/package.sh` zipping the contents of `extension/` (not the folder).
-4. `docs`: `store/` with the 128×128 icon, 1280×800 screenshots, listing copy, single-purpose statement and per-permission justifications. Open question for the user: supply icon/screenshots or generate placeholders.
-Then: register the developer account ($5), upload as **Unlisted** first, test the store install, flip to Public. Say in the listing that users need their own OpenAI key and pay per use.
+Phase 4 `web-store-release` (2026-09-21) made it submittable: manifest at `1.0.0` with a real description, icons and only the permissions it uses; `tabs` removed via the port scheme above; `PRIVACY.md`; `scripts/package.sh`; `store/` with listing copy (`listing.md` is the source for every dashboard field), the icon (`icon.svg`, rendered to `extension/icons/` with headless Chrome) and three screenshots from a harness that runs the real `app.html` over a stubbed `chrome` API (`store/screenshots.html`, fictional eval profile). The icon is a placeholder in the app's own mark; replace `icon.svg`, re-render, and re-upload when there is a real one.
+
+**Store process (manual):** developer account registered → New Item → upload `dist/resume-studio-1.0.0.zip` → paste `store/listing.md` → visibility **Unlisted** → submit. Every version is reviewed again, and a new version cannot be uploaded while one is under review, so batch changes. Test the store install (permission prompt, `onInstalled` tour) from the unlisted link, then flip to Public. Bump `version` in the manifest for each upload.
 
 **After that (deferred features):**
+- **Listing polish.** A designed icon, more screenshots (cover letter, research citations, print view), a promo tile (440×280) if the store asks for one.
 - **Keyword gate follow-ups.** Confirmed terms only ever land in `skills`; a way to attach one to a specific experience (so it appears in a bullet, not just the skills line) would help ATS scoring further. Also consider showing the *matched* keywords alongside the missing ones so the user sees the whole picture.
 - **Match panel.** `matchAnalysis` is stored on `lastMatchAnalysis` but not shown. A panel beside the preview listing each requirement with ✓/◐/✗ and the profile evidence, so users fix their profile rather than the output.
 - **Cover-letter latency** (~45–60s): run match analysis and company research concurrently; research only needs the company name, which a cheap first pass could extract.

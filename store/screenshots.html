@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  Screenshot harness for the Chrome Web Store listing. Loads the real
+  extension/app.html with a stubbed `chrome` API seeded from a fictional
+  profile (test/eval/profiles/maria_backend_ms.json) and sample-resume.json,
+  so the app renders as it would for a user without needing the extension
+  runtime or an API key.
+
+    python3 -m http.server 8790          # from the repo root
+    open http://localhost:8790/store/screenshots.html#profile
+    open http://localhost:8790/store/screenshots.html#generate
+    open http://localhost:8790/store/screenshots.html#keywords
+
+  Capture at 1280×800 (the store's screenshot size). See scripts/screenshots.sh.
+-->
+<meta charset="utf-8">
+<script>
+(async () => {
+  const [profile, lastResume, html] = await Promise.all([
+    fetch('../test/eval/profiles/maria_backend_ms.json').then(r => r.json()),
+    fetch('sample-resume.json').then(r => r.json()),
+    fetch('../extension/app.html').then(r => r.text())
+  ]);
+  const scene = location.hash.slice(1) || 'generate';
+  const store = {
+    profile,
+    lastResume,
+    onboarding: { seen: true, installedAt: '2026-09-01T00:00:00.000Z', completedAt: '2026-09-01T00:00:00.000Z', checklistDismissed: true, firstGeneratedAt: '2026-09-01T00:00:00.000Z' },
+    apiKey: { value: 'sk-placeholder', last4: 'k9Qz', savedAt: '2026-09-01T00:00:00.000Z', verifiedAt: '2026-09-01T00:00:00.000Z' },
+    researchEnabled: true,
+    reuseResume: true
+  };
+  const area = (keys) => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).filter(k => k in store).map(k => [k, store[k]]));
+  window.chrome = {
+    storage: {
+      local: { get: async (k) => area(k), set: async (o) => Object.assign(store, o), remove: async () => {} },
+      session: { get: async () => ({}), set: async () => {}, remove: async () => {} }
+    },
+    runtime: { id: 'harness', getURL: (p) => `../extension/${p}`, connect: () => ({ onDisconnect: { addListener() {} } }), lastError: undefined }
+  };
+  // Point the page's relative assets at extension/ and open it in place.
+  document.open();
+  document.write(html.replace('<head>', '<head><base href="../extension/">'));
+  document.close();
+
+  // Stage the requested scene once the app has initialised (it waits 100ms).
+  setTimeout(() => {
+    document.documentElement.setAttribute('data-theme', 'light');
+    if (scene === 'profile') {
+      document.querySelector('[data-tab="profile"]').click();
+      // Skills and the first experience card say more than the name fields;
+      // hide what comes before them (headless screenshots paint blank when scrolled).
+      let el = document.getElementById('skills-list')?.closest('section')?.previousElementSibling;
+      while (el) { el.style.display = 'none'; el = el.previousElementSibling; }
+      return;
+    }
+    document.querySelector('[data-tab="generate"]').click();
+    document.getElementById('job-text').value = lastResume.jobText;
+    if (scene === 'keywords') {
+      const list = document.getElementById('keywords-list');
+      ['Kubernetes', 'Terraform', 'incident response', 'GraphQL', 'Datadog', 'Feature flags'].forEach((kw, i) => {
+        const label = document.createElement('label');
+        label.className = 'keyword-chip';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = i < 2;
+        label.append(input, kw);
+        list.appendChild(label);
+      });
+      document.getElementById('keywords-modal').classList.remove('hidden');
+    } else {
+      const status = document.getElementById('generation-status');
+      status.textContent = 'Resume revised. Kept 6 of 6 bullets from the previous version. Added to your skills: Kubernetes, Terraform.';
+      status.className = 'status-message status-success';
+    }
+  }, 400);
+})();
+</script>

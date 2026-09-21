@@ -29,7 +29,9 @@ Every sentence there came from the candidate's profile, and the letter says so w
 
 ## 🚀 Install
 
-Until the extension is on the Chrome Web Store, load it from source. Takes about two minutes.
+**From the Chrome Web Store** (once the listing is live): open the store page, click **Add to Chrome**, then click the extension's icon in the toolbar. Skip to step 3.
+
+**From source** (until then, or to run a development copy) — takes about two minutes:
 
 ### 1. Get the code
 - Click the green **Code** button → **Download ZIP**, and extract it somewhere you'll keep it (Chrome loads the extension from this folder, so don't delete it afterwards)
@@ -164,7 +166,11 @@ resume-cv-generator/
 ├── test/
 │   ├── parser.html          # Parser harness against fixture PDFs
 │   ├── fixtures/            # Synthetic resume PDFs
+│   ├── unit/                # node:test for the pure generation helpers
 │   └── eval/                # Prompt evals: profiles × postings, scored by rubric
+├── store/                   # Web Store listing copy, icon source, screenshot harness
+├── scripts/                 # package.sh (store zip), screenshots.sh
+├── PRIVACY.md               # Privacy policy linked from the store listing
 ├── CLAUDE.md                # Architecture notes for contributors
 └── README.md                # This file
 ```

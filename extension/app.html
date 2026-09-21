@@ -276,6 +276,11 @@
                                 <span>Research the company for the cover letter <span class="research-hint">(a few web searches, roughly $0.05–0.10)</span></span>
                             </label>
 
+                            <label class="research-toggle hidden" for="reuse-resume" id="reuse-resume-row">
+                                <input type="checkbox" id="reuse-resume" checked>
+                                <span>Revise the last resume instead of starting over <span class="research-hint" id="reuse-resume-hint"></span></span>
+                            </label>
+
                             <div id="generation-status" class="status-message hidden"></div>
                         </section>
                     </div>
@@ -389,6 +394,41 @@
                                 It is stored only in this browser and sent directly to OpenAI when you verify or generate. Once saved it can be replaced but not viewed.
                             </p>
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>ATS keywords</label>
+                        <p class="api-key-help">Before generating, terms from the posting that your profile does not mention are listed so you can add the ones you have. Terms you leave unchecked are not asked about again.</p>
+                        <div class="modal-actions">
+                            <button id="ignored-keywords-reset" class="btn btn-secondary btn-sm btn-ripple" disabled>Ask again about skipped terms</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="keywords-modal" class="modal hidden">
+            <div class="modal-content glass-floating">
+                <div class="modal-header">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        Keywords not in your profile
+                    </h3>
+                    <button class="modal-close" id="keywords-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="keywords-intro">The posting asks for these and your profile does not mention them. Check the ones you actually have; they are added to your skills so the resume can use the posting's exact wording.</p>
+                    <div id="keywords-list" class="keywords-list"></div>
+                    <label class="research-toggle" for="keywords-remember">
+                        <input type="checkbox" id="keywords-remember" checked>
+                        <span>Don't ask about the unchecked ones again</span>
+                    </label>
+                    <div class="modal-actions">
+                        <button id="keywords-continue" class="btn btn-primary btn-ripple">Continue</button>
+                        <button id="keywords-cancel" class="btn btn-secondary btn-ripple">Cancel</button>
                     </div>
                 </div>
             </div>

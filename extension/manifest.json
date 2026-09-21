@@ -1,28 +1,37 @@
-
 {
   "manifest_version": 3,
   "name": "Resume Studio",
-  "version": "2.0.0",
-  "description": "AI-powered resume and cover letter generator with iOS 26 Liquid Glass design",
-  
+  "version": "1.0.0",
+  "description": "Tailored resumes and cover letters from your profile and a job posting, using your own OpenAI key. Nothing leaves your browser except calls to OpenAI.",
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "tabs",
-    "activeTab",
     "downloads"
   ],
-  
+
   "host_permissions": [
     "https://api.openai.com/*"
   ],
-  
+
   "background": {
     "service_worker": "background.js"
   },
-  
+
   "action": {
-    "default_popup": "",
-    "default_title": "Open Cover Letter Generator"
+    "default_title": "Open Resume Studio",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }

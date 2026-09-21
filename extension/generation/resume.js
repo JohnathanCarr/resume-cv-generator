@@ -74,7 +74,8 @@ Hard rules:
 4. Skills: 3–4 category lines, most relevant to the posting first, using the posting's spelling of each term. Only skills from the profile.
 5. Education: every institution in the profile, with the details given. Coursework only if the profile lists it; keep the 3–6 most relevant.
 6. Programs/certifications: only what the profile lists under certifications & achievements; otherwise an empty list.
-7. One U.S. Letter page. The user message gives a word target based on how much material the profile actually has; use as much of the profile as is relevant to reach it, and never pad or invent to get there. If you must cut, drop the least relevant bullets whole rather than shortening relevant ones.`;
+7. One U.S. Letter page. The user message gives a word target based on how much material the profile actually has; use as much of the profile as is relevant to reach it, and never pad or invent to get there. If you must cut, drop the least relevant bullets whole rather than shortening relevant ones.
+8. When the user message includes a CURRENT RESUME, revise it rather than writing a new one. Keep every line, bullet and skill entry that already serves this posting exactly as written; change only what the posting needs — reorder skill lines and mirror the posting's exact terms, swap in more relevant profile bullets, roles or projects and drop less relevant ones, update the summary line. Do not reword a bullet that already fits, and do not reintroduce anything the current resume dropped unless this posting calls for it.`;
 
 // How much the profile has to work with, so the target is honest.
 function countProfileWords(profile) {
@@ -95,13 +96,20 @@ function resumeBudget(profile, override = {}) {
   return { availableWords: available, targetWords: Math.max(150, target), maxWords: max };
 }
 
-function buildResumeMessages({ profile, jobText, match, matchText, budget }) {
+// baseResume (optional) is a previously generated resume in RESUME_SCHEMA
+// shape; when given, the prompt asks for a revision of it instead of a fresh
+// draft (see system rule 8) so wording stays stable between runs.
+function buildResumeMessages({ profile, jobText, match, matchText, budget, baseResume = null }) {
   const roleName = match.role || 'the role';
   const companyName = match.company || 'the company';
   const mustIncludeExperiences = (profile.experiences || []).filter(exp => exp.mustInclude);
   const mustIncludeProjects = (profile.projects || []).filter(proj => proj.mustInclude);
 
-  const user = `Create a targeted, one-page resume for the ${roleName} role at ${companyName}.
+  const task = baseResume
+    ? `Revise the candidate's current resume (at the end of this message) into a targeted, one-page resume for the ${roleName} role at ${companyName}. Keep what already fits; change only what this posting needs.`
+    : `Create a targeted, one-page resume for the ${roleName} role at ${companyName}.`;
+
+  const user = `${task}
 
 Selection:
 • Include every experience and project marked mustInclude. Then rank the rest by how many of the posting's requirements they evidence (see the match analysis), then recency.
@@ -135,7 +143,10 @@ Projects:
 ${formatProjects(profile)}
 
 Certifications & achievements (certifications, awards, research, publications, leadership, volunteering, programs):
-${formatExtras(profile)}`;
+${formatExtras(profile)}${baseResume ? `
+
+CURRENT RESUME (revise this; keep every bullet and line that still fits, verbatim):
+${JSON.stringify(baseResume)}` : ''}`;
 
   return [
     { role: 'system', content: SYSTEM },

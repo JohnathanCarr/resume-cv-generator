@@ -9,6 +9,7 @@ import { analyzeMatch, renderMatchForPrompt } from './matchAnalysis.js';
 import { buildResumeMessages, RESUME_SCHEMA, resumeBudget } from './resume.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
+export { missingKeywords, applyKeywords } from './keywords.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
 
@@ -32,20 +33,40 @@ function requireInputs(profile, jobText) {
   if (!profile || !jobText) throw new Error('Missing required fields: profile and jobText');
 }
 
-// The caller may pass budget.maxWords after measuring a rendered page that overflowed.
-export async function generateResume(apiKey, { profile, jobText, budget: budgetOverride = {} }) {
+// Bullets in the new resume that appear verbatim in the base one, for the
+// "kept N of M" report after a revision.
+function keptBullets(base, next) {
+  const bullets = (r) => [...(r.experience || []), ...(r.projects || [])].flatMap(e => e.bullets || []).map(b => b.trim());
+  const before = new Set(bullets(base));
+  return { kept: bullets(next).filter(b => before.has(b)).length, base: before.size };
+}
+
+// Match analysis on its own, so the extension can pause between reading the
+// posting and generating (the ATS keyword check) and then pass the match back
+// in to either generator instead of paying for the analysis twice.
+export async function analyzeJob(apiKey, { profile, jobText }) {
+  requireInputs(profile, jobText);
+  const openai = createClient(apiKey);
+  const match = await analyzeMatch(openai, { profile, jobText });
+  console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
+  return match;
+}
+
+// The caller may pass budget.maxWords after measuring a rendered page that
+// overflowed, `match` from analyzeJob() to skip the analysis, and
+// `baseResume` (a previous resumeContent) to revise instead of regenerate.
+export async function generateResume(apiKey, { profile, jobText, budget: budgetOverride = {}, match = null, baseResume = null }) {
   const startTime = Date.now();
   requireInputs(profile, jobText);
   const openai = createClient(apiKey);
-  console.log(`[${new Date().toISOString()}] Resume generation started`);
+  console.log(`[${new Date().toISOString()}] Resume ${baseResume ? 'revision' : 'generation'} started`);
   const budget = resumeBudget(profile, budgetOverride);
 
   // Structured read of the posting against the profile; replaces regex guessing.
-  const match = await analyzeMatch(openai, { profile, jobText });
+  if (!match) match = await analyzeJob(apiKey, { profile, jobText });
   const matchText = renderMatchForPrompt(match);
-  console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
-  const messages = buildResumeMessages({ profile, jobText, match, matchText, budget });
+  const messages = buildResumeMessages({ profile, jobText, match, matchText, budget, baseResume });
   let { data: resume } = await generateStructured(openai, {
     messages, schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
   });
@@ -89,8 +110,9 @@ export async function generateResume(apiKey, { profile, jobText, budget: budgetO
 
   // Never show certifications the profile does not have.
   if (!(Array.isArray(profile.extras) && profile.extras.length)) resume.programs = [];
+  const reuse = baseResume ? keptBullets(baseResume, resume) : null;
   const endTime = Date.now();
-  console.log(`[${new Date().toISOString()}] Resume generated in ${endTime - startTime}ms (${words} words, ${bulletCount(resume)}/${availableBullets} bullets)`);
+  console.log(`[${new Date().toISOString()}] Resume generated in ${endTime - startTime}ms (${words} words, ${bulletCount(resume)}/${availableBullets} bullets${reuse ? `, kept ${reuse.kept}/${reuse.base} from the previous resume` : ''})`);
   return {
     resumeContent: resume,
     matchAnalysis: match,
@@ -102,22 +124,24 @@ export async function generateResume(apiKey, { profile, jobText, budget: budgetO
       usedBullets: bulletCount(resume),
       availableBullets,
       trimmed,
-      expanded
+      expanded,
+      revised: Boolean(baseResume),
+      keptBullets: reuse ? reuse.kept : null,
+      baseBullets: reuse ? reuse.base : null
     }
   };
 }
 
 // briefCache maps lower-cased company name → brief; a cached brief for the
 // matched company is reused instead of searching again.
-export async function generateCoverLetter(apiKey, { profile, jobText, research = true, briefCache = {} }) {
+export async function generateCoverLetter(apiKey, { profile, jobText, research = true, briefCache = {}, match = null }) {
   const startTime = Date.now();
   requireInputs(profile, jobText);
   const openai = createClient(apiKey);
   console.log(`[${new Date().toISOString()}] Cover letter generation started`);
 
-  const match = await analyzeMatch(openai, { profile, jobText });
+  if (!match) match = await analyzeJob(apiKey, { profile, jobText });
   const matchText = renderMatchForPrompt(match);
-  console.log(`Match: ${match.company || '(unnamed company)'} — ${match.role || '(unnamed role)'}; ${match.requirements.length} requirements, ${match.requirements.filter(r => r.strength !== 'none').length} supported`);
 
   // Company brief: cached → researched → posting-only.
   let brief;

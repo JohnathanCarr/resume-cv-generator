@@ -1,0 +1,74 @@
+{
+  "resumeContent": {
+    "summary": "Software Engineer II specializing in backend services and distributed systems in Go and TypeScript.",
+    "skills": [
+      "Backend & APIs: Go, TypeScript, Node.js, gRPC, SQL",
+      "Infrastructure: Kubernetes, Terraform, Docker, CI/CD",
+      "Data & Observability: PostgreSQL, ClickHouse, Observability",
+      "Development: Python, Rust, React, TDD"
+    ],
+    "education": [
+      {
+        "school": "University of Texas at Austin",
+        "degree": "Master of Science",
+        "major": "Computer Science",
+        "minor": null,
+        "location": "Austin, TX",
+        "dates": "May 2026",
+        "gpa": "3.9/4.0",
+        "honors": null,
+        "coursework": "Distributed Systems, Machine Learning"
+      },
+      {
+        "school": "Texas A&M University",
+        "degree": "B.S.",
+        "major": "Computer Engineering",
+        "minor": "Mathematics",
+        "location": "College Station, TX",
+        "dates": "Aug 2018 - May 2022",
+        "gpa": null,
+        "honors": "Magna Cum Laude",
+        "coursework": null
+      }
+    ],
+    "experience": [
+      {
+        "title": "Software Engineer II",
+        "company": "Stripe",
+        "dates": "Jun 2023 - Present",
+        "location": "San Francisco, CA",
+        "bullets": [
+          "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
+          "Led Kubernetes upgrades for 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
+          "Mentored two interns who converted to full-time offers."
+        ]
+      },
+      {
+        "title": "Software Engineering Intern",
+        "company": "Datadog",
+        "dates": "May 2022 - Aug 2022",
+        "location": "New York, NY",
+        "bullets": [
+          "Built a Go service to deduplicate log ingestion streams, reducing storage costs by $180K annually."
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "Latticework",
+        "link": null,
+        "bullets": [
+          "Built an open-source tracing dashboard with a React + TypeScript front end over a ClickHouse backend.",
+          "Received 1.2K GitHub stars."
+        ]
+      }
+    ],
+    "programs": [
+      "AWS Certified Solutions Architect \u2013 Associate, Amazon Web Services (Mar 2024)"
+    ]
+  },
+  "jobText": "Senior Backend Engineer \u2014 Infrastructure\nVercel \u00b7 San Francisco, CA (Hybrid)\n\nAbout the role\nVercel is seeking a Senior Backend Engineer to join our Infrastructure team. You will design and operate the distributed systems behind our edge network and build the APIs used by millions of developers every day. You'll own services end to end: design, rollout, on-call, and the observability that keeps them honest.\n\nWhat you'll do\n- Design and operate high-throughput backend services in Go and TypeScript\n- Run production workloads on Kubernetes, including upgrades and capacity planning\n- Build observability (metrics, tracing, alerting) and lead incident response\n- Partner with product engineering on API design and platform reliability\n\nRequirements\n- 3+ years building backend services in Go or TypeScript\n- Experience operating Kubernetes in production\n- Strong understanding of observability and incident response\n- Track record of shipping reliable APIs at scale\n\nNice to have\n- Experience with PostgreSQL or ClickHouse\n- Open-source contributions\n- Experience with edge or CDN infrastructure\n",
+  "company": "Vercel",
+  "role": "Senior Backend Engineer \u2014 Infrastructure",
+  "generatedAt": "2026-09-21T18:00:00.000Z"
+}

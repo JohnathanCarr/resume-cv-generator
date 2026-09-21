@@ -54,6 +54,28 @@ class CoverLetterApp {
         this.restoreLastResume();
         this.maybeStartOnboarding();
         this.renderChecklist();
+        this.connectToBackground();
+    }
+
+    // Keeps a runtime port open so background.js knows which tab the app is in
+    // (it focuses this tab on icon click instead of opening another). The
+    // service worker drops the port whenever Chrome unloads it, so reconnect;
+    // stop once the extension itself has been reloaded or removed.
+    connectToBackground() {
+        if (typeof chrome === 'undefined' || !chrome.runtime?.connect) return;
+        const connect = () => {
+            try {
+                const port = chrome.runtime.connect({ name: 'app' });
+                port.onDisconnect.addListener(() => {
+                    void chrome.runtime.lastError; // read so Chrome does not log it as unchecked
+                    if (!chrome.runtime?.id) return;
+                    setTimeout(connect, 500);
+                });
+            } catch {
+                // Extension context invalidated; nothing to reconnect to.
+            }
+        };
+        connect();
     }
 
     // Data Management

@@ -1,66 +1,54 @@
-// Background script for Cover Letter Generator extension
+// Service worker: opens the app tab on install and on toolbar-icon click, and
+// focuses the existing one instead of opening a second.
+//
+// The app tab is tracked without the `tabs` permission: app.html opens a
+// runtime port when it loads, which tells us its tab id (port.sender.tab is
+// available for the extension's own pages), and the port closing tells us the
+// tab is gone. The id lives in chrome.storage.session because this worker is
+// unloaded when idle and would forget it. tabs.create/update and
+// windows.update need no permission.
 
-let appTabId = null;
 const APP_URL = chrome.runtime.getURL('app.html');
 
-// First install: open the app and mark onboarding as not yet seen.
+async function openApp() {
+  const { appTabId } = await chrome.storage.session.get('appTabId');
+  if (appTabId != null) {
+    try {
+      const tab = await chrome.tabs.update(appTabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return tab;
+    } catch {
+      // The tab is gone (closed while the worker was asleep); fall through.
+    }
+  }
+  const tab = await chrome.tabs.create({ url: APP_URL, active: true });
+  await chrome.storage.session.set({ appTabId: tab.id });
+  return tab;
+}
+
+// First install: seed onboarding as not yet seen and open the app.
 // Reloading an unpacked extension does not fire this with reason "install".
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason !== 'install') return;
   try {
     await chrome.storage.local.set({ onboarding: { seen: false, installedAt: new Date().toISOString() } });
-    const tab = await chrome.tabs.create({ url: APP_URL, active: true });
-    appTabId = tab.id;
+    await openApp();
   } catch (error) {
     console.error('Error during first-run setup:', error);
   }
 });
 
-// Handle extension icon click
-chrome.action.onClicked.addListener(async (tab) => {
-  try {
-    // Check if app tab already exists
-    if (appTabId) {
-      try {
-        const existingTab = await chrome.tabs.get(appTabId);
-        if (existingTab && existingTab.url === APP_URL) {
-          // Focus existing tab
-          await chrome.tabs.update(appTabId, { active: true });
-          await chrome.windows.update(existingTab.windowId, { focused: true });
-          return;
-        }
-      } catch (error) {
-        // Tab no longer exists, clear the reference
-        appTabId = null;
-      }
-    }
-    
-    // Create new app tab
-    const newTab = await chrome.tabs.create({
-      url: APP_URL,
-      active: true
-    });
-    
-    appTabId = newTab.id;
-    
-  } catch (error) {
-    console.error('Error opening cover letter generator:', error);
-  }
+chrome.action.onClicked.addListener(() => {
+  openApp().catch(error => console.error('Error opening Resume Studio:', error));
 });
 
-// Clean up tab reference when tab is closed
-chrome.tabs.onRemoved.addListener((tabId) => {
-  if (tabId === appTabId) {
-    appTabId = null;
-  }
+// app.html connects on load and stays connected while open.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'app' || !port.sender?.tab) return;
+  const tabId = port.sender.tab.id;
+  chrome.storage.session.set({ appTabId: tabId });
+  port.onDisconnect.addListener(async () => {
+    const { appTabId } = await chrome.storage.session.get('appTabId');
+    if (appTabId === tabId) await chrome.storage.session.remove('appTabId');
+  });
 });
-
-// Handle tab updates to maintain reference
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (tabId === appTabId && changeInfo.url && changeInfo.url !== APP_URL) {
-    // User navigated away from app, clear reference
-    appTabId = null;
-  }
-});
-
-console.log('Cover Letter Generator background script loaded');

@@ -2110,11 +2110,8 @@ class CoverLetterApp {
                             border-bottom: 1pt solid #000;
                             padding-bottom: 2pt;
                         ">PROGRAMS / CERTIFICATIONS</h2>
-                        <div style="font-size: ${bodyFontSize}; margin-bottom: 0.3em; line-height: 1.3;">
-                            <strong>Paycom – Technology Summer Engagement Program – Austin, Texas</strong> – Jun 2025<br>
-                            • Selected participant in Paycom’s multi-day tech immersion program. Completed workshops on secure documentation and compliance strategies.<br>
-                            • Collaborated with a student team to design and pitch a feature concept to Paycom engineers, gaining feedback on Agile teamwork and presentation skills.
-                        </div>
+                        ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
+                        <div style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
                         </div>
                     ` : ''
                     }

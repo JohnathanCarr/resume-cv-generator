@@ -33,7 +33,6 @@ class CoverLetterApp {
         this.lastApiCall = null;
         this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
         this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
-        this.ignoredKeywords = [];   // posting terms the user said do not apply; never asked about again
         
         // Initialize after a brief delay to ensure DOM is ready
         setTimeout(() => this.init(), 100);
@@ -82,15 +81,14 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'baselineResume', 'ignoredKeywords']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'baselineResume']);
         this.onboarding = result.onboarding || null;
         this.apiKey = result.apiKey || null;
         this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
         this.researchEnabled = result.researchEnabled !== false;
         this.lastResume = result.lastResume && result.lastResume.resumeContent ? result.lastResume : null;
         this.baselineResume = result.baselineResume || null;
-        chrome.storage.local.remove('reuseResume').catch?.(() => {}); // retired "Revise the last resume" toggle
-        this.ignoredKeywords = Array.isArray(result.ignoredKeywords) ? result.ignoredKeywords : [];
+        chrome.storage.local.remove(['reuseResume', 'ignoredKeywords']).catch?.(() => {}); // retired settings
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -181,11 +179,6 @@ class CoverLetterApp {
         document.getElementById('keywords-continue')?.addEventListener('click', () => this.resolveKeywords(this.readKeywordChoices()));
         document.getElementById('keywords-modal')?.addEventListener('click', (e) => {
             if (e.target.id === 'keywords-modal') this.resolveKeywords(null);
-        });
-        document.getElementById('ignored-keywords-reset')?.addEventListener('click', async () => {
-            this.ignoredKeywords = [];
-            await chrome.storage.local.set({ ignoredKeywords: [] });
-            this.renderSettings();
         });
 
         // Settings / API key
@@ -332,7 +325,7 @@ class CoverLetterApp {
         this.showStatus('Reading the posting…', 'loading');
         const { analyzeJob, missingKeywords, applyKeywords } = await this.generation();
         const match = await analyzeJob(this.apiKey.value, { profile: this.profile, jobText });
-        const missing = missingKeywords(match, this.profile, { ignored: this.ignoredKeywords });
+        const missing = missingKeywords(match, this.profile);
         if (!missing.length) return { match, profile: this.profile, added: [] };
 
         this.hideLoading();
@@ -346,20 +339,13 @@ class CoverLetterApp {
             this.renderSkills();
             await this.saveData();
         }
-        if (choice.remember) {
-            const rejected = missing.filter(kw => !choice.accepted.includes(kw));
-            if (rejected.length) {
-                this.ignoredKeywords = [...new Set([...this.ignoredKeywords, ...rejected])];
-                await chrome.storage.local.set({ ignoredKeywords: this.ignoredKeywords });
-            }
-        }
         return { match: applied.match, profile: this.profile, added: applied.added };
     }
 
     promptForKeywords(keywords) {
         const list = document.getElementById('keywords-list');
         const modal = document.getElementById('keywords-modal');
-        if (!list || !modal) return Promise.resolve({ accepted: [], remember: false });
+        if (!list || !modal) return Promise.resolve({ accepted: [] });
         list.innerHTML = '';
         keywords.forEach((kw, i) => {
             const label = document.createElement('label');
@@ -372,8 +358,6 @@ class CoverLetterApp {
             list.appendChild(label);
         });
         this._keywordOptions = keywords;
-        const remember = document.getElementById('keywords-remember');
-        if (remember) remember.checked = true;
         modal.classList.remove('hidden');
         return new Promise((resolve) => { this._keywordResolve = resolve; });
     }
@@ -381,7 +365,7 @@ class CoverLetterApp {
     readKeywordChoices() {
         const accepted = [...document.querySelectorAll('#keywords-list input:checked')]
             .map(el => this._keywordOptions[Number(el.dataset.index)]).filter(Boolean);
-        return { accepted, remember: Boolean(document.getElementById('keywords-remember')?.checked) };
+        return { accepted };
     }
 
     resolveKeywords(choice) {
@@ -999,12 +983,6 @@ class CoverLetterApp {
     }
 
     renderSettings({ replacing = false } = {}) {
-        const resetBtn = document.getElementById('ignored-keywords-reset');
-        if (resetBtn) {
-            const n = this.ignoredKeywords.length;
-            resetBtn.disabled = n === 0;
-            resetBtn.textContent = n ? `Ask again about ${n} skipped term${n === 1 ? '' : 's'}` : 'No skipped terms';
-        }
         const saved = document.getElementById('api-key-saved');
         const entry = document.getElementById('api-key-entry');
         const cancel = document.getElementById('api-key-cancel');

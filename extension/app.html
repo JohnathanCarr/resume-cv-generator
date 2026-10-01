@@ -392,13 +392,6 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>ATS keywords</label>
-                        <p class="api-key-help">Before generating, terms from the posting that your profile does not mention are listed so you can add the ones you have. Terms you leave unchecked are not asked about again.</p>
-                        <div class="modal-actions">
-                            <button id="ignored-keywords-reset" class="btn btn-secondary btn-sm btn-ripple" disabled>Ask again about skipped terms</button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -416,12 +409,8 @@
                     <button class="modal-close" id="keywords-close" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p id="keywords-intro">The posting asks for these and your profile does not mention them. Check the ones you actually have; they are added to your skills so the resume can use the posting's exact wording.</p>
+                    <p id="keywords-intro">The posting's key requirements include these, and your profile does not mention them. Check the ones you actually have; they are added to your skills so the resume can use the posting's exact wording.</p>
                     <div id="keywords-list" class="keywords-list"></div>
-                    <label class="research-toggle" for="keywords-remember">
-                        <input type="checkbox" id="keywords-remember" checked>
-                        <span>Don't ask about the unchecked ones again</span>
-                    </label>
                     <div class="modal-actions">
                         <button id="keywords-continue" class="btn btn-primary btn-ripple">Continue</button>
                         <button id="keywords-cancel" class="btn btn-secondary btn-ripple">Cancel</button>

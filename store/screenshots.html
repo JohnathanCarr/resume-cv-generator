@@ -27,8 +27,7 @@
     lastResume,
     onboarding: { seen: true, installedAt: '2026-09-01T00:00:00.000Z', completedAt: '2026-09-01T00:00:00.000Z', checklistDismissed: true, firstGeneratedAt: '2026-09-01T00:00:00.000Z' },
     apiKey: { value: 'sk-placeholder', last4: 'k9Qz', savedAt: '2026-09-01T00:00:00.000Z', verifiedAt: '2026-09-01T00:00:00.000Z' },
-    researchEnabled: true,
-    reuseResume: true
+    researchEnabled: true
   };
   const area = (keys) => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).filter(k => k in store).map(k => [k, store[k]]));
   window.chrome = {
@@ -70,7 +69,7 @@
       document.getElementById('keywords-modal').classList.remove('hidden');
     } else {
       const status = document.getElementById('generation-status');
-      status.textContent = 'Resume revised. Kept 6 of 6 bullets from the previous version. Added to your skills: Kubernetes, Terraform.';
+      status.textContent = 'Resume tailored. Kept 6 of 6 bullets from your resume as written. Added to your skills: Kubernetes, Terraform.';
       status.className = 'status-message status-success';
     }
   }, 400);

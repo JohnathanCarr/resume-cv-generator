@@ -31,8 +31,8 @@ class CoverLetterApp {
         this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
         this.researchEnabled = true;
         this.lastApiCall = null;
-        this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — base for the next revision
-        this.reuseResume = true;     // "Revise the last resume" toggle
+        this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
+        this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
         this.ignoredKeywords = [];   // posting terms the user said do not apply; never asked about again
         
         // Initialize after a brief delay to ensure DOM is ready
@@ -52,6 +52,7 @@ class CoverLetterApp {
         this.setupAutosave();
         this.renderProfile();
         this.restoreLastResume();
+        this.ensureBaseline();
         this.maybeStartOnboarding();
         this.renderChecklist();
         this.connectToBackground();
@@ -81,13 +82,14 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'reuseResume', 'ignoredKeywords']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'baselineResume', 'ignoredKeywords']);
         this.onboarding = result.onboarding || null;
         this.apiKey = result.apiKey || null;
         this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
         this.researchEnabled = result.researchEnabled !== false;
         this.lastResume = result.lastResume && result.lastResume.resumeContent ? result.lastResume : null;
-        this.reuseResume = result.reuseResume !== false;
+        this.baselineResume = result.baselineResume || null;
+        chrome.storage.local.remove('reuseResume').catch?.(() => {}); // retired "Revise the last resume" toggle
         this.ignoredKeywords = Array.isArray(result.ignoredKeywords) ? result.ignoredKeywords : [];
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
@@ -172,17 +174,6 @@ class CoverLetterApp {
                 chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
             });
         }
-
-        // Revise-the-last-resume toggle (row is hidden until a resume exists)
-        const reuseToggle = document.getElementById('reuse-resume');
-        if (reuseToggle) {
-            reuseToggle.checked = this.reuseResume;
-            reuseToggle.addEventListener('change', (e) => {
-                this.reuseResume = e.target.checked;
-                chrome.storage.local.set({ reuseResume: this.reuseResume }).catch?.(() => {});
-            });
-        }
-        this.renderReuseRow();
 
         // Keyword check modal: resolved by promptForKeywords()
         document.getElementById('keywords-close')?.addEventListener('click', () => this.resolveKeywords(null));
@@ -400,18 +391,7 @@ class CoverLetterApp {
         if (resolve) resolve(choice);
     }
 
-    // ---- Last resume (base for revisions) --------------------------------------
-
-    renderReuseRow() {
-        const row = document.getElementById('reuse-resume-row');
-        const hint = document.getElementById('reuse-resume-hint');
-        if (!row) return;
-        row.classList.toggle('hidden', !this.lastResume);
-        if (hint && this.lastResume) {
-            const target = [this.lastResume.role, this.lastResume.company].filter(Boolean).join(' at ');
-            hint.textContent = target ? `(last: ${target})` : '';
-        }
-    }
+    // ---- Last resume (restored into the preview on load) -----------------------
 
     async rememberResume(result, jobText) {
         this.lastResume = {
@@ -421,7 +401,6 @@ class CoverLetterApp {
             role: result.matchAnalysis?.role || '',
             generatedAt: result.metadata?.generatedAt || new Date().toISOString()
         };
-        this.renderReuseRow();
         try {
             await chrome.storage.local.set({ lastResume: this.lastResume });
         } catch (error) {
@@ -1353,12 +1332,8 @@ class CoverLetterApp {
         }
 
         this.showProfileStatus('Reading your resume…', 'loading');
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-                ? chrome.runtime.getURL('pdf.worker.min.js')
-                : 'pdf.worker.min.js';
-
-        const { profile: parsed, meta } = await ResumeParser.parse(pdfjsLib, buffer);
+        const { profile: parsed, meta } = await this.parseResumePdf(buffer);
+        await this.saveBaseline(parsed);
         const { profile, report } = ProfileMerge.merge(this.profile, parsed);
         this.profile = profile;
         this.lastParseMeta = meta;
@@ -1369,6 +1344,44 @@ class CoverLetterApp {
         this.showProfileStatus(this.describeMergeReport(report, meta), 'success');
         if (meta.warnings.length) {
             console.warn('Resume parser warnings:', meta.warnings);
+        }
+    }
+
+    parseResumePdf(buffer) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+                ? chrome.runtime.getURL('pdf.worker.min.js')
+                : 'pdf.worker.min.js';
+        return ResumeParser.parse(pdfjsLib, buffer);
+    }
+
+    // The baseline is the uploaded resume as parsed, frozen: generation edits
+    // it, and only a new upload replaces it (profile edits do not).
+    async saveBaseline(parsed) {
+        const { createBaseline } = await this.generation();
+        this.baselineResume = createBaseline(parsed, this.uploadedResume || {});
+        try {
+            await chrome.storage.local.set({ baselineResume: this.baselineResume });
+        } catch (error) {
+            console.error('Error saving baseline resume:', error);
+        }
+    }
+
+    // Uploads from before the baseline existed (or from an older parser) are
+    // re-parsed from the stored PDF so the user does not have to re-upload.
+    // Returns whether a current baseline is available afterwards.
+    async ensureBaseline() {
+        if (!this.uploadedResume?.dataBase64) return false;
+        const { isCurrentBaseline } = await this.generation();
+        if (isCurrentBaseline(this.baselineResume)) return true;
+        if (typeof pdfjsLib === 'undefined' || typeof ResumeParser === 'undefined') return false;
+        try {
+            const { profile: parsed } = await this.parseResumePdf(this.base64ToBytes(this.uploadedResume.dataBase64));
+            await this.saveBaseline(parsed);
+            return true;
+        } catch (error) {
+            console.error('Could not build the baseline from the stored resume:', error);
+            return false;
         }
     }
 
@@ -1772,18 +1785,27 @@ class CoverLetterApp {
   const jobText = document.getElementById('job-text').value.trim();
   if (!jobText) { this.showError('Please enter a job description.', false); return; }
   if (!this.profile.name) { this.showError('Please complete your profile first.', false); return; }
+  if (!this.uploadedResume) {
+    this.showError('Upload your current resume in the Profile tab first. The generator tailors that resume to the posting.', false);
+    return;
+  }
   if (!this.requireApiKeyForGeneration()) return;
 
   this.showLoading();
 
   try {
+    if (!(await this.ensureBaseline())) {
+      throw new Error('your uploaded resume could not be read. Try uploading it again in the Profile tab.');
+    }
     const checked = await this.checkKeywords(jobText);
     if (!checked) { this.showStatus('Cancelled.', 'error'); return; }
     const { match, profile } = checked;
 
-    // Revise the last resume rather than starting over, unless the user opted out.
-    const baseResume = this.reuseResume && this.lastResume ? this.lastResume.resumeContent : null;
-    this.showStatus(baseResume ? 'Revising your resume…' : 'Generating resume...', 'loading');
+    // Every posting starts from the user's own resume, never from the last
+    // tailored version.
+    const { baselineToResume } = await this.generation();
+    const baseResume = baselineToResume(this.baselineResume);
+    this.showStatus('Tailoring your resume…', 'loading');
     let result = await this.requestResume({ profile, jobText, match, baseResume });
 
     // The pipeline budgets by word count; only the rendered page knows whether it
@@ -1849,14 +1871,14 @@ class CoverLetterApp {
     describeResumeResult(result, { overflow, refit, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
-        const verb = meta.revised ? 'revised' : 'generated';
+        const verb = meta.revised ? 'tailored' : 'generated';
         if (overflow > 1.0) {
             parts.push(`Resume ${verb}, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
         } else {
             parts.push(refit ? `Resume ${verb} and trimmed to fit one page.` : `Resume ${verb}.`);
         }
         if (meta.revised && meta.baseBullets) {
-            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from the previous version.`);
+            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from your resume as written.`);
         }
         if (added.length) {
             parts.push(`Added to your skills: ${added.join(', ')}.`);

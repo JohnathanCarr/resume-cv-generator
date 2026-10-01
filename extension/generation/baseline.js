@@ -8,7 +8,7 @@
 
 // Bump when the parser or the snapshot shape changes; the extension re-parses
 // the stored PDF into a fresh snapshot when the stored version is older.
-const BASELINE_VERSION = 1;
+const BASELINE_VERSION = 2; // 2: skill groups kept with their labels
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
@@ -33,6 +33,11 @@ function createBaseline(parsed, source = {}) {
       location: str(p.location),
       summary: str(p.summary),
       skills: (p.skills || []).map(str).filter(Boolean),
+      // The resume's own skill lines; one unlabelled group when the parser
+      // found no category labels.
+      skillGroups: (p.skillGroups && p.skillGroups.length ? p.skillGroups : [{ label: '', items: p.skills || [] }])
+        .map((g, i) => ({ id: `skills:${i + 1}`, label: str(g.label), items: (g.items || []).map(str).filter(Boolean) }))
+        .filter(g => g.items.length),
       education: withIds(p.education, 'edu'),
       experiences: withIds(p.experiences, 'exp').map(e => ({ ...e, bullets: (e.bullets || []).map(str).filter(Boolean) })),
       projects: withIds(p.projects, 'proj').map(e => ({ ...e, bullets: (e.bullets || []).map(str).filter(Boolean) })),
@@ -52,17 +57,20 @@ function hasSummary(baseline) {
 
 const dates = (e) => [str(e.start), str(e.end)].filter(Boolean).join(' - ') || null;
 
-// The snapshot in the generator's RESUME_SCHEMA shape, so it can be passed as
-// `baseResume` (the CURRENT RESUME the model revises). summary is null when
-// the uploaded resume has none, which tells the model not to write one.
-function baselineToResume(baseline) {
-  const r = baseline?.resume || {};
+// A resume document (the snapshot's `resume`, or a tailored copy of it from
+// tailor.js) in the RESUME_SCHEMA shape the extension's formatResume()
+// renders. summary is null when there is none.
+function resumeDocToSchema(doc) {
+  const r = doc || {};
   const extraLine = (x) => [str(x.title), str(x.organization)].filter(Boolean).join(' – ')
     + (dates(x) ? ` (${dates(x)})` : '')
     + (str(x.description) ? `: ${str(x.description)}` : '');
+  const groups = r.skillGroups && r.skillGroups.length
+    ? r.skillGroups
+    : ((r.skills || []).length ? [{ label: '', items: r.skills }] : []);
   return {
     summary: str(r.summary) || null,
-    skills: (r.skills || []).length ? [`Skills: ${r.skills.join(', ')}`] : [],
+    skills: groups.map(g => `${g.label || 'Skills'}: ${g.items.join(', ')}`),
     education: (r.education || []).map(e => ({
       school: str(e.institution),
       degree: str(e.degreeType),
@@ -81,9 +89,13 @@ function baselineToResume(baseline) {
       location: str(e.location) || null,
       bullets: e.bullets || []
     })),
-    projects: (r.projects || []).map(p => ({ name: str(p.name), link: str(p.link) || null, bullets: p.bullets || [] })),
+    // The parser keeps a project's header text after the name (tagline, stack,
+    // year) as its description; show it where the resume had it.
+    projects: (r.projects || []).map(p => ({ name: [str(p.name), str(p.description)].filter(Boolean).join(' | '), link: str(p.link) || null, bullets: p.bullets || [] })),
     programs: (r.extras || []).map(extraLine).filter(Boolean)
   };
 }
 
-export { BASELINE_VERSION, createBaseline, isCurrentBaseline, hasSummary, baselineToResume };
+const baselineToResume = (baseline) => resumeDocToSchema(baseline?.resume);
+
+export { BASELINE_VERSION, createBaseline, isCurrentBaseline, hasSummary, baselineToResume, resumeDocToSchema };

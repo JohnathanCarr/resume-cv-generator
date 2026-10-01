@@ -2,11 +2,12 @@
 // Runs the generation pipeline (extension/generation/) over profiles × job
 // postings in-process and scores the output with score.js. No server needed.
 //
-//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research] [--revise]
+//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research]
 //
-// --revise chains the jobs per profile: the first resume is generated fresh
-// and each later one revises the previous result (as the extension does), so
-// the run measures whether revision keeps quality and how much it reuses.
+// Resumes are tailored the way the extension does it: an edit list against
+// the user's uploaded resume. The eval profiles have no uploaded resume, so
+// evalBaseline() stands one in: the profile minus some material (see there),
+// which also gives the swaps something to draw on.
 //
 // The key may also be read from test/eval/.env (OPENAI_API_KEY=...) for local
 // convenience. Outputs go to test/eval/runs/<timestamp>-<label>/ (gitignored);
@@ -55,6 +56,25 @@ function listProfiles(filter) {
   return out;
 }
 
+// The "uploaded resume" for an eval profile: the whole profile except the
+// last project and last certification/award (when there are two or more),
+// the last bullet of every job or project with three or more, the last
+// course of each school, and the last two skills. What is held back is the
+// pool the tailoring may swap in.
+function evalBaseline(profile, createBaseline) {
+  const lastOff = (list, min) => (list.length >= min ? list.slice(0, -1) : list);
+  const trimBullets = (e) => ({ ...e, bullets: lastOff(e.bullets || [], 3) });
+  const resume = {
+    ...profile,
+    skills: lastOff(lastOff(profile.skills || [], 6), 6),
+    education: (profile.education || []).map(e => ({ ...e, coursework: lastOff(String(e.coursework || '').split(/\s*,\s*/).filter(Boolean), 3).join(', ') })),
+    experiences: (profile.experiences || []).map(trimBullets),
+    projects: lastOff(profile.projects || [], 2).map(trimBullets),
+    extras: lastOff(profile.extras || [], 2)
+  };
+  return createBaseline(resume, { name: 'eval' });
+}
+
 function listJobs(filter) {
   const d = path.join(ROOT, 'jobs');
   return fs.readdirSync(d).filter(f => f.endsWith('.txt')).filter(f => !filter || filter.split(',').some(x => f.startsWith(x))).map(f => {
@@ -87,7 +107,7 @@ function rescore(runDir) {
     const [profile, job, kind] = f.replace(/\.json$/, '').split('__');
     const company = (saved.request.jobText.split('\n')[1] || '').split('·')[0].trim();
     const scored = kind === 'resume'
-      ? scoreResume({ resumeContent: saved.response.resumeContent, profile: saved.request.profile, jobText: saved.request.jobText, company })
+      ? scoreResume({ result: saved.response, baseline: saved.request.baseline, profile: saved.request.profile, jobText: saved.request.jobText })
       : scoreCoverLetter({ coverLetter: saved.response.coverLetter, profile: saved.request.profile, jobText: saved.request.jobText, company, unsourcedClaims: saved.response.unsourcedClaims });
     results.push({ kind, profile, job, ms: 0, ...scored });
     console.log(`${kind.padEnd(7)} ${fmt(scored.score)}  ${profile} × ${job}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
@@ -131,7 +151,6 @@ async function main() {
   const key = readKey();
   const only = arg('only', null);
   const research = !arg('no-research', false);
-  const revise = Boolean(arg('revise', false));
   const label = arg('label', 'run');
   const profiles = listProfiles(arg('profiles', null));
   const jobs = listJobs(arg('jobs', null));
@@ -139,7 +158,7 @@ async function main() {
 
   // The pipeline is an ES module; the extension page logs progress to the
   // console, which is noise here.
-  const { generateResume, generateCoverLetter } = await import(pathToFileURL(PIPELINE).href);
+  const { tailorResume, generateCoverLetter, createBaseline } = await import(pathToFileURL(PIPELINE).href);
   const quiet = (fn) => async (...args) => {
     const { log, warn } = console;
     console.log = () => {}; console.warn = () => {};
@@ -154,22 +173,16 @@ async function main() {
   console.log(`Running ${profiles.length} profile(s) × ${jobs.length} job(s)${only ? ` (${only} only)` : ''} → ${path.relative(process.cwd(), outDir)}\n`);
 
   for (const p of profiles) {
-    let baseResume = null;
+    const baseline = evalBaseline(p.profile, createBaseline);
     for (const j of jobs) {
       const body = { profile: p.profile, jobText: j.text, research };
       const tag = `${p.id} × ${j.id}`;
 
       if (!only || only === 'resume') {
-        const resumeBody = revise && baseResume ? { ...body, baseResume } : body;
-        const r = await call(quiet(generateResume), key, resumeBody);
-        const scored = r.ok ? scoreResume({ resumeContent: r.data.resumeContent, profile: p.profile, jobText: j.text, company: j.company }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
-        let reuse = '';
-        if (r.ok && r.data.metadata?.revised) {
-          scored.info.keptBullets = r.data.metadata.keptBullets;
-          scored.info.baseBullets = r.data.metadata.baseBullets;
-          reuse = `  kept ${r.data.metadata.keptBullets}/${r.data.metadata.baseBullets}`;
-        }
-        if (r.ok) baseResume = r.data.resumeContent;
+        const resumeBody = { ...body, baseline };
+        const r = await call(quiet(tailorResume), key, resumeBody);
+        const scored = r.ok ? scoreResume({ result: r.data, baseline, profile: p.profile, jobText: j.text }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
+        const reuse = r.ok ? `  ${scored.info.edits} edits ${JSON.stringify(scored.info.byOp)}  core kw ${scored.info.coverage}` : '';
         results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
         fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored }, null, 2));
         console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);

@@ -158,59 +158,86 @@ function profileAnchors(text, profile) {
 
 // ── Public scorers ────────────────────────────────────────────────────────
 
-function scoreResume({ resumeContent, profile, jobText, company }) {
+// Scores a tailored resume (pipeline tailorResume() result) against the
+// baseline it edited. Tailoring keeps the user's resume, so length and page
+// fill are the user's own; the rubric measures what the edits did and whether
+// they stayed honest.
+function scoreResume({ result, baseline, profile, jobText }) {
   const checks = {};
   const fails = [];
-  const r = resumeContent || {};
+  const r = result?.resumeContent || {};
+  const doc = result?.tailored || {};
+  const base = baseline?.resume || {};
+  const meta = result?.metadata || {};
+  const changes = result?.changes || [];
 
-  checks.validShape = typeof r === 'object' && Array.isArray(r.experience) ? 1 : 0;
+  checks.validShape = typeof r === 'object' && Array.isArray(r.experience) && Array.isArray(changes) ? 1 : 0;
   if (!checks.validShape) fails.push('invalid shape');
 
-  const sections = ['summary', 'skills', 'education', 'experience', 'projects'].filter(k => r[k] && (Array.isArray(r[k]) ? r[k].length : true));
-  checks.hasCoreSections = sections.length >= 4 ? 1 : sections.length / 5;
+  // Jobs and education are never touched: same entries, same headers, same order.
+  const header = (e) => [e.title, e.company, e.start, e.end].join('|');
+  const jobsSame = (doc.experiences || []).map(header).join('\n') === (base.experiences || []).map(header).join('\n');
+  const eduSame = (doc.education || []).map(e => e.institution).join('|') === (base.education || []).map(e => e.institution).join('|');
+  checks.historyIntact = jobsSame && eduSame ? 1 : 0;
+  if (!checks.historyIntact) fails.push('jobs or education changed');
+
+  // A summary only when the upload had one.
+  checks.summaryRule = Boolean((doc.summary || '').trim()) === Boolean((base.summary || '').trim()) ? 1 : 0;
+  if (!checks.summaryRule) fails.push('summary added or removed');
 
   const flat = [];
   const pushAll = (v) => { if (Array.isArray(v)) v.forEach(pushAll); else if (v && typeof v === 'object') Object.values(v).forEach(pushAll); else if (v != null) flat.push(String(v)); };
   pushAll(r);
   const text = flat.join('\n');
-  const totalWords = wc(text);
-  checks.wordBudget = totalWords <= 750 ? 1 : totalWords <= 850 ? 0.5 : 0;
-  if (totalWords > 850) fails.push(`over budget: ${totalWords} words`);
-  // A one-page resume should use the page — but only as far as the profile has
-  // material. Expected length is the material (plus headers) capped at a page.
-  // Tightened bullets come out shorter than the source, so ~90% of it is full use.
-  const available = wc(profileText(profile));
-  const expected = Math.min(650, Math.round(available * 0.9));
-  const fill = totalWords / expected;
-  checks.pageFill = fill >= 0.85 ? 1 : fill >= 0.65 ? 0.5 : 0;
-
-  const bullets = [...(r.experience || []), ...(r.projects || [])].flatMap(e => e.bullets || []);
-  const longBullets = bullets.filter(b => wc(b) > 30);
-  checks.bulletLength = bullets.length ? 1 - longBullets.length / bullets.length : 1;
-
-  const eduExpected = (profile.education || []).length;
-  const eduGot = Array.isArray(r.education) ? r.education.length : (r.education ? 1 : 0);
-  checks.educationComplete = eduExpected ? Math.min(1, eduGot / eduExpected) : 1;
-
-  const must = (profile.experiences || []).filter(e => e.mustInclude).map(e => lower(e.company));
-  const gotCompanies = (r.experience || []).map(e => lower(e.company));
-  const missingMust = must.filter(m => !gotCompanies.some(g => g.includes(m) || m.includes(g)));
-  checks.mustIncludeHonored = must.length ? 1 - missingMust.length / must.length : 1;
-  if (missingMust.length) fails.push(`mustInclude missing: ${missingMust.join(', ')}`);
-
   const fab = fabricatedNumbers(text, profile, jobText);
   checks.noFabricatedNumbers = fab.length ? 0 : 1;
   if (fab.length) fails.push(`fabricated numbers: ${fab.join(', ')}`);
 
-  const kws = relevantJdKeywords(jobText, profile);
-  const cov = coverage(text, kws);
-  checks.jdKeywordCoverage = +cov.ratio.toFixed(2);
+  // Core keyword coverage after tailoring, as a share of what was reachable:
+  // a keyword the candidate has nowhere in the profile cannot be added honestly.
+  const cov = meta.coverage || { before: { found: 0, total: 0 }, after: { found: 0, total: 0, missing: [] } };
+  const profileCorpus = lower(profileText(profile));
+  const reachable = cov.after.total - (cov.after.missing || []).filter(k => !profileCorpus.includes(lower(k))).length;
+  checks.coreKeywordCoverage = reachable ? +Math.min(1, cov.after.found / reachable).toFixed(2) : 1;
 
-  const verbStart = bullets.filter(b => /^[A-Z][a-z]+(?:ed|t|ilt|ade|an|rew|ote|ook|ed)\b/.test(b) || /^(?:Led|Built|Designed|Shipped|Owned|Reduced|Cut|Improved|Automated|Migrated|Launched|Created|Developed|Implemented|Engineered|Analy[sz]ed|Trained|Mentored|Delivered|Increased|Optimi[sz]ed|Published|Authored|Diagnosed|Extracted|Performed|Cleaned|Co-authored|Identified|Visuali[sz]ed|Provided|Adapt(?:ed)?)\b/.test(b));
-  checks.actionVerbBullets = bullets.length ? +(verbStart.length / bullets.length).toFixed(2) : 1;
+  // No keyword stuffing: no core keyword more than three times.
+  const coreTerms = (result?.matchAnalysis?.keywords || []).filter(k => k.importance === 'core').map(k => k.term);
+  const stuffed = coreTerms.filter(t => (lower(text).match(new RegExp(`\\b${lower(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')) || []).length > 3);
+  checks.noStuffing = stuffed.length ? 0 : 1;
+  if (stuffed.length) fails.push(`keyword used more than 3 times: ${stuffed.join(', ')}`);
+
+  // Restraint: a handful of edits, none rejected after the repair pass.
+  const n = changes.length;
+  checks.editRestraint = n <= 12 ? 1 : 0.5;
+  if (n > 12) fails.push(`${n} edits`);
+  checks.noRejectedEdits = (meta.rejected || []).length ? 0.5 : 1;
+  if ((meta.rejected || []).length) fails.push(`rejected: ${meta.rejected.join(' / ')}`);
+
+  // Unchanged lines must be byte-identical (true by construction; guards applyEdits).
+  // A bullet may only disappear if it was edited or its project was swapped out.
+  const swapped = new Set(changes.filter(c => /^proj:\d+$/.test(c.id)).map(c => c.id));
+  const edited = new Set(changes.map(c => c.id));
+  const docBullets = new Set([...(doc.experiences || []), ...(doc.projects || [])].flatMap(e => e.bullets || []));
+  const lostUnedited = [...(base.experiences || []), ...(base.projects || [])]
+    .filter(e => !swapped.has(e.id))
+    .flatMap(e => (e.bullets || []).map((b, i) => ({ id: `${e.id}.b${i + 1}`, b })))
+    .filter(({ id, b }) => !edited.has(id) && !docBullets.has(b));
+  checks.verbatimElsewhere = lostUnedited.length ? 0 : 1;
+  if (lostUnedited.length) fails.push(`unedited lines changed: ${lostUnedited.map(x => x.id).join(', ')}`);
+  const keptBullets = [...docBullets].filter(b => (base.experiences || []).concat(base.projects || []).some(e => (e.bullets || []).includes(b))).length;
 
   const score = Object.values(checks).reduce((a, b) => a + b, 0) / Object.keys(checks).length;
-  return { score: +score.toFixed(3), checks, fails, info: { totalWords, bullets: bullets.length, jdKeywords: kws.length, missingKeywords: cov.missing.slice(0, 8) } };
+  return {
+    score: +score.toFixed(3), checks, fails,
+    info: {
+      edits: n,
+      byOp: changes.reduce((a, c) => ({ ...a, [c.op]: (a[c.op] || 0) + 1 }), {}),
+      coverage: `${cov.before.found}/${cov.before.total} → ${cov.after.found}/${cov.after.total}`,
+      missingCore: cov.after.missing,
+      keptBullets,
+      words: `${meta.wordsBefore} → ${meta.wordsAfter}`
+    }
+  };
 }
 
 function scoreCoverLetter({ coverLetter, profile, jobText, company, unsourcedClaims }) {

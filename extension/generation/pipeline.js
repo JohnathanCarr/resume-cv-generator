@@ -10,6 +10,7 @@ import { buildResumeMessages, RESUME_SCHEMA, resumeBudget, wantsSummary } from '
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
+export { createBaseline, isCurrentBaseline, baselineToResume } from './baseline.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
 

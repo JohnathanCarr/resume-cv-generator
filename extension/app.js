@@ -380,6 +380,8 @@ class CoverLetterApp {
     async rememberResume(result, jobText) {
         this.lastResume = {
             resumeContent: result.resumeContent,
+            tailored: result.tailored || null, // tailored resume document, same ids as the baseline
+            changes: result.changes || [],     // one record per applied edit, for the preview highlights
             jobText,
             company: result.matchAnalysis?.company || '',
             role: result.matchAnalysis?.role || '',
@@ -1780,25 +1782,27 @@ class CoverLetterApp {
     const { match, profile } = checked;
 
     // Every posting starts from the user's own resume, never from the last
-    // tailored version.
-    const { baselineToResume } = await this.generation();
-    const baseResume = baselineToResume(this.baselineResume);
+    // tailored version. The model returns edits; the pipeline applies them.
     this.showStatus('Tailoring your resume…', 'loading');
-    let result = await this.requestResume({ profile, jobText, match, baseResume });
+    let result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume });
 
-    // The pipeline budgets by word count; only the rendered page knows whether it
-    // actually fits. If it overflows, ask once more with a tighter ceiling — as a
-    // revision of what it just produced, so the wording does not churn.
+    // Only the rendered page knows whether it fits. Edits may not push the
+    // resume onto more pages than the upload itself takes; if they do, ask
+    // once more with a cap on how many words the edits may add.
     let overflow = await this.renderResumeAndMeasure(result.resumeContent);
     let refit = false;
-    if (overflow > 1.0 && result.metadata?.words) {
-      const maxWords = Math.floor(result.metadata.words / overflow * 0.92);
-      this.showStatus('Trimming to one page…', 'loading');
-      const first = result.metadata;
-      result = await this.requestResume({ profile, jobText, match, baseResume: result.resumeContent, budget: { maxWords } });
-      result.metadata = { ...result.metadata, revised: first.revised, keptBullets: first.keptBullets, baseBullets: first.baseBullets };
+    let pageLimit = 1;
+    if (overflow > 1.0) {
+      const { baselineToResume } = await this.generation();
+      pageLimit = Math.max(1, Math.ceil(await this.renderResumeAndMeasure(baselineToResume(this.baselineResume)) - 0.02));
+      if (overflow > pageLimit) {
+        const meta = result.metadata;
+        const excessWords = Math.ceil(meta.wordsAfter * (1 - pageLimit / overflow)) + 5;
+        this.showStatus('Keeping it to your page count…', 'loading');
+        result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, maxNetWords: meta.wordsAfter - meta.wordsBefore - excessWords });
+        refit = true;
+      }
       overflow = await this.renderResumeAndMeasure(result.resumeContent);
-      refit = true;
     }
 
     this.lastApiCall.response = result;
@@ -1808,7 +1812,7 @@ class CoverLetterApp {
     await this.saveData();
     await this.rememberResume(result, jobText);
 
-    this.showStatus(this.describeResumeResult(result, { overflow, refit, added: checked.added }), overflow > 1.0 ? 'error' : 'success');
+    this.showStatus(this.describeResumeResult(result, { overflow, pageLimit, refit, added: checked.added }), overflow > pageLimit ? 'error' : 'success');
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
@@ -1825,8 +1829,8 @@ class CoverLetterApp {
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
-        const { generateResume } = await this.generation();
-        return generateResume(this.apiKey.value, body);
+        const { tailorResume } = await this.generation();
+        return tailorResume(this.apiKey.value, body);
     }
 
     // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).
@@ -1846,23 +1850,27 @@ class CoverLetterApp {
         });
     }
 
-    describeResumeResult(result, { overflow, refit, added = [] }) {
+    describeResumeResult(result, { overflow, pageLimit = 1, refit, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
-        const verb = meta.revised ? 'tailored' : 'generated';
-        if (overflow > 1.0) {
-            parts.push(`Resume ${verb}, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
+        const n = meta.edits || 0;
+        if (!n) {
+            parts.push('Your resume already matches this posting well; nothing was changed.');
         } else {
-            parts.push(refit ? `Resume ${verb} and trimmed to fit one page.` : `Resume ${verb}.`);
+            parts.push(`Resume tailored with ${n} edit${n === 1 ? '' : 's'}${refit ? ', kept to your page count' : ''}.`);
         }
-        if (meta.revised && meta.baseBullets) {
-            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from your resume as written.`);
+        const cov = meta.coverage;
+        if (cov && cov.after.total) {
+            parts.push(`Key ATS keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
         }
         if (added.length) {
             parts.push(`Added to your skills: ${added.join(', ')}.`);
         }
-        if (meta.words && meta.words < 450 && meta.usedBullets >= meta.availableBullets) {
-            parts.push(`It uses everything in your profile (${meta.words} words); a full page is usually 550–700. Add more achievements, coursework, or certifications to your profile to fill it.`);
+        if (overflow > pageLimit) {
+            parts.push(`It runs to ${overflow.toFixed(1)} pages, longer than your uploaded resume.`);
+        }
+        if (meta.rejected?.length) {
+            console.warn('Edits rejected by the validator:', meta.rejected);
         }
         return parts.join(' ');
     }

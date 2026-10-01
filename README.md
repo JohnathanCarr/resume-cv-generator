@@ -139,7 +139,7 @@ The model, per-call reasoning effort and research limits are pinned in `extensio
 
 ### Model and prompts
 - The model, reasoning effort per call and research limits live in `extension/generation/config.js`
-- Prompts live in `extension/generation/` — `matchAnalysis.js`, `companyResearch.js`, `resume.js`, `coverLetter.js`
+- Prompts live in `extension/generation/` — `matchAnalysis.js`, `companyResearch.js`, `tailor.js`, `coverLetter.js`
 - Before changing a prompt, run the eval set (`test/eval/README.md`) so you can compare before and after; it runs the same code the extension does
 
 ### Extension customization

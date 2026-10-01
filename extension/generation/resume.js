@@ -11,7 +11,7 @@ const RESUME_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    summary: { type: 'string', description: 'One-line headline for the top of the resume.' },
+    summary: { type: ['string', 'null'], description: 'One-line headline for the top of the resume, or null when the candidate has no summary.' },
     skills: { type: 'array', items: { type: 'string' }, description: 'Up to 4 category lines, e.g. "Languages: Go, TypeScript".' },
     education: {
       type: 'array',
@@ -75,7 +75,7 @@ Hard rules:
 5. Education: every institution in the profile, with the details given. Coursework only if the profile lists it; keep the 3–6 most relevant.
 6. Programs/certifications: only what the profile lists under certifications & achievements; otherwise an empty list.
 7. One U.S. Letter page. The user message gives a word target based on how much material the profile actually has; use as much of the profile as is relevant to reach it, and never pad or invent to get there. If you must cut, drop the least relevant bullets whole rather than shortening relevant ones.
-8. When the user message includes a CURRENT RESUME, revise it rather than writing a new one. Keep every line, bullet and skill entry that already serves this posting exactly as written; change only what the posting needs — reorder skill lines and mirror the posting's exact terms, swap in more relevant profile bullets, roles or projects and drop less relevant ones, update the summary line. Do not reword a bullet that already fits, and do not reintroduce anything the current resume dropped unless this posting calls for it.`;
+8. When the user message includes a CURRENT RESUME, revise it rather than writing a new one. Keep every line, bullet and skill entry that already serves this posting exactly as written; change only what the posting needs — reorder skill lines and mirror the posting's exact terms, swap in more relevant profile bullets, roles or projects and drop less relevant ones, edit the summary if it has one (never add one). Do not reword a bullet that already fits, and do not reintroduce anything the current resume dropped unless this posting calls for it.`;
 
 // How much the profile has to work with, so the target is honest.
 function countProfileWords(profile) {
@@ -96,14 +96,27 @@ function resumeBudget(profile, override = {}) {
   return { availableWords: available, targetWords: Math.max(150, target), maxWords: max };
 }
 
-// baseResume (optional) is a previously generated resume in RESUME_SCHEMA
-// shape; when given, the prompt asks for a revision of it instead of a fresh
-// draft (see system rule 8) so wording stays stable between runs.
+// A summary is kept (and retargeted) only if the candidate already has one:
+// in the resume being revised when there is one, otherwise in the profile.
+// The generator never writes a summary from nothing.
+function wantsSummary(profile, baseResume) {
+  const text = baseResume ? baseResume.summary : profile.summary;
+  return Boolean(typeof text === 'string' && text.trim());
+}
+
+// baseResume (optional) is a resume in RESUME_SCHEMA shape (the user's
+// uploaded resume, see baseline.js); when given, the prompt asks for a
+// revision of it instead of a fresh draft (see system rule 8).
 function buildResumeMessages({ profile, jobText, match, matchText, budget, baseResume = null }) {
   const roleName = match.role || 'the role';
   const companyName = match.company || 'the company';
   const mustIncludeExperiences = (profile.experiences || []).filter(exp => exp.mustInclude);
   const mustIncludeProjects = (profile.projects || []).filter(proj => proj.mustInclude);
+  const summaryRule = wantsSummary(profile, baseResume)
+    ? (baseResume
+      ? '• Summary: keep the current resume\'s summary and edit it only as far as the posting needs (mirror its exact terms); same length, same facts.'
+      : '• The summary is one line: the candidate\'s actual level and specialty in the posting\'s terms, no adjectives.')
+    : '• Summary: the candidate has none, so return null. Do not write one.';
 
   const task = baseResume
     ? `Revise the candidate's current resume (at the end of this message) into a targeted, one-page resume for the ${roleName} role at ${companyName}. Keep what already fits; change only what this posting needs.`
@@ -114,7 +127,7 @@ function buildResumeMessages({ profile, jobText, match, matchText, budget, baseR
 Selection:
 • Include every experience and project marked mustInclude. Then rank the rest by how many of the posting's requirements they evidence (see the match analysis), then recency.
 • Experience: 3–4 bullets per role for relevant roles, 1–2 for less relevant ones. Projects: 2–3 bullets each.
-• The summary is one line: the candidate's actual level and specialty in the posting's terms, no adjectives.
+${summaryRule}
 • Rewrite bullets to lead with what the posting asks for, but every fact in a bullet must already be in the profile's version of it.
 
 Length: the profile holds about ${budget.availableWords} words of material. Aim for about ${budget.targetWords} words in total and never exceed ${budget.maxWords}. If the material is thin, a shorter resume is correct; do not stretch it.
@@ -128,7 +141,7 @@ ${matchText}
 CANDIDATE PROFILE:
 Name: ${profile.name}
 Location: ${profile.location || 'Not specified'}
-Summary (adapt to the role; do not copy verbatim): ${profile.summary || 'None provided'}
+Summary: ${profile.summary || 'None provided'}
 Education (one line per institution; include every institution):
 ${formatEducation(profile)}
 
@@ -154,4 +167,4 @@ ${JSON.stringify(baseResume)}` : ''}`;
   ];
 }
 
-export { buildResumeMessages, RESUME_SCHEMA, resumeBudget, countProfileWords };
+export { buildResumeMessages, RESUME_SCHEMA, resumeBudget, countProfileWords, wantsSummary };

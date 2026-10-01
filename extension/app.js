@@ -31,9 +31,8 @@ class CoverLetterApp {
         this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
         this.researchEnabled = true;
         this.lastApiCall = null;
-        this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — base for the next revision
-        this.reuseResume = true;     // "Revise the last resume" toggle
-        this.ignoredKeywords = [];   // posting terms the user said do not apply; never asked about again
+        this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
+        this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
         
         // Initialize after a brief delay to ensure DOM is ready
         setTimeout(() => this.init(), 100);
@@ -52,6 +51,7 @@ class CoverLetterApp {
         this.setupAutosave();
         this.renderProfile();
         this.restoreLastResume();
+        this.ensureBaseline();
         this.maybeStartOnboarding();
         this.renderChecklist();
         this.connectToBackground();
@@ -81,14 +81,14 @@ class CoverLetterApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'reuseResume', 'ignoredKeywords']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'baselineResume']);
         this.onboarding = result.onboarding || null;
         this.apiKey = result.apiKey || null;
         this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
         this.researchEnabled = result.researchEnabled !== false;
         this.lastResume = result.lastResume && result.lastResume.resumeContent ? result.lastResume : null;
-        this.reuseResume = result.reuseResume !== false;
-        this.ignoredKeywords = Array.isArray(result.ignoredKeywords) ? result.ignoredKeywords : [];
+        this.baselineResume = result.baselineResume || null;
+        chrome.storage.local.remove(['reuseResume', 'ignoredKeywords']).catch?.(() => {}); // retired settings
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -173,28 +173,12 @@ class CoverLetterApp {
             });
         }
 
-        // Revise-the-last-resume toggle (row is hidden until a resume exists)
-        const reuseToggle = document.getElementById('reuse-resume');
-        if (reuseToggle) {
-            reuseToggle.checked = this.reuseResume;
-            reuseToggle.addEventListener('change', (e) => {
-                this.reuseResume = e.target.checked;
-                chrome.storage.local.set({ reuseResume: this.reuseResume }).catch?.(() => {});
-            });
-        }
-        this.renderReuseRow();
-
         // Keyword check modal: resolved by promptForKeywords()
         document.getElementById('keywords-close')?.addEventListener('click', () => this.resolveKeywords(null));
         document.getElementById('keywords-cancel')?.addEventListener('click', () => this.resolveKeywords(null));
         document.getElementById('keywords-continue')?.addEventListener('click', () => this.resolveKeywords(this.readKeywordChoices()));
         document.getElementById('keywords-modal')?.addEventListener('click', (e) => {
             if (e.target.id === 'keywords-modal') this.resolveKeywords(null);
-        });
-        document.getElementById('ignored-keywords-reset')?.addEventListener('click', async () => {
-            this.ignoredKeywords = [];
-            await chrome.storage.local.set({ ignoredKeywords: [] });
-            this.renderSettings();
         });
 
         // Settings / API key
@@ -341,7 +325,7 @@ class CoverLetterApp {
         this.showStatus('Reading the posting…', 'loading');
         const { analyzeJob, missingKeywords, applyKeywords } = await this.generation();
         const match = await analyzeJob(this.apiKey.value, { profile: this.profile, jobText });
-        const missing = missingKeywords(match, this.profile, { ignored: this.ignoredKeywords });
+        const missing = missingKeywords(match, this.profile);
         if (!missing.length) return { match, profile: this.profile, added: [] };
 
         this.hideLoading();
@@ -355,20 +339,13 @@ class CoverLetterApp {
             this.renderSkills();
             await this.saveData();
         }
-        if (choice.remember) {
-            const rejected = missing.filter(kw => !choice.accepted.includes(kw));
-            if (rejected.length) {
-                this.ignoredKeywords = [...new Set([...this.ignoredKeywords, ...rejected])];
-                await chrome.storage.local.set({ ignoredKeywords: this.ignoredKeywords });
-            }
-        }
         return { match: applied.match, profile: this.profile, added: applied.added };
     }
 
     promptForKeywords(keywords) {
         const list = document.getElementById('keywords-list');
         const modal = document.getElementById('keywords-modal');
-        if (!list || !modal) return Promise.resolve({ accepted: [], remember: false });
+        if (!list || !modal) return Promise.resolve({ accepted: [] });
         list.innerHTML = '';
         keywords.forEach((kw, i) => {
             const label = document.createElement('label');
@@ -381,8 +358,6 @@ class CoverLetterApp {
             list.appendChild(label);
         });
         this._keywordOptions = keywords;
-        const remember = document.getElementById('keywords-remember');
-        if (remember) remember.checked = true;
         modal.classList.remove('hidden');
         return new Promise((resolve) => { this._keywordResolve = resolve; });
     }
@@ -390,7 +365,7 @@ class CoverLetterApp {
     readKeywordChoices() {
         const accepted = [...document.querySelectorAll('#keywords-list input:checked')]
             .map(el => this._keywordOptions[Number(el.dataset.index)]).filter(Boolean);
-        return { accepted, remember: Boolean(document.getElementById('keywords-remember')?.checked) };
+        return { accepted };
     }
 
     resolveKeywords(choice) {
@@ -400,18 +375,7 @@ class CoverLetterApp {
         if (resolve) resolve(choice);
     }
 
-    // ---- Last resume (base for revisions) --------------------------------------
-
-    renderReuseRow() {
-        const row = document.getElementById('reuse-resume-row');
-        const hint = document.getElementById('reuse-resume-hint');
-        if (!row) return;
-        row.classList.toggle('hidden', !this.lastResume);
-        if (hint && this.lastResume) {
-            const target = [this.lastResume.role, this.lastResume.company].filter(Boolean).join(' at ');
-            hint.textContent = target ? `(last: ${target})` : '';
-        }
-    }
+    // ---- Last resume (restored into the preview on load) -----------------------
 
     async rememberResume(result, jobText) {
         this.lastResume = {
@@ -421,7 +385,6 @@ class CoverLetterApp {
             role: result.matchAnalysis?.role || '',
             generatedAt: result.metadata?.generatedAt || new Date().toISOString()
         };
-        this.renderReuseRow();
         try {
             await chrome.storage.local.set({ lastResume: this.lastResume });
         } catch (error) {
@@ -1020,12 +983,6 @@ class CoverLetterApp {
     }
 
     renderSettings({ replacing = false } = {}) {
-        const resetBtn = document.getElementById('ignored-keywords-reset');
-        if (resetBtn) {
-            const n = this.ignoredKeywords.length;
-            resetBtn.disabled = n === 0;
-            resetBtn.textContent = n ? `Ask again about ${n} skipped term${n === 1 ? '' : 's'}` : 'No skipped terms';
-        }
         const saved = document.getElementById('api-key-saved');
         const entry = document.getElementById('api-key-entry');
         const cancel = document.getElementById('api-key-cancel');
@@ -1353,12 +1310,8 @@ class CoverLetterApp {
         }
 
         this.showProfileStatus('Reading your resume…', 'loading');
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-                ? chrome.runtime.getURL('pdf.worker.min.js')
-                : 'pdf.worker.min.js';
-
-        const { profile: parsed, meta } = await ResumeParser.parse(pdfjsLib, buffer);
+        const { profile: parsed, meta } = await this.parseResumePdf(buffer);
+        await this.saveBaseline(parsed);
         const { profile, report } = ProfileMerge.merge(this.profile, parsed);
         this.profile = profile;
         this.lastParseMeta = meta;
@@ -1369,6 +1322,44 @@ class CoverLetterApp {
         this.showProfileStatus(this.describeMergeReport(report, meta), 'success');
         if (meta.warnings.length) {
             console.warn('Resume parser warnings:', meta.warnings);
+        }
+    }
+
+    parseResumePdf(buffer) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+                ? chrome.runtime.getURL('pdf.worker.min.js')
+                : 'pdf.worker.min.js';
+        return ResumeParser.parse(pdfjsLib, buffer);
+    }
+
+    // The baseline is the uploaded resume as parsed, frozen: generation edits
+    // it, and only a new upload replaces it (profile edits do not).
+    async saveBaseline(parsed) {
+        const { createBaseline } = await this.generation();
+        this.baselineResume = createBaseline(parsed, this.uploadedResume || {});
+        try {
+            await chrome.storage.local.set({ baselineResume: this.baselineResume });
+        } catch (error) {
+            console.error('Error saving baseline resume:', error);
+        }
+    }
+
+    // Uploads from before the baseline existed (or from an older parser) are
+    // re-parsed from the stored PDF so the user does not have to re-upload.
+    // Returns whether a current baseline is available afterwards.
+    async ensureBaseline() {
+        if (!this.uploadedResume?.dataBase64) return false;
+        const { isCurrentBaseline } = await this.generation();
+        if (isCurrentBaseline(this.baselineResume)) return true;
+        if (typeof pdfjsLib === 'undefined' || typeof ResumeParser === 'undefined') return false;
+        try {
+            const { profile: parsed } = await this.parseResumePdf(this.base64ToBytes(this.uploadedResume.dataBase64));
+            await this.saveBaseline(parsed);
+            return true;
+        } catch (error) {
+            console.error('Could not build the baseline from the stored resume:', error);
+            return false;
         }
     }
 
@@ -1772,18 +1763,27 @@ class CoverLetterApp {
   const jobText = document.getElementById('job-text').value.trim();
   if (!jobText) { this.showError('Please enter a job description.', false); return; }
   if (!this.profile.name) { this.showError('Please complete your profile first.', false); return; }
+  if (!this.uploadedResume) {
+    this.showError('Upload your current resume in the Profile tab first. The generator tailors that resume to the posting.', false);
+    return;
+  }
   if (!this.requireApiKeyForGeneration()) return;
 
   this.showLoading();
 
   try {
+    if (!(await this.ensureBaseline())) {
+      throw new Error('your uploaded resume could not be read. Try uploading it again in the Profile tab.');
+    }
     const checked = await this.checkKeywords(jobText);
     if (!checked) { this.showStatus('Cancelled.', 'error'); return; }
     const { match, profile } = checked;
 
-    // Revise the last resume rather than starting over, unless the user opted out.
-    const baseResume = this.reuseResume && this.lastResume ? this.lastResume.resumeContent : null;
-    this.showStatus(baseResume ? 'Revising your resume…' : 'Generating resume...', 'loading');
+    // Every posting starts from the user's own resume, never from the last
+    // tailored version.
+    const { baselineToResume } = await this.generation();
+    const baseResume = baselineToResume(this.baselineResume);
+    this.showStatus('Tailoring your resume…', 'loading');
     let result = await this.requestResume({ profile, jobText, match, baseResume });
 
     // The pipeline budgets by word count; only the rendered page knows whether it
@@ -1849,14 +1849,14 @@ class CoverLetterApp {
     describeResumeResult(result, { overflow, refit, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
-        const verb = meta.revised ? 'revised' : 'generated';
+        const verb = meta.revised ? 'tailored' : 'generated';
         if (overflow > 1.0) {
             parts.push(`Resume ${verb}, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
         } else {
             parts.push(refit ? `Resume ${verb} and trimmed to fit one page.` : `Resume ${verb}.`);
         }
         if (meta.revised && meta.baseBullets) {
-            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from the previous version.`);
+            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from your resume as written.`);
         }
         if (added.length) {
             parts.push(`Added to your skills: ${added.join(', ')}.`);
@@ -2110,11 +2110,8 @@ class CoverLetterApp {
                             border-bottom: 1pt solid #000;
                             padding-bottom: 2pt;
                         ">PROGRAMS / CERTIFICATIONS</h2>
-                        <div style="font-size: ${bodyFontSize}; margin-bottom: 0.3em; line-height: 1.3;">
-                            <strong>Paycom – Technology Summer Engagement Program – Austin, Texas</strong> – Jun 2025<br>
-                            • Selected participant in Paycom’s multi-day tech immersion program. Completed workshops on secure documentation and compliance strategies.<br>
-                            • Collaborated with a student team to design and pitch a feature concept to Paycom engineers, gaining feedback on Agile teamwork and presentation skills.
-                        </div>
+                        ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
+                        <div style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
                         </div>
                     ` : ''
                     }

@@ -1,7 +1,7 @@
 // node --test test/unit/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { missingKeywords, applyKeywords } from '../../extension/generation/keywords.js';
+import { missingKeywords, applyKeywords, keywordTerms, MAX_ASKED } from '../../extension/generation/keywords.js';
 
 const profile = {
   summary: 'Backend engineer',
@@ -22,9 +22,27 @@ test('matches whole terms only, case-insensitively, through punctuation', () => 
   assert.deepEqual(missingKeywords(match, profile), ['Google Cloud', 'C']);
 });
 
-test('drops duplicates and ignored terms', () => {
+test('drops duplicates', () => {
   const match = { keywords: ['Kubernetes', 'kubernetes', 'Terraform', 'Docker'] };
-  assert.deepEqual(missingKeywords(match, profile, { ignored: ['terraform'] }), ['Kubernetes', 'Docker']);
+  assert.deepEqual(missingKeywords(match, profile), ['Kubernetes', 'Terraform', 'Docker']);
+});
+
+test('asks only about core keywords', () => {
+  const match = { keywords: [
+    { term: 'Kubernetes', importance: 'core' },
+    { term: 'communication', importance: 'supporting' },
+    { term: 'Terraform', importance: 'core' },
+    { term: 'fast-paced environment', importance: 'supporting' }
+  ] };
+  assert.deepEqual(missingKeywords(match, profile), ['Kubernetes', 'Terraform']);
+  assert.deepEqual(keywordTerms(match), ['Kubernetes', 'communication', 'Terraform', 'fast-paced environment']);
+  assert.deepEqual(keywordTerms(match, { coreOnly: true }), ['Kubernetes', 'Terraform']);
+});
+
+test('caps the list at MAX_ASKED, keeping posting order', () => {
+  const terms = Array.from({ length: MAX_ASKED + 4 }, (_, i) => `Tool${i}`);
+  const match = { keywords: terms.map(term => ({ term, importance: 'core' })) };
+  assert.deepEqual(missingKeywords(match, profile), terms.slice(0, MAX_ASKED));
 });
 
 test('applyKeywords appends new skills and patches requirement evidence without mutating inputs', () => {

@@ -68,7 +68,7 @@ Your key is stored only in this browser's extension storage and sent directly to
 ### Generate Documents
 1. **Go to the Generate tab**
 2. **Paste any job description**
-3. **Choose your document**. Before either is written, the posting is read against your profile; if it names skills or tools your profile does not mention anywhere, a dialog lists them — tick the ones you actually have (they are added to your skills so the document can use the posting's wording), leave the rest, **Continue**. Unticked terms are remembered and not asked about again (reset in Settings).
+3. **Choose your document**. Before either is written, the posting is read against your profile; if its key skills or tools (at most 8, the ones a recruiter would filter on) are missing from your profile, a dialog lists them — tick the ones you actually have (they are added to your skills so the document can use the posting's wording), leave the rest, **Continue**.
    - **Generate Cover Letter** → 250–350 words, grounded in your profile and the posting. Leave **Research the company** ticked for a few web searches about the employer (roughly $0.05–0.10 per letter, cached per company for 30 days); untick it to use the posting only.
    - **Generate Resume** → one page, ATS-friendly, sized to how much material your profile actually has. After the first one, **Revise the last resume instead of starting over** is ticked by default: the new resume keeps every bullet and line that still fits and changes only what the posting needs. Untick it for a fresh draft.
 4. **Save it**:

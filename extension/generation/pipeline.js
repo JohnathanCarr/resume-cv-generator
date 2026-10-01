@@ -6,7 +6,7 @@
 import { CONFIG } from './config.js';
 import { createClient, generateStructured, safeErrorMessage } from './openai.js';
 import { analyzeMatch, renderMatchForPrompt } from './matchAnalysis.js';
-import { buildResumeMessages, RESUME_SCHEMA, resumeBudget } from './resume.js';
+import { buildResumeMessages, RESUME_SCHEMA, resumeBudget, wantsSummary } from './resume.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
@@ -110,6 +110,8 @@ export async function generateResume(apiKey, { profile, jobText, budget: budgetO
 
   // Never show certifications the profile does not have.
   if (!(Array.isArray(profile.extras) && profile.extras.length)) resume.programs = [];
+  // Nor a summary the candidate never wrote.
+  if (!wantsSummary(profile, baseResume)) resume.summary = null;
   const reuse = baseResume ? keptBullets(baseResume, resume) : null;
   const endTime = Date.now();
   console.log(`[${new Date().toISOString()}] Resume generated in ${endTime - startTime}ms (${words} words, ${bulletCount(resume)}/${availableBullets} bullets${reuse ? `, kept ${reuse.kept}/${reuse.base} from the previous resume` : ''})`);

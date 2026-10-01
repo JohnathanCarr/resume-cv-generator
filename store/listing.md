@@ -1,7 +1,7 @@
 # Chrome Web Store listing
 
 Everything the Developer Dashboard asks for, in the order it asks. Paste from here.
-Screenshots and the icon are rendered by `scripts/screenshots.sh` and `store/icon.svg`.
+Screenshots (`screenshot-*.jpg`, 1280×800, no alpha as the store requires) are rendered by `scripts/screenshots.sh`; the icon comes from `store/icon.svg`.
 
 ## Store listing
 

@@ -15,6 +15,16 @@ for f in manifest.json background.js app.html app.js icons/icon128.png; do
   [ -f "$SRC/$f" ] || { echo "Missing $SRC/$f" >&2; exit 1; }
 done
 
+# MV3 bans remotely hosted code, and the store's scanner flags script URLs
+# even in unreachable library branches (rejected once for jsPDF's PDFObject
+# CDN link). Fail here instead of in review.
+REMOTE_CODE='(cdnjs\.cloudflare\.com|unpkg\.com|cdn\.jsdelivr\.net|<script[^>]+src=["'"'"']?https?:|import\(["'"'"']https?:|importScripts\(["'"'"']https?:)'
+if HITS="$(grep -rEon "$REMOTE_CODE" "$SRC" --include='*.js' --include='*.html')"; then
+  echo "Remotely hosted code found (MV3 violation):" >&2
+  echo "$HITS" | cut -c1-200 >&2
+  exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 rm -f "$OUT"
 ( cd "$SRC" && zip -qr -X "$OUT" . -x '.DS_Store' '*/.DS_Store' '*.md' '.*' )

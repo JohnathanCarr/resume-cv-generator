@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Resume Studio",
   "version": "1.0.0",
-  "description": "Tailored resumes and cover letters from your profile and a job posting, using your own OpenAI key. Nothing leaves your browser except calls to OpenAI.",
+  "description": "Tailored, ATS-friendly resumes and cover letters from your own profile and a job posting. Bring your own OpenAI key; nothing else.",
 
   "icons": {
     "16": "icons/icon16.png",

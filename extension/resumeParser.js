@@ -662,26 +662,51 @@
         return items;
     }
 
+    // Returns { skills, groups }: the flat, deduplicated list, and the same
+    // items grouped under the resume's own category labels ("Languages: Go,
+    // Python" → { label: 'Languages', items: ['Go', 'Python'] }). Items with
+    // no label go in a group labelled ''. Groups keep the resume's order.
     function parseSkills(section) {
         const skills = [];
         const seen = new Set();
+        const groups = [];
         const LEAD_RE = /^(?:Proficient|Proficiency|Experienced|Experience|Familiar|Familiarity|Knowledge|Skilled|Comfortable|Working knowledge|Exposure)\s+(?:in|with|of)\s+/i;
 
         // "Label:" prefixes. After a separator the label may contain spaces
         // ("Frameworks & Tools:"); after plain whitespace only a single token
         // is taken so "JavaScript Frameworks/Libs:" keeps "JavaScript".
-        const CATEGORY_RE = /(?:(?:^|[,;|•·])\s*[A-Za-z][\w\/&()' -]{1,40}:\s*|\s+[A-Za-z][\w\/&()'-]{1,30}:\s*)/g;
+        const CATEGORY_RE = /(?:(?:^|[,;|•·])\s*([A-Za-z][\w\/&()' -]{1,40}):\s*|\s+([A-Za-z][\w\/&()'-]{1,30}):\s*)/g;
 
+        let group = null;
+        const startGroup = (label) => {
+            label = clean(label || '');
+            group = groups.find(g => g.label.toLowerCase() === label.toLowerCase());
+            if (!group) { group = { label, items: [] }; groups.push(group); }
+        };
         const push = (item) => {
             const key = item.toLowerCase();
             if (seen.has(key)) return;
             seen.add(key);
             skills.push(item);
+            group.items.push(item);
         };
 
-        for (let text of joinSkillLines(section.lines)) {
-            // "Languages: Python, Java; Tools: Git" → drop every "Label:" prefix.
-            text = text.replace(CATEGORY_RE, ', ');
+        // "Languages: Python, Java; Tools: Git" → [['Languages', 'Python, Java;'], ['Tools', 'Git']]
+        const segments = (text) => {
+            const out = [];
+            let last = 0, label = '';
+            for (const m of text.matchAll(CATEGORY_RE)) {
+                out.push([label, text.slice(last, m.index)]);
+                label = m[1] || m[2];
+                last = m.index + m[0].length;
+            }
+            out.push([label, text.slice(last)]);
+            return out.filter(([l, body]) => l || body.trim());
+        };
+
+        for (const line of joinSkillLines(section.lines)) {
+          for (let [label, text] of segments(line)) {
+            startGroup(label);
             // "AWS (SQS, Lambda)" → "AWS, SQS, Lambda"
             text = text.replace(/\(([^)]*)\)/g, ', $1, ');
 
@@ -701,8 +726,9 @@
                     push(item);
                 }
             }
+          }
         }
-        return skills;
+        return { skills, groups: groups.filter(g => g.items.length) };
     }
 
     function parseExtras(section, leftMargin, rightMargin, trustEOL) {
@@ -770,7 +796,7 @@
 
         const profile = {
             name: '', contact: '', location: '', summary: '',
-            education: [], skills: [], experiences: [], projects: [], extras: []
+            education: [], skills: [], skillGroups: [], experiences: [], projects: [], extras: []
         };
 
         if (!lines.length) {
@@ -790,9 +816,12 @@
                 case 'summary':
                     profile.summary = clean([profile.summary, ...section.lines.map(l => l.text)].join(' '));
                     break;
-                case 'skills':
-                    profile.skills.push(...parseSkills(section));
+                case 'skills': {
+                    const { skills, groups } = parseSkills(section);
+                    profile.skills.push(...skills);
+                    profile.skillGroups.push(...groups);
                     break;
+                }
                 case 'education':
                     profile.education.push(...parseEducation(section, leftMargin, rightMargin));
                     break;

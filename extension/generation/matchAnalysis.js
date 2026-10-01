@@ -7,6 +7,7 @@
 // with strength "none" has no evidence and must not be claimed downstream.
 
 import { CONFIG } from './config.js';
+import { keywordTerms } from './keywords.js';
 const { GENERATION_MODEL, REASONING } = CONFIG;
 
 // Renders the profile with stable ids so the model can cite items.
@@ -90,7 +91,19 @@ const MATCH_SCHEMA = {
         required: ['text', 'kind', 'evidence', 'strength']
       }
     },
-    keywords: { type: 'array', items: { type: 'string' }, description: 'Skills, tools and phrases from the posting that an applicant tracking system would match on, in the posting\'s exact wording. Include all of them, whether or not the candidate has them.' }
+    keywords: {
+      type: 'array',
+      description: 'Skills, tools and phrases from the posting that an applicant tracking system would match on, in the posting\'s exact wording, whether or not the candidate has them.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          term: { type: 'string', description: 'The posting\'s exact wording.' },
+          importance: { type: 'string', enum: ['core', 'supporting'] }
+        },
+        required: ['term', 'importance']
+      }
+    }
   },
   required: ['company', 'role', 'seniority', 'location', 'about_company', 'requirements', 'keywords']
 };
@@ -102,6 +115,7 @@ Rules:
 - List every requirement and qualification in the posting, one per entry, marking each as required or preferred. Keep the posting's wording.
 - For each requirement, cite the profile ids that genuinely support it. Cite an item only if it demonstrates the requirement, not merely mentions a related word. strength is "strong" when the evidence clearly meets it, "partial" when it is adjacent or below the stated bar (for example fewer years, related tool, coursework only), and "none" when nothing in the profile supports it — in which case evidence must be empty.
 - keywords are the posting's exact terms an applicant tracking system would look for: languages, tools, frameworks, methodologies, certifications, and short phrases like "incident response". Do not paraphrase them.
+- Mark a keyword "core" only if a recruiter would plausibly filter candidates on it: a concrete, nameable hard skill, tool, language, platform, methodology or certification (usually 1–3 words, e.g. "PyTorch", "A/B testing", "HIPAA") that is in a required qualification or named more than once. Usually 3–8 per posting. Everything else is "supporting": the job title itself, descriptions of experience ("reliable APIs at scale", "applied ML in production"), categories where the posting also names the specific tools ("data visualization tool" when it lists Tableau), preferred or nice-to-have items mentioned once, soft skills ("communication", "ownership"), and generic phrases ("fast-paced environment", "problem solving").
 - about_company contains only what the posting says. Do not add outside knowledge.`;
 
 async function analyzeMatch(openai, { profile, jobText }) {
@@ -132,7 +146,10 @@ function renderMatchForPrompt(match) {
   for (const r of match.requirements) {
     lines.push(`- [${r.kind}] ${r.text} → ${r.strength.toUpperCase()}${r.evidence.length ? ` (evidence: ${r.evidence.join(', ')})` : ''}`);
   }
-  lines.push('', `ATS keywords from the posting: ${match.keywords.join(', ')}`);
+  const core = keywordTerms(match, { coreOnly: true });
+  const supporting = keywordTerms(match).filter(t => !core.includes(t));
+  lines.push('', `Core ATS keywords (mirror these first): ${core.join(', ') || 'none'}`);
+  if (supporting.length) lines.push(`Supporting ATS keywords: ${supporting.join(', ')}`);
   return lines.join('\n');
 }
 

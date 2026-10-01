@@ -1,7 +1,10 @@
 // ATS keyword gap check. The match analysis returns the posting's exact ATS
-// keywords whether or not the candidate has them; this module finds the ones
-// the profile does not mention at all so the extension can ask the user
-// whether they apply. Pure functions, no DOM, no API calls.
+// keywords, each marked core or supporting, whether or not the candidate has
+// them; this module finds the core ones the profile does not mention at all
+// so the extension can ask the user whether they apply. Supporting terms are
+// never asked about: they are mirrored when the candidate has them, but a
+// long list of soft skills and passing mentions buries the terms that matter.
+// Pure functions, no DOM, no API calls.
 //
 // Terms the user confirms are appended to profile.skills — the profile stays
 // the single source of truth, so the resume prompt's no-fabrication rule still
@@ -39,20 +42,31 @@ function corpusHas(corpus, term) {
   return new RegExp(`(^|[^a-z0-9+#])${escapeRegExp(term)}([^a-z0-9+#]|$)`).test(corpus);
 }
 
-// Keywords from the match that appear nowhere in the profile, in the posting's
-// wording, deduplicated case-insensitively and minus any the user has already
-// said do not apply. Order follows the posting.
-function missingKeywords(match, profile, { ignored = [] } = {}) {
+// At most this many terms are asked about per posting.
+const MAX_ASKED = 8;
+
+// The match's keyword terms in posting order. Plain strings (matches from
+// before keywords carried an importance) count as core.
+function keywordTerms(match, { coreOnly = false } = {}) {
+  return ((match && match.keywords) || [])
+    .map(k => (typeof k === 'string' ? { term: k, importance: 'core' } : k || {}))
+    .filter(k => !coreOnly || k.importance === 'core')
+    .map(k => String(k.term || '').trim())
+    .filter(Boolean);
+}
+
+// Core keywords that appear nowhere in the profile, in the posting's wording,
+// deduplicated case-insensitively, in posting order, capped at `limit`.
+function missingKeywords(match, profile, { limit = MAX_ASKED } = {}) {
   const corpus = profileCorpus(profile);
-  const skip = new Set(ignored.map(normalizeTerm));
   const seen = new Set();
   const out = [];
-  for (const raw of (match && match.keywords) || []) {
-    const kw = String(raw || '').trim();
+  for (const kw of keywordTerms(match, { coreOnly: true })) {
     const term = normalizeTerm(kw);
-    if (!term || seen.has(term) || skip.has(term)) continue;
+    if (!term || seen.has(term)) continue;
     seen.add(term);
     if (!corpusHas(corpus, term)) out.push(kw);
+    if (out.length >= limit) break;
   }
   return out;
 }
@@ -86,4 +100,4 @@ function applyKeywords(match, profile, accepted) {
   return { profile: nextProfile, match: nextMatch, added };
 }
 
-export { missingKeywords, applyKeywords, normalizeTerm };
+export { missingKeywords, applyKeywords, keywordTerms, normalizeTerm, MAX_ASKED };

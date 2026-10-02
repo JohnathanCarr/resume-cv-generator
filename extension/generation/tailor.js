@@ -12,11 +12,20 @@
 //   skills   target=skills:<n>, items         the full, reordered item list for one skill
 //                                             line, keeping every original item, adding
 //                                             only skills from the profile
+//   remove   target=<item id>                 drop a bullet (a job keeps at least one),
+//                                             a project, an extra or a coursework line,
+//                                             only to fit the page
 // Jobs, education entries and headers are never edited or removed.
+//
+// The page is a hard limit, planned from the start: with a layout (layout.js)
+// every line in the prompt carries its size and spare room, the page's free
+// space is stated, validateEdits() totals the height every edit adds or saves,
+// and fitToPage() is the last resort (undo growth, then drop whole items).
 //
 // Pure functions, no DOM, no API calls.
 
 import { normalizeTerm, keywordTerms } from './keywords.js';
+import { lineCount, spareChars, itemHeight, projectHeight, estimateDocHeight } from './layout.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const norm = (s) => String(s || '').toLowerCase().replace(/[.,;:'"()]/g, '').replace(/\s+/g, ' ').trim();
@@ -104,19 +113,26 @@ function extraText(x) {
     + (dates(x) ? ` (${dates(x)})` : '') + (str(x.description) ? `: ${str(x.description)}` : '');
 }
 
-function renderDocForPrompt(doc) {
+const skillLineText = (g, items = g.items) => `${g.label || 'Skills'}: ${items.join(', ')}`;
+
+// With a layout, each line's tag says how many rendered lines it takes and
+// how many characters still fit before it wraps onto another.
+function renderDocForPrompt(doc, layout = null) {
+  const tag = (id, kind, text) => layout
+    ? `[${id} · ${lineCount(layout, kind, text)} line${lineCount(layout, kind, text) === 1 ? '' : 's'}, ${spareChars(layout, kind, text)} spare]`
+    : `[${id}]`;
   const out = [];
-  if (str(doc.summary)) out.push('SUMMARY', `[summary] ${doc.summary}`, '');
+  if (str(doc.summary)) out.push('SUMMARY', `${tag('summary', 'summary', doc.summary)} ${doc.summary}`, '');
   if ((doc.skillGroups || []).length) {
     out.push('SKILLS');
-    for (const g of doc.skillGroups) out.push(`[${g.id}] ${g.label ? `${g.label}: ` : ''}${g.items.join(', ')}`);
+    for (const g of doc.skillGroups) out.push(`${tag(g.id, 'skills', skillLineText(g))} ${g.label ? `${g.label}: ` : ''}${g.items.join(', ')}`);
     out.push('');
   }
   if ((doc.experiences || []).length) {
     out.push('EXPERIENCE (job headers are fixed)');
     for (const e of doc.experiences) {
       out.push(`${e.id}: ${e.title} — ${e.company}${dates(e) ? ` (${dates(e)})` : ''}`);
-      (e.bullets || []).forEach((b, i) => out.push(`  [${e.id}.b${i + 1}] ${b}`));
+      (e.bullets || []).forEach((b, i) => out.push(`  ${tag(`${e.id}.b${i + 1}`, 'bullet', b)} ${b}`));
     }
     out.push('');
   }
@@ -124,7 +140,7 @@ function renderDocForPrompt(doc) {
     out.push('EDUCATION (fixed except coursework)');
     for (const e of doc.education) {
       out.push(`${e.id}: ${[e.degreeType, e.major].filter(Boolean).join(' in ')} — ${e.institution}`);
-      if (str(e.coursework)) out.push(`  [${e.id}.coursework] ${e.coursework}`);
+      if (str(e.coursework)) out.push(`  ${tag(`${e.id}.coursework`, 'coursework', e.coursework)} ${e.coursework}`);
     }
     out.push('');
   }
@@ -132,15 +148,110 @@ function renderDocForPrompt(doc) {
     out.push('PROJECTS');
     for (const p of doc.projects) {
       out.push(`[${p.id}] ${p.name}${p.description ? ` — ${p.description}` : ''}`);
-      (p.bullets || []).forEach((b, i) => out.push(`  [${p.id}.b${i + 1}] ${b}`));
+      (p.bullets || []).forEach((b, i) => out.push(`  ${tag(`${p.id}.b${i + 1}`, 'bullet', b)} ${b}`));
     }
     out.push('');
   }
   if ((doc.extras || []).length) {
     out.push('CERTIFICATIONS, AWARDS & OTHER');
-    for (const x of doc.extras) out.push(`[${x.id}] ${extraText(x)}`);
+    for (const x of doc.extras) out.push(`${tag(x.id, 'extra', extraText(x))} ${extraText(x)}`);
   }
   return out.join('\n').trim();
+}
+
+// ── Page budget ──────────────────────────────────────────────────────────────
+
+// Height of the baseline as laid out: measured by the extension when it can,
+// estimated from the layout otherwise. Space is what is left under one page,
+// less half a line of safety for rounding in the estimate.
+function pageBudget(doc, layout) {
+  const usedPx = Number.isFinite(layout.usedPx) ? layout.usedPx : estimateDocHeight(layout, doc, extraText);
+  const lineUnit = layout.kinds.bullet.lineHeight;
+  const limitPx = layout.capacityPx - lineUnit * 0.5;
+  return { usedPx, limitPx, lineUnit, spacePx: limitPx - usedPx, spareLines: Math.floor((limitPx - usedPx) / lineUnit) };
+}
+
+// Height an edit adds (positive) or saves (negative). Edits must be valid.
+function editDelta(e, doc, pool, layout) {
+  const line = editableLines(doc)[e.target];
+  if (!line) return 0;
+  if (e.op === 'remove') {
+    if (line.kind === 'project') return -projectHeight(layout, line.project);
+    return -itemHeight(layout, line.kind, line.text);
+  }
+  if (e.op === 'skills') {
+    return itemHeight(layout, 'skills', skillLineText(line.group, e.items || [])) - itemHeight(layout, 'skills', skillLineText(line.group));
+  }
+  if (e.op === 'swap') {
+    if (line.kind === 'bullet') return itemHeight(layout, 'bullet', str(e.text) || pool.bullets[e.with].text) - itemHeight(layout, 'bullet', line.text);
+    if (line.kind === 'project') return projectHeight(layout, pool.projects.find(p => p.id === e.with)) - projectHeight(layout, line.project);
+    if (line.kind === 'extra') return itemHeight(layout, 'extra', extraText(pool.extras.find(x => x.id === e.with))) - itemHeight(layout, 'extra', line.text);
+  }
+  if (e.op === 'rewrite') return itemHeight(layout, line.kind, str(e.text)) - itemHeight(layout, line.kind, line.text);
+  return 0;
+}
+
+function pageCheck(edits, doc, pool, layout) {
+  const budget = pageBudget(doc, layout);
+  const deltaPx = edits.reduce((a, e) => a + editDelta(e, doc, pool, layout), 0);
+  const afterPx = budget.usedPx + deltaPx;
+  return { ...budget, deltaPx, afterPx, overPx: Math.max(0, afterPx - budget.limitPx), overLines: Math.ceil(Math.max(0, afterPx - budget.limitPx) / budget.lineUnit) };
+}
+
+function describeBudget(budget) {
+  return budget.spareLines >= 0
+    ? `The resume must fit on one page; this is a hard limit. Right now about ${budget.spareLines} line${budget.spareLines === 1 ? '' : 's'} of space are free.`
+    : `The resume must fit on one page; this is a hard limit. Right now it is about ${-budget.spareLines} line${budget.spareLines === -1 ? '' : 's'} too long, so your edits must remove at least that much: drop the least relevant bullets, projects or certification lines.`;
+}
+
+// Last resort when the model's edits still do not fit: first undo the edits
+// that grow the page, largest first; then remove whole items, least likely to
+// matter first: certification/award/other lines from the end, project bullets
+// and projects from the end, then the last bullets of the oldest jobs (every
+// job keeps one), then coursework. Never shortens a line.
+function fitToPage(edits, doc, pool, layout) {
+  let kept = [...edits];
+  const trimmed = [];
+  let check = pageCheck(kept, doc, pool, layout);
+  if (!check.overPx) return { edits: kept, trimmed, undone: [], page: check };
+
+  const undone = [];
+  const growth = kept.map(e => ({ e, d: editDelta(e, doc, pool, layout) })).filter(x => x.d > 0).sort((a, b) => b.d - a.d);
+  for (const { e } of growth) {
+    if (!check.overPx) break;
+    kept = kept.filter(x => x !== e);
+    undone.push(e);
+    check = pageCheck(kept, doc, pool, layout);
+  }
+
+  const targeted = () => new Set(kept.map(e => e.target));
+  const candidates = [];
+  for (const x of [...(doc.extras || [])].reverse()) candidates.push(x.id);
+  for (const p of [...(doc.projects || [])].reverse()) {
+    (p.bullets || []).map((_, i) => `${p.id}.b${i + 1}`).reverse().forEach(id => candidates.push(id));
+    candidates.push(p.id);
+  }
+  for (const j of [...(doc.experiences || [])].reverse()) {
+    (j.bullets || []).slice(1).map((_, i) => `${j.id}.b${i + 2}`).reverse().forEach(id => candidates.push(id));
+  }
+  for (const e of doc.education || []) if (str(e.coursework)) candidates.push(`${e.id}.coursework`);
+
+  for (const id of candidates) {
+    if (!check.overPx) break;
+    const t = targeted();
+    if (t.has(id)) continue;
+    const owner = id.replace(/\.b\d+$/, '');
+    if (/^proj:\d+$/.test(id)) {
+      // Removing a project replaces any removals of its bullets.
+      kept = kept.filter(x => !(x.op === 'remove' && x.target.startsWith(`${id}.`)));
+      if (kept.some(x => x.target.startsWith(`${id}.`))) continue;
+    } else if (/^proj:\d+\.b\d+$/.test(id) && t.has(owner)) continue;
+    const e = { op: 'remove', target: id, with: null, text: null, items: null, reason: 'Fit to one page' };
+    kept.push(e);
+    trimmed.push(id);
+    check = pageCheck(kept, doc, pool, layout);
+  }
+  return { edits: kept, trimmed, undone, page: check };
 }
 
 function renderPoolForPrompt(pool) {
@@ -180,7 +291,7 @@ const EDITS_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          op: { type: 'string', enum: ['rewrite', 'swap', 'skills'] },
+          op: { type: 'string', enum: ['rewrite', 'swap', 'skills', 'remove'] },
           target: { type: 'string', description: 'Id of the resume line or item being edited, e.g. exp:1.b2, proj:2, skills:1, summary.' },
           with: { ...nullable('string'), description: 'swap only: the unused item id that replaces the target.' },
           text: { ...nullable('string'), description: 'rewrite: the new line. swap: optional reworded version of an incoming bullet; null to use it as written.' },
@@ -199,6 +310,7 @@ const SYSTEM = `You tailor a candidate's existing resume to one job posting so a
 Edit types:
 - rewrite: reword one line (a bullet, the summary, a coursework line) so it uses the posting's exact terms for things the line already shows. Keep every fact, number, tool and outcome; add none, and remove none. Add the posting's term alongside the candidate's wording; never trade a stronger or more specific claim for the posting's weaker one (keep "statistical modeling", do not turn it into "basic statistics"). An added term must name something the line already describes: the posting's name for it, its acronym or full form, or the category it belongs to ("Kubernetes upgrade" for a Kubernetes version migration). Do not add outcomes or qualities the line does not state (reliability, scalability, data quality), and never insert soft-skill words (written, communication, collaboration) into a bullet. Use parentheses only for an acronym and its full form, or the posting's spelling and the candidate's, and only when they differ. Use the posting's spelling, and where the posting uses an acronym or a full name, give both once ("Search Engine Optimization (SEO)"). Keep it about the same length. Only rewrite a line when it gains a posting term or requirement it lacks.
 - swap: replace a resume bullet, project or certification/award line with unused profile material of the same kind that is clearly more relevant to the posting. A bullet may only be replaced by an unused bullet of the same job or project (the id says which). Projects swap with projects, certifications/awards/other lines with each other. You may reword an incoming bullet under the rewrite rules (text), or leave text null.
+- remove: drop a bullet, a project, a certification/award/other line or a coursework line. Only to make the resume fit its page, and always the least relevant item for this posting. A job keeps at least one bullet.
 - skills: give the complete new item list for one skill line: every item it has now, most posting-relevant first, plus any skills from "Skills in the profile but not on the resume" that the posting asks for, each placed on the line where it fits best. You may write an existing item in the posting's spelling while keeping the original in parentheses ("PostgreSQL (Postgres)"). Never add a skill that is not in the profile.
 
 Rules:
@@ -208,10 +320,12 @@ Rules:
 4. Never remove or reorder jobs or education, never change headers, titles, dates or employers. Each target is edited at most once, and each unused item is used at most once.
 5. Only edit the summary if the resume has one (target "summary"). Never add a summary.
 6. Coursework lines may only list courses already on that line or listed as "Other courses" for that school.
-7. Give each edit a reason naming the posting term or requirement it serves.`;
+7. Give each edit a reason naming the posting term or requirement it serves.
+8. One page, hard limit. Each line's tag shows how many rendered lines it takes and how many characters still fit on its last line ("2 lines, 14 spare"). A rewrite that adds no more than the spare characters costs no space; going past them adds a line. Swapped-in items take their own length. Plan the edits so the page budget given below is never exceeded; if the resume is already too long, remove the least relevant items first.`;
 
-function buildTailorMessages({ doc, pool, jobText, matchText, match, maxNetWords = null }) {
+function buildTailorMessages({ doc, pool, jobText, matchText, match, layout = null }) {
   const core = keywordTerms(match, { coreOnly: true });
+  const budget = layout ? pageBudget(doc, layout) : null;
   const user = `Tailor this resume to the posting with as few edits as achieve a strong ATS match.
 
 JOB POSTING:
@@ -222,13 +336,13 @@ ${matchText}
 
 Core keywords to place where the candidate genuinely has them: ${core.join(', ') || 'none'}
 
-CURRENT RESUME (ids in brackets):
-${doc ? renderDocForPrompt(doc) : ''}
+CURRENT RESUME (ids in brackets${layout ? ', with each line\'s size' : ''}):
+${doc ? renderDocForPrompt(doc, layout) : ''}
 
 UNUSED PROFILE MATERIAL (may be swapped in):
-${renderPoolForPrompt(pool)}${maxNetWords !== null ? `
+${renderPoolForPrompt(pool)}${budget ? `
 
-LENGTH: the last edits pushed the resume past its page. This time the edits together must change the word count by at most ${maxNetWords} words (negative means shorter): prefer swaps for shorter items and rewrites no longer than the line they replace.` : ''}`;
+PAGE: ${describeBudget(budget)}` : ''}`;
   return [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }];
 }
 
@@ -258,7 +372,9 @@ function newNumbers(text, source) {
 
 // Returns { valid, errors }: the edits that can be applied as given, and a
 // message for each one that cannot (fed back to the model in a repair pass).
-function validateEdits(edits, doc, pool) {
+// With a layout, `page` reports the height the valid edits leave, and an
+// over-the-page result adds a PAGE error (the edits themselves stay valid).
+function validateEdits(edits, doc, pool, layout = null) {
   const lines = editableLines(doc);
   const used = new Set();
   const usedPool = new Set();
@@ -267,14 +383,15 @@ function validateEdits(edits, doc, pool) {
   const otherSkillItems = (groupId) => new Set((doc.skillGroups || []).filter(g => g.id !== groupId).flatMap(g => g.items).map(normalizeTerm));
   const allowedSkills = new Set([...allSkillItems(doc), ...pool.skills].map(normalizeTerm));
   // A project being swapped out takes its bullets with it.
-  const swappedProjects = new Set((Array.isArray(edits) ? edits : []).filter(e => e.op === 'swap' && /^proj:\d+$/.test(e.target)).map(e => e.target));
+  const swappedProjects = new Set((Array.isArray(edits) ? edits : []).filter(e => (e.op === 'swap' || e.op === 'remove') && /^proj:\d+$/.test(e.target)).map(e => e.target));
+  const removedFrom = {};
 
   for (const e of Array.isArray(edits) ? edits : []) {
     const fail = (msg) => errors.push(`${e.op} ${e.target}: ${msg}`);
     const line = lines[e.target];
     if (!line) { fail('no such editable line'); continue; }
     if (used.has(e.target)) { fail('target edited more than once'); continue; }
-    if (line.kind === 'bullet' && swappedProjects.has(line.owner)) { fail(`${line.owner} is swapped out, so its bullets cannot be edited`); continue; }
+    if (line.kind === 'bullet' && swappedProjects.has(line.owner)) { fail(`${line.owner} is swapped out or removed, so its bullets cannot be edited`); continue; }
 
     if (e.op === 'rewrite') {
       const text = str(e.text);
@@ -326,12 +443,26 @@ function validateEdits(edits, doc, pool) {
       const dupes = items.filter(i => others.has(normalizeTerm(i)));
       if (dupes.length) { fail(`already on another skill line: ${dupes.join(', ')}`); continue; }
       if (new Set(items.map(normalizeTerm)).size !== items.length) { fail('duplicate items'); continue; }
+    } else if (e.op === 'remove') {
+      if (!['bullet', 'project', 'extra', 'coursework'].includes(line.kind)) { fail(`a ${line.kind} line cannot be removed`); continue; }
+      if (line.kind === 'bullet' && /^exp:/.test(line.owner)) {
+        const job = doc.experiences.find(x => x.id === line.owner);
+        removedFrom[line.owner] = (removedFrom[line.owner] || 0) + 1;
+        if (removedFrom[line.owner] >= (job.bullets || []).length) { removedFrom[line.owner]--; fail(`${line.owner} must keep at least one bullet`); continue; }
+      }
     } else { fail('unknown op'); continue; }
 
     used.add(e.target);
     valid.push(e);
   }
-  return { valid, errors };
+  let page = null;
+  if (layout) {
+    page = pageCheck(valid, doc, pool, layout);
+    if (page.overPx > 0) {
+      errors.push(`PAGE: these edits leave the resume about ${page.overLines} line${page.overLines === 1 ? '' : 's'} over one page (${page.spareLines >= 0 ? `${page.spareLines} free before the edits` : `${-page.spareLines} over before the edits`}). Keep rewrites within their spare characters, swap in shorter items, or remove the least relevant bullets, projects or certification lines.`);
+    }
+  }
+  return { valid, errors, page };
 }
 
 // ── Applying ─────────────────────────────────────────────────────────────────
@@ -341,12 +472,17 @@ function validateEdits(edits, doc, pool) {
 // they replaced) and one change record per edit, keyed by that id:
 //   { id, op, before, after, added?, reason }
 // before/after are line text (skills: the item lists). Edits must be valid.
+// Every experience and project in the result carries bulletIds, the baseline
+// id of each remaining bullet (a swapped-in project's bullets get new ones),
+// so the preview can match lines to changes after removals shift positions.
 function applyEdits(baseDoc, pool, edits) {
   const doc = JSON.parse(JSON.stringify(baseDoc));
   const changes = [];
-  const findEntry = (id) => [...(doc.experiences || []), ...(doc.projects || [])].find(x => x.id === id);
+  const entries = () => [...(doc.experiences || []), ...(doc.projects || [])];
+  const findEntry = (id) => entries().find(x => x.id === id);
+  for (const x of entries()) x.bulletIds = (x.bullets || []).map((_, i) => `${x.id}.b${i + 1}`);
 
-  for (const e of edits) {
+  for (const e of edits.filter(x => x.op !== 'remove')) {
     const reason = str(e.reason);
     const bullet = e.target.match(/^((?:exp|proj):\d+)\.b(\d+)$/);
     if (e.target === 'summary') {
@@ -375,12 +511,38 @@ function applyEdits(baseDoc, pool, edits) {
       const idx = doc.projects.findIndex(x => x.id === e.target);
       const incoming = pool.projects.find(p => p.id === e.with);
       changes.push({ id: e.target, op: 'swap', before: doc.projects[idx].name, after: incoming.name, reason });
-      doc.projects[idx] = { ...incoming, id: e.target };
+      doc.projects[idx] = { ...incoming, id: e.target, bulletIds: incoming.bullets.map((_, i) => `${e.target}.new${i + 1}`) };
     } else if (/^extra:/.test(e.target)) {
       const idx = doc.extras.findIndex(x => x.id === e.target);
       const incoming = pool.extras.find(x => x.id === e.with);
       changes.push({ id: e.target, op: 'swap', before: extraText(doc.extras[idx]), after: extraText(incoming), reason });
       doc.extras[idx] = { ...incoming, id: e.target };
+    }
+  }
+
+  // Removals last, by id, so earlier positions do not shift under them.
+  for (const e of edits.filter(x => x.op === 'remove')) {
+    const reason = str(e.reason);
+    const bullet = e.target.match(/^((?:exp|proj):\d+)\.b\d+$/);
+    if (bullet) {
+      const entry = findEntry(bullet[1]);
+      const i = entry.bulletIds.indexOf(e.target);
+      if (i === -1) continue;
+      changes.push({ id: e.target, op: 'remove', before: entry.bullets[i], after: null, reason });
+      entry.bullets.splice(i, 1);
+      entry.bulletIds.splice(i, 1);
+    } else if (/\.coursework$/.test(e.target)) {
+      const edu = doc.education.find(x => `${x.id}.coursework` === e.target);
+      changes.push({ id: e.target, op: 'remove', before: edu.coursework, after: null, reason });
+      edu.coursework = '';
+    } else if (/^proj:/.test(e.target)) {
+      const p = doc.projects.find(x => x.id === e.target);
+      changes.push({ id: e.target, op: 'remove', before: p.name, after: null, reason });
+      doc.projects = doc.projects.filter(x => x !== p);
+    } else if (/^extra:/.test(e.target)) {
+      const x = doc.extras.find(y => y.id === e.target);
+      changes.push({ id: e.target, op: 'remove', before: extraText(x), after: null, reason });
+      doc.extras = doc.extras.filter(y => y !== x);
     }
   }
   doc.skills = allSkillItems(doc);
@@ -416,6 +578,6 @@ function keywordCoverage(doc, match, { coreOnly = true } = {}) {
 }
 
 export {
-  EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits,
-  editableLines, renderDocForPrompt, renderPoolForPrompt, keywordCoverage, docWords
+  EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits, fitToPage, pageCheck, pageBudget,
+  editableLines, renderDocForPrompt, renderPoolForPrompt, keywordCoverage, docWords, extraText
 };

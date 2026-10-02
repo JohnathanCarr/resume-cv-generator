@@ -6,12 +6,13 @@
 import { CONFIG } from './config.js';
 import { createClient, generateStructured, safeErrorMessage } from './openai.js';
 import { analyzeMatch, renderMatchForPrompt } from './matchAnalysis.js';
-import { EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits, keywordCoverage, docWords } from './tailor.js';
+import { EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits, fitToPage, keywordCoverage, docWords } from './tailor.js';
+import { makeLayout } from './layout.js';
 import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
-export { createBaseline, isCurrentBaseline, baselineToResume } from './baseline.js';
+export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
 
@@ -31,12 +32,14 @@ export async function analyzeJob(apiKey, { profile, jobText }) {
 }
 
 // Tailors the user's own resume (a baseline from baseline.js) to a posting:
-// the model returns an edit list (tailor.js), which is validated, repaired
-// once if any edit is invalid, and applied. Invalid edits that survive the
-// repair are dropped, never applied. `match` from analyzeJob() skips the
-// analysis; `maxNetWords` (set by the extension after a page overflow) caps
-// how much the edits may lengthen the resume.
-export async function tailorResume(apiKey, { profile, jobText, baseline, match = null, maxNetWords = null }) {
+// the model returns an edit list (tailor.js), which is validated and applied.
+// One page is a hard limit planned from the start: `layout` (layout.js; the
+// extension passes a measured render of the upload, evals get estimates)
+// gives the model each line's size and the page's free space, the validator
+// totals the edits' height, up to two repair passes fix invalid or
+// over-the-page edits, and fitToPage() is the last resort. Invalid edits are
+// dropped, never applied. `match` from analyzeJob() skips the analysis.
+export async function tailorResume(apiKey, { profile, jobText, baseline, match = null, layout = null }) {
   const startTime = Date.now();
   requireInputs(profile, jobText);
   if (!baseline?.resume) throw new Error('Missing the uploaded resume to tailor.');
@@ -44,28 +47,36 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
   if (!match) match = await analyzeJob(apiKey, { profile, jobText });
 
   const base = baseline.resume;
+  const L = makeLayout(layout || {});
   const pool = buildPool(base, profile);
-  const messages = buildTailorMessages({ doc: base, pool, jobText, matchText: renderMatchForPrompt(match), match, maxNetWords });
+  const messages = buildTailorMessages({ doc: base, pool, jobText, matchText: renderMatchForPrompt(match), match, layout: L });
   const request = (msgs) => generateStructured(openai, { messages: msgs, schema: EDITS_SCHEMA, schemaName: 'resume_edits', maxTokens: MAX_COMPLETION_TOKENS.resume });
 
   let { data } = await request(messages);
-  let { valid, errors } = validateEdits(data.edits, base, pool);
-  let repaired = false;
-  if (errors.length) {
-    console.log(`Tailoring: ${errors.length} invalid edit(s), requesting a repair`, errors);
-    ({ data } = await request([
-      ...messages,
+  let { valid, errors } = validateEdits(data.edits, base, pool, L);
+  let repairs = 0;
+  let convo = messages;
+  while (errors.length && repairs < 2) {
+    console.log(`Tailoring: ${errors.length} problem(s), requesting a repair`, errors);
+    convo = [
+      ...convo,
       { role: 'assistant', content: JSON.stringify(data) },
-      { role: 'user', content: `These edits cannot be applied:\n${errors.map(e => `- ${e}`).join('\n')}\nReturn the complete edit list again with those fixed or removed. Keep the valid edits as they were.` }
-    ]));
-    ({ valid, errors } = validateEdits(data.edits, base, pool));
-    repaired = true;
+      { role: 'user', content: `These edits cannot be applied as they are:\n${errors.map(e => `- ${e}`).join('\n')}\nReturn the complete edit list again with those fixed. Keep the valid edits as they were unless the page limit requires changing them.` }
+    ];
+    ({ data } = await request(convo));
+    ({ valid, errors } = validateEdits(data.edits, base, pool, L));
+    repairs++;
   }
 
-  const { doc, changes } = applyEdits(base, pool, valid);
+  // Never over the page: undo growth, then drop whole items, if the model
+  // could not get there itself.
+  const fit = fitToPage(valid, base, pool, L);
+  const rejected = errors.filter(e => !e.startsWith('PAGE:'));
+  const { doc, changes } = applyEdits(base, pool, fit.edits);
   const coverage = { before: keywordCoverage(base, match), after: keywordCoverage(doc, match) };
   const endTime = Date.now();
-  console.log(`[${new Date().toISOString()}] Resume tailored in ${endTime - startTime}ms: ${changes.length} edits, core keywords ${coverage.before.found}/${coverage.before.total} → ${coverage.after.found}/${coverage.after.total}${errors.length ? `, ${errors.length} rejected` : ''}`);
+  const page = { estimated: !L.measured, usedPx: Math.round(fit.page.usedPx), afterPx: Math.round(fit.page.afterPx), limitPx: Math.round(fit.page.limitPx), fits: fit.page.overPx === 0, trimmed: fit.trimmed, undone: fit.undone.map(e => e.target) };
+  console.log(`[${new Date().toISOString()}] Resume tailored in ${endTime - startTime}ms: ${changes.length} edits, core keywords ${coverage.before.found}/${coverage.before.total} → ${coverage.after.found}/${coverage.after.total}, page ${page.usedPx} → ${page.afterPx}/${page.limitPx}px${fit.trimmed.length ? `, trimmed ${fit.trimmed.join(', ')}` : ''}${rejected.length ? `, ${rejected.length} rejected` : ''}`);
   return {
     resumeContent: resumeDocToSchema(doc),
     tailored: doc,
@@ -75,9 +86,10 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
       generatedAt: new Date().toISOString(),
       processingTime: endTime - startTime,
       edits: changes.length,
-      rejected: errors,
-      repaired,
+      rejected,
+      repairs,
       coverage,
+      page,
       wordsBefore: docWords(base),
       wordsAfter: docWords(doc)
     }

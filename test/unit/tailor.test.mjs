@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBaseline } from '../../extension/generation/baseline.js';
-import { buildPool, validateEdits, applyEdits, keywordCoverage, editableLines } from '../../extension/generation/tailor.js';
+import { buildPool, validateEdits, applyEdits, keywordCoverage, editableLines, fitToPage, pageCheck } from '../../extension/generation/tailor.js';
+import { makeLayout, lineCount, spareChars } from '../../extension/generation/layout.js';
 
 const parsed = {
   name: 'Dana Reyes', summary: 'Backend engineer with 3 years in Go',
@@ -105,7 +106,7 @@ test('applying edits changes only the edited lines and records each change', () 
   const { valid } = validateEdits(good, doc, pool);
   const { doc: out, changes } = applyEdits(doc, pool, valid);
   assert.deepEqual(out.experiences[0].bullets, ['Built a Go billing API serving 2M requests a day', 'Deployed services to Kubernetes with Terraform']);
-  assert.deepEqual(out.experiences[1], doc.experiences[1]);
+  assert.deepEqual(out.experiences[1], { ...doc.experiences[1], bulletIds: ['exp:2.b1'] });
   assert.equal(out.summary, doc.summary);
   assert.equal(out.projects[0].name, 'Tracer');
   assert.equal(out.projects[0].id, 'proj:1');
@@ -123,4 +124,70 @@ test('keyword coverage counts core terms in the document', () => {
   const { doc: out } = applyEdits(doc, pool, valid);
   assert.deepEqual(keywordCoverage(doc, match), { found: 1, total: 3, missing: ['Kubernetes', 'Terraform'] });
   assert.deepEqual(keywordCoverage(out, match), { found: 3, total: 3, missing: [] });
+});
+
+// A layout where every character is 5px wide and a bullet line holds 100
+// characters, so wrapping is easy to reason about.
+const fixedLayout = (usedPx) => makeLayout({
+  usedPx,
+  textWidth: (text) => String(text).length * 5,
+  kinds: Object.fromEntries(['bullet', 'summary', 'skills', 'coursework', 'extra', 'projectHeader'].map(k => [k, { width: 500, lineHeight: 20, gap: 0 }])),
+  entryGap: 0
+});
+
+test('layout wraps words and reports the room left on the last line', () => {
+  const L = fixedLayout(0);
+  assert.equal(lineCount(L, 'bullet', 'x'.repeat(99)), 1);
+  assert.equal(lineCount(L, 'bullet', `${'x'.repeat(60)} ${'y'.repeat(60)}`), 2);
+  // 500px line, 250px used, one 5px space before the next word: 245px = 49 chars.
+  assert.equal(spareChars(L, 'bullet', 'x'.repeat(50)), 49);
+});
+
+test('remove drops items, never jobs, and every job keeps a bullet', () => {
+  const { valid, errors } = validateEdits([
+    { op: 'remove', target: 'exp:2.b1', reason: '' },      // Initech's only bullet
+    { op: 'remove', target: 'exp:1', reason: '' },         // a job
+    { op: 'remove', target: 'summary', reason: '' },
+    { op: 'remove', target: 'exp:1.b2', reason: '' },
+    { op: 'remove', target: 'extra:1', reason: '' },
+    { op: 'remove', target: 'proj:1', reason: '' },
+    { op: 'rewrite', target: 'proj:1.b1', text: 'Parsed 30 unit formats', reason: '' }
+  ], doc, pool);
+  assert.deepEqual(valid.map(e => e.target), ['exp:1.b2', 'extra:1', 'proj:1']);
+  assert.equal(errors.length, 4);
+  const { doc: out, changes } = applyEdits(doc, pool, valid);
+  assert.deepEqual(out.experiences[0].bullets, ['Built billing API serving 2M requests a day']);
+  assert.deepEqual(out.experiences[0].bulletIds, ['exp:1.b1']);
+  assert.equal(out.projects.length, 0);
+  assert.equal(out.extras.length, 0);
+  assert.ok(changes.every(c => c.op === 'remove' && c.after === null));
+});
+
+test('edits that overflow the page are flagged with how far over', () => {
+  // 1046px usable (1056 minus half a line); the resume uses 1030.
+  const L = fixedLayout(1030);
+  // Within the rewrite length rule, but past 100 characters: one more line.
+  const long = 'Built a Go billing API serving 2M requests a day across internationalization-heavy merchant-facing reconciliation workloads';
+  const { valid, errors, page } = validateEdits([{ op: 'rewrite', target: 'exp:1.b1', text: long, reason: '' }], doc, pool, L);
+  assert.equal(valid.length, 1);
+  assert.equal(page.overPx, 4);
+  assert.match(errors.at(-1), /^PAGE: these edits leave the resume about 1 line over one page/);
+  // A rewrite within the line's spare room costs nothing.
+  const ok = validateEdits([{ op: 'rewrite', target: 'exp:1.b1', text: 'Built a Go billing API serving 2M requests a day', reason: '' }], doc, pool, L);
+  assert.equal(ok.page.overPx, 0);
+  assert.deepEqual(ok.errors, []);
+});
+
+test('fitToPage undoes growth first, then removes whole items until it fits', () => {
+  const grow = { op: 'rewrite', target: 'exp:1.b1', text: 'Built a Go billing API serving 2M requests a day ' + 'for internal consumers across the platform '.repeat(2), reason: '' };
+  // Over even with no edits (1050 > 1046): growth is undone, then items go.
+  const L = fixedLayout(1050);
+  const fit = fitToPage([grow], doc, pool, L);
+  assert.deepEqual(fit.undone.map(e => e.target), ['exp:1.b1']);
+  assert.deepEqual(fit.trimmed, ['extra:1']);
+  assert.equal(pageCheck(fit.edits, doc, pool, L).overPx, 0);
+  // Already fits: nothing changes.
+  const roomy = fitToPage([grow], doc, pool, fixedLayout(500));
+  assert.deepEqual(roomy.edits, [grow]);
+  assert.deepEqual(roomy.trimmed, []);
 });

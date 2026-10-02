@@ -182,7 +182,7 @@ async function main() {
         const resumeBody = { ...body, baseline };
         const r = await call(quiet(tailorResume), key, resumeBody);
         const scored = r.ok ? scoreResume({ result: r.data, baseline, profile: p.profile, jobText: j.text }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
-        const reuse = r.ok ? `  ${scored.info.edits} edits ${JSON.stringify(scored.info.byOp)}  core kw ${scored.info.coverage}` : '';
+        const reuse = r.ok ? `  ${scored.info.edits} edits ${JSON.stringify(scored.info.byOp)}  core kw ${scored.info.coverage}  page ${scored.info.page}` : '';
         results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
         fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored }, null, 2));
         console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);

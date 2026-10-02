@@ -21,7 +21,8 @@ summaries to compare against.
 - `score.js` — the rubric. Resume (tailoring, scored against the baseline it
   edited): shape, jobs and education untouched, summary only if the upload had
   one, no fabricated numbers, core keyword coverage of what the profile can
-  honestly reach, no keyword more than three times, at most 12 edits, no edits
+  honestly reach, no keyword more than three times, fits one page (by the
+  layout estimate), at most 12 edits, no edits
   rejected after the repair pass, unedited lines byte-identical. Eval profiles
   have no uploaded resume; `evalBaseline()` in `run.js` uses the profile minus
   some held-back material, which becomes the swap pool. Cover letter: length,

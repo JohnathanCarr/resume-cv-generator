@@ -206,8 +206,12 @@ function scoreResume({ result, baseline, profile, jobText }) {
   checks.noStuffing = stuffed.length ? 0 : 1;
   if (stuffed.length) fails.push(`keyword used more than 3 times: ${stuffed.join(', ')}`);
 
+  // One page, hard limit (by the layout estimate under Node).
+  checks.fitsOnePage = meta.page ? (meta.page.fits ? 1 : 0) : 1;
+  if (!checks.fitsOnePage) fails.push(`over one page: ${meta.page.afterPx}/${meta.page.limitPx}px`);
+
   // Restraint: a handful of edits, none rejected after the repair pass.
-  const n = changes.length;
+  const n = changes.filter(c => c.op !== 'remove').length;
   checks.editRestraint = n <= 12 ? 1 : 0.5;
   if (n > 12) fails.push(`${n} edits`);
   checks.noRejectedEdits = (meta.rejected || []).length ? 0.5 : 1;
@@ -235,7 +239,8 @@ function scoreResume({ result, baseline, profile, jobText }) {
       coverage: `${cov.before.found}/${cov.before.total} → ${cov.after.found}/${cov.after.total}`,
       missingCore: cov.after.missing,
       keptBullets,
-      words: `${meta.wordsBefore} → ${meta.wordsAfter}`
+      words: `${meta.wordsBefore} → ${meta.wordsAfter}`,
+      page: meta.page ? `${meta.page.usedPx} → ${meta.page.afterPx}/${meta.page.limitPx}px${meta.page.trimmed.length ? ` trimmed ${meta.page.trimmed.join(',')}` : ''}` : null
     }
   };
 }

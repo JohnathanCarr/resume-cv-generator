@@ -1,0 +1,36 @@
+{
+  "label": "one-page",
+  "kinds": {
+    "resume": {
+      "n": 10,
+      "meanScore": 0.998,
+      "meanMs": 23438,
+      "failures": 0,
+      "checks": {
+        "validShape": 1,
+        "historyIntact": 1,
+        "summaryRule": 1,
+        "noFabricatedNumbers": 1,
+        "coreKeywordCoverage": 0.98,
+        "noStuffing": 1,
+        "fitsOnePage": 1,
+        "editRestraint": 1,
+        "noRejectedEdits": 1,
+        "verbatimElsewhere": 1
+      }
+    }
+  },
+  "stamp": "2026-10-02T19-29-14",
+  "profiles": [
+    "david_analyst_undergrad",
+    "maria_backend_ms"
+  ],
+  "jobs": [
+    "01_senior_backend_vercel",
+    "02_data_analyst_intern_shopify",
+    "03_ml_engineer_lumen_health",
+    "04_mobile_fullstack_northwind",
+    "05_product_analyst_notion"
+  ],
+  "note": "Tailoring rubric with the one-page check (layout estimate under Node)."
+}

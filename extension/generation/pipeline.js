@@ -13,6 +13,7 @@ import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from '
 import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
 export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
+export { previewResumes, changeCounts } from './highlight.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
 

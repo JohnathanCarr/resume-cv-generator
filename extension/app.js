@@ -1,6 +1,9 @@
 // Cover Letter Generator App Logic
 
 class CoverLetterApp {
+    // One US Letter page at CSS 96dpi; the resume's hard limit.
+    static PAGE_PX = 11 * 96;
+
     static EXTRA_TYPES = [
         ['research', 'Research'],
         ['program', 'Program'],
@@ -380,6 +383,8 @@ class CoverLetterApp {
     async rememberResume(result, jobText) {
         this.lastResume = {
             resumeContent: result.resumeContent,
+            tailored: result.tailored || null, // tailored resume document, same ids as the baseline
+            changes: result.changes || [],     // one record per applied edit, for the preview highlights
             jobText,
             company: result.matchAnalysis?.company || '',
             role: result.matchAnalysis?.role || '',
@@ -1780,26 +1785,29 @@ class CoverLetterApp {
     const { match, profile } = checked;
 
     // Every posting starts from the user's own resume, never from the last
-    // tailored version.
-    const { baselineToResume } = await this.generation();
-    const baseResume = baselineToResume(this.baselineResume);
+    // tailored version. The model returns edits; the pipeline applies them.
+    // One page is a hard limit, planned from the start: measure how the
+    // upload lays out at print size and hand that to the pipeline, which gives
+    // the model each line's room and the page's free space.
     this.showStatus('Tailoring your resume…', 'loading');
-    let result = await this.requestResume({ profile, jobText, match, baseResume });
+    const layout = await this.measureLayout(this.baselineResume.resume);
+    let result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout });
 
-    // The pipeline budgets by word count; only the rendered page knows whether it
-    // actually fits. If it overflows, ask once more with a tighter ceiling — as a
-    // revision of what it just produced, so the wording does not churn.
-    let overflow = await this.renderResumeAndMeasure(result.resumeContent);
-    let refit = false;
-    if (overflow > 1.0 && result.metadata?.words) {
-      const maxWords = Math.floor(result.metadata.words / overflow * 0.92);
-      this.showStatus('Trimming to one page…', 'loading');
-      const first = result.metadata;
-      result = await this.requestResume({ profile, jobText, match, baseResume: result.resumeContent, budget: { maxWords } });
-      result.metadata = { ...result.metadata, revised: first.revised, keptBullets: first.keptBullets, baseBullets: first.baseBullets };
-      overflow = await this.renderResumeAndMeasure(result.resumeContent);
-      refit = true;
+    // Confirm on the real layout. The pipeline works from per-line estimates;
+    // if the result still spills over, fold the measured error into the
+    // budget and ask again (twice at most).
+    let height = await this.measureResumeHeight(result.resumeContent);
+    let refits = 0;
+    while (height > CoverLetterApp.PAGE_PX && refits < 2) {
+      const predicted = result.metadata?.page?.afterPx || layout.usedPx;
+      layout.usedPx += (height - predicted) * (refits + 1);
+      this.showStatus('Fitting it to one page…', 'loading');
+      result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout });
+      height = await this.measureResumeHeight(result.resumeContent);
+      refits++;
     }
+    const overflow = height / CoverLetterApp.PAGE_PX;
+    await this.renderResumeAndMeasure(result.resumeContent);
 
     this.lastApiCall.response = result;
     this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
@@ -1808,7 +1816,7 @@ class CoverLetterApp {
     await this.saveData();
     await this.rememberResume(result, jobText);
 
-    this.showStatus(this.describeResumeResult(result, { overflow, refit, added: checked.added }), overflow > 1.0 ? 'error' : 'success');
+    this.showStatus(this.describeResumeResult(result, { overflow, added: checked.added }), overflow > 1 ? 'error' : 'success');
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
@@ -1825,8 +1833,8 @@ class CoverLetterApp {
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
-        const { generateResume } = await this.generation();
-        return generateResume(this.apiKey.value, body);
+        const { tailorResume } = await this.generation();
+        return tailorResume(this.apiKey.value, body);
     }
 
     // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).
@@ -1846,25 +1854,89 @@ class CoverLetterApp {
         });
     }
 
-    describeResumeResult(result, { overflow, refit, added = [] }) {
+    describeResumeResult(result, { overflow, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
-        const verb = meta.revised ? 'tailored' : 'generated';
-        if (overflow > 1.0) {
-            parts.push(`Resume ${verb}, but it still runs to ${overflow.toFixed(1)} pages — remove a bullet or two in your profile, or mark fewer items Must Include.`);
-        } else {
-            parts.push(refit ? `Resume ${verb} and trimmed to fit one page.` : `Resume ${verb}.`);
-        }
-        if (meta.revised && meta.baseBullets) {
-            parts.push(`Kept ${meta.keptBullets} of ${meta.baseBullets} bullets from your resume as written.`);
+        const n = (result.changes || []).filter(c => c.op !== 'remove').length;
+        parts.push(n
+            ? `Resume tailored with ${n} edit${n === 1 ? '' : 's'}.`
+            : 'Your resume already matches this posting well; nothing was reworded.');
+        const cov = meta.coverage;
+        if (cov && cov.after.total) {
+            parts.push(`Key ATS keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
         }
         if (added.length) {
             parts.push(`Added to your skills: ${added.join(', ')}.`);
         }
-        if (meta.words && meta.words < 450 && meta.usedBullets >= meta.availableBullets) {
-            parts.push(`It uses everything in your profile (${meta.words} words); a full page is usually 550–700. Add more achievements, coursework, or certifications to your profile to fill it.`);
+        const removed = (result.changes || []).filter(c => c.op === 'remove').length;
+        if (removed) {
+            parts.push(`Removed ${removed} less relevant item${removed === 1 ? '' : 's'} to fit one page.`);
+        }
+        if (overflow > 1) {
+            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Remove a bullet or two from your uploaded resume and try again.`);
+        }
+        if (meta.rejected?.length) {
+            console.warn('Edits rejected by the validator:', meta.rejected);
         }
         return parts.join(' ');
+    }
+
+    // ---- Page measurement (one-page limit) --------------------------------------
+
+    // Lays out resume markup off-screen at print width (the page box is
+    // 7.5in wide either way; min-height dropped so the content height shows)
+    // and hands the page element to fn. Fonts must be loaded first or widths
+    // come out in the fallback face.
+    async withOffscreenResume(resumeContent, fn) {
+        if (document.fonts?.ready) await document.fonts.ready;
+        const host = document.createElement('div');
+        host.setAttribute('aria-hidden', 'true');
+        host.style.cssText = 'position:absolute;left:-10000px;top:0;width:8.5in;visibility:hidden;pointer-events:none;';
+        host.innerHTML = this.formatResume(resumeContent);
+        document.body.appendChild(host);
+        try {
+            const page = host.querySelector('.resume-page');
+            page.style.minHeight = '0';
+            return fn(page);
+        } finally {
+            host.remove();
+        }
+    }
+
+    async measureResumeHeight(resumeContent) {
+        return this.withOffscreenResume(resumeContent, page => page.getBoundingClientRect().height);
+    }
+
+    // The layout for generation/layout.js: the upload's measured height plus,
+    // per kind of line (data-kind in formatResume), its font, usable width,
+    // line height and gap, and a canvas-backed textWidth. Kinds the upload
+    // does not have fall back to layout.js defaults.
+    async measureLayout(doc) {
+        const { resumeDocToSchema } = await this.generation();
+        const ctx = document.createElement('canvas').getContext('2d');
+        const textWidth = (text, font) => { ctx.font = font; return ctx.measureText(text).width; };
+        return this.withOffscreenResume(resumeDocToSchema(doc), page => {
+            const kinds = {};
+            for (const kind of ['bullet', 'summary', 'skills', 'coursework', 'extra', 'projectHeader']) {
+                const el = page.querySelector(`[data-kind="${kind}"]`);
+                if (!el) continue;
+                const cs = getComputedStyle(el);
+                kinds[kind] = {
+                    font: `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`,
+                    width: el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+                    lineHeight: parseFloat(cs.lineHeight),
+                    gap: parseFloat(cs.marginBottom) + parseFloat(cs.marginTop)
+                };
+            }
+            const entry = page.querySelector('.project-entry, .experience-entry');
+            return {
+                capacityPx: CoverLetterApp.PAGE_PX,
+                usedPx: page.getBoundingClientRect().height,
+                entryGap: entry ? parseFloat(getComputedStyle(entry).marginBottom) : undefined,
+                kinds,
+                textWidth
+            };
+        });
     }
 
     displayResume(resumeContent) {
@@ -1970,7 +2042,7 @@ class CoverLetterApp {
                         font-size: ${contactFontSize};
                         line-height: 1.3;
                     ">${this.formatContactLine()}</div>
-                    ${resume.summary ? `<div style="
+                    ${resume.summary ? `<div data-kind="summary" style="
                         margin: 0.3em 0 0 0;
                         font-size: ${contactFontSize};
                         font-weight: bold;
@@ -2021,7 +2093,7 @@ class CoverLetterApp {
                     ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
                     ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
                     ${(edu.honors || edu.coursework) ? `
-                    <div style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
+                    <div data-kind="coursework" style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
                         ${edu.honors ? `• ${edu.honors}<br>` : ''}
                         ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
                     </div>` : ''}
@@ -2061,7 +2133,7 @@ class CoverLetterApp {
                                 font-size: ${bodyFontSize};
                                 line-height: ${lineHeight};
                             ">
-                                ${exp.bullets.map(bullet => `<li style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
+                                ${exp.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
                             </ul>
                         </div>
                     `).join('')}
@@ -2080,7 +2152,7 @@ class CoverLetterApp {
                     ">PROJECTS</h2>
                     ${resume.projects.map(proj => `
                         <div class="project-entry" style="margin-bottom: ${entrySpacing};">
-                            <div style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
+                            <div data-kind="projectHeader" style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
                                 ${proj.name}${proj.link ? ` | ${proj.link}` : ''}
                             </div>
                             <ul style="
@@ -2089,7 +2161,7 @@ class CoverLetterApp {
                                 font-size: ${bodyFontSize};
                                 line-height: ${lineHeight};
                             ">
-                                ${proj.bullets.map(bullet => `<li style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
+                                ${proj.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
                             </ul>
                         </div>
                     `).join('')}
@@ -2111,7 +2183,7 @@ class CoverLetterApp {
                             padding-bottom: 2pt;
                         ">PROGRAMS / CERTIFICATIONS</h2>
                         ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
-                        <div style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
+                        <div data-kind="extra" style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
                         </div>
                     ` : ''
                     }
@@ -2163,7 +2235,7 @@ class CoverLetterApp {
         if (Array.isArray(skills) && skills.length > 0 && typeof skills[0] === 'string' && skills[0].includes(':')) {
             // Skills already come grouped from API
             return skills.map(skillLine => 
-                `<p style="margin: 0 0 0.2em 0; line-height: 1.3;"><strong>${skillLine.split(':')[0]}:</strong> ${skillLine.split(':')[1]}</p>`
+                `<p data-kind="skills" style="margin: 0 0 0.2em 0; line-height: 1.3;"><strong>${skillLine.split(':')[0]}:</strong> ${skillLine.split(':')[1]}</p>`
             ).join('');
         } else {
             // Fallback: group skills manually

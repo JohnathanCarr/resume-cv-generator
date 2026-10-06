@@ -1,45 +1,23 @@
 // Document generation pipelines: match analysis → (research) → generate →
-// one repair pass. Ported from the local proxy's /generateResume and
+// one repair pass. Resumes are tailored as an edit list (tailor.js). Ported from the local proxy's /generateResume and
 // /generateCoverLetter routes; the return values keep the same shape the
 // extension already consumes.
 
 import { CONFIG } from './config.js';
 import { createClient, generateStructured, safeErrorMessage } from './openai.js';
 import { analyzeMatch, renderMatchForPrompt } from './matchAnalysis.js';
-import { buildResumeMessages, RESUME_SCHEMA, resumeBudget, wantsSummary } from './resume.js';
+import { EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits, fitToPage, keywordCoverage, docWords } from './tailor.js';
+import { makeLayout } from './layout.js';
+import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
-export { createBaseline, isCurrentBaseline, baselineToResume } from './baseline.js';
+export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
 
-// Words in every string of a generated resume.
-function resumeWordCount(resume) {
-  let n = 0;
-  const walk = (v) => {
-    if (Array.isArray(v)) v.forEach(walk);
-    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
-    else if (typeof v === 'string') n += v.trim().split(/\s+/).filter(Boolean).length;
-  };
-  walk(resume);
-  return n;
-}
-
-function bulletCount(resume) {
-  return [...(resume.experience || []), ...(resume.projects || [])].reduce((a, e) => a + (e.bullets || []).length, 0);
-}
-
 function requireInputs(profile, jobText) {
   if (!profile || !jobText) throw new Error('Missing required fields: profile and jobText');
-}
-
-// Bullets in the new resume that appear verbatim in the base one, for the
-// "kept N of M" report after a revision.
-function keptBullets(base, next) {
-  const bullets = (r) => [...(r.experience || []), ...(r.projects || [])].flatMap(e => e.bullets || []).map(b => b.trim());
-  const before = new Set(bullets(base));
-  return { kept: bullets(next).filter(b => before.has(b)).length, base: before.size };
 }
 
 // Match analysis on its own, so the extension can pause between reading the
@@ -53,84 +31,67 @@ export async function analyzeJob(apiKey, { profile, jobText }) {
   return match;
 }
 
-// The caller may pass budget.maxWords after measuring a rendered page that
-// overflowed, `match` from analyzeJob() to skip the analysis, and
-// `baseResume` (a previous resumeContent) to revise instead of regenerate.
-export async function generateResume(apiKey, { profile, jobText, budget: budgetOverride = {}, match = null, baseResume = null }) {
+// Tailors the user's own resume (a baseline from baseline.js) to a posting:
+// the model returns an edit list (tailor.js), which is validated and applied.
+// One page is a hard limit planned from the start: `layout` (layout.js; the
+// extension passes a measured render of the upload, evals get estimates)
+// gives the model each line's size and the page's free space, the validator
+// totals the edits' height, up to two repair passes fix invalid or
+// over-the-page edits, and fitToPage() is the last resort. Invalid edits are
+// dropped, never applied. `match` from analyzeJob() skips the analysis.
+export async function tailorResume(apiKey, { profile, jobText, baseline, match = null, layout = null }) {
   const startTime = Date.now();
   requireInputs(profile, jobText);
+  if (!baseline?.resume) throw new Error('Missing the uploaded resume to tailor.');
   const openai = createClient(apiKey);
-  console.log(`[${new Date().toISOString()}] Resume ${baseResume ? 'revision' : 'generation'} started`);
-  const budget = resumeBudget(profile, budgetOverride);
-
-  // Structured read of the posting against the profile; replaces regex guessing.
   if (!match) match = await analyzeJob(apiKey, { profile, jobText });
-  const matchText = renderMatchForPrompt(match);
 
-  const messages = buildResumeMessages({ profile, jobText, match, matchText, budget, baseResume });
-  let { data: resume } = await generateStructured(openai, {
-    messages, schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
-  });
+  const base = baseline.resume;
+  const L = makeLayout(layout || {});
+  const pool = buildPool(base, profile);
+  const messages = buildTailorMessages({ doc: base, pool, jobText, matchText: renderMatchForPrompt(match), match, layout: L });
+  const request = (msgs) => generateStructured(openai, { messages: msgs, schema: EDITS_SCHEMA, schemaName: 'resume_edits', maxTokens: MAX_COMPLETION_TOKENS.resume });
 
-  // Over the ceiling: one pass asking for whole bullets to be dropped, not truncated.
-  let words = resumeWordCount(resume);
-  let trimmed = false;
-  if (words > budget.maxWords) {
-    console.log(`Resume is ${words} words (max ${budget.maxWords}); requesting a trim`);
-    const repair = await generateStructured(openai, {
-      messages: [
-        ...messages,
-        { role: 'assistant', content: JSON.stringify(resume) },
-        { role: 'user', content: `That is ${words} words; the maximum is ${budget.maxWords}. Remove the least relevant whole bullets (and coursework if needed) until it is under ${budget.maxWords} words. Do not shorten bullets mid-sentence and do not change anything else.` }
-      ],
-      schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
-    });
-    resume = repair.data;
-    words = resumeWordCount(resume);
-    trimmed = true;
+  let { data } = await request(messages);
+  let { valid, errors } = validateEdits(data.edits, base, pool, L);
+  let repairs = 0;
+  let convo = messages;
+  while (errors.length && repairs < 2) {
+    console.log(`Tailoring: ${errors.length} problem(s), requesting a repair`, errors);
+    convo = [
+      ...convo,
+      { role: 'assistant', content: JSON.stringify(data) },
+      { role: 'user', content: `These edits cannot be applied as they are:\n${errors.map(e => `- ${e}`).join('\n')}\nReturn the complete edit list again with those fixed. Keep the valid edits as they were unless the page limit requires changing them.` }
+    ];
+    ({ data } = await request(convo));
+    ({ valid, errors } = validateEdits(data.edits, base, pool, L));
+    repairs++;
   }
 
-  const availableBullets = [...(profile.experiences || []), ...(profile.projects || [])].reduce((a, e) => a + (e.bullets || []).length, 0);
-
-  // Well under target with material left over: one pass asking for more of the profile.
-  let expanded = false;
-  if (!trimmed && words < budget.targetWords * 0.7 && bulletCount(resume) < availableBullets) {
-    console.log(`Resume is ${words} words with ${bulletCount(resume)}/${availableBullets} bullets used (target ${budget.targetWords}); requesting an expansion`);
-    const expand = await generateStructured(openai, {
-      messages: [
-        ...messages,
-        { role: 'assistant', content: JSON.stringify(resume) },
-        { role: 'user', content: `That is ${words} words and uses ${bulletCount(resume)} of the profile's ${availableBullets} bullets; the target is about ${budget.targetWords} words. Add the most relevant of the remaining profile bullets, roles, projects, coursework or certifications until you are near the target (never over ${budget.maxWords}). Only material from the profile; do not lengthen existing bullets with new detail.` }
-      ],
-      schema: RESUME_SCHEMA, schemaName: 'resume', maxTokens: MAX_COMPLETION_TOKENS.resume
-    });
-    resume = expand.data;
-    words = resumeWordCount(resume);
-    expanded = true;
-  }
-
-  // Never show certifications the profile does not have.
-  if (!(Array.isArray(profile.extras) && profile.extras.length)) resume.programs = [];
-  // Nor a summary the candidate never wrote.
-  if (!wantsSummary(profile, baseResume)) resume.summary = null;
-  const reuse = baseResume ? keptBullets(baseResume, resume) : null;
+  // Never over the page: undo growth, then drop whole items, if the model
+  // could not get there itself.
+  const fit = fitToPage(valid, base, pool, L);
+  const rejected = errors.filter(e => !e.startsWith('PAGE:'));
+  const { doc, changes } = applyEdits(base, pool, fit.edits);
+  const coverage = { before: keywordCoverage(base, match), after: keywordCoverage(doc, match) };
   const endTime = Date.now();
-  console.log(`[${new Date().toISOString()}] Resume generated in ${endTime - startTime}ms (${words} words, ${bulletCount(resume)}/${availableBullets} bullets${reuse ? `, kept ${reuse.kept}/${reuse.base} from the previous resume` : ''})`);
+  const page = { estimated: !L.measured, usedPx: Math.round(fit.page.usedPx), afterPx: Math.round(fit.page.afterPx), limitPx: Math.round(fit.page.limitPx), fits: fit.page.overPx === 0, trimmed: fit.trimmed, undone: fit.undone.map(e => e.target) };
+  console.log(`[${new Date().toISOString()}] Resume tailored in ${endTime - startTime}ms: ${changes.length} edits, core keywords ${coverage.before.found}/${coverage.before.total} → ${coverage.after.found}/${coverage.after.total}, page ${page.usedPx} → ${page.afterPx}/${page.limitPx}px${fit.trimmed.length ? `, trimmed ${fit.trimmed.join(', ')}` : ''}${rejected.length ? `, ${rejected.length} rejected` : ''}`);
   return {
-    resumeContent: resume,
+    resumeContent: resumeDocToSchema(doc),
+    tailored: doc,
+    changes,
     matchAnalysis: match,
     metadata: {
       generatedAt: new Date().toISOString(),
       processingTime: endTime - startTime,
-      words,
-      budget,
-      usedBullets: bulletCount(resume),
-      availableBullets,
-      trimmed,
-      expanded,
-      revised: Boolean(baseResume),
-      keptBullets: reuse ? reuse.kept : null,
-      baseBullets: reuse ? reuse.base : null
+      edits: changes.length,
+      rejected,
+      repairs,
+      coverage,
+      page,
+      wordsBefore: docWords(base),
+      wordsAfter: docWords(doc)
     }
   };
 }

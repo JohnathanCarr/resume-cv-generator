@@ -18,9 +18,14 @@ summaries to compare against.
 
 - `profiles/` — synthetic profiles (committed) and `profiles/local/` for real ones (gitignored)
 - `jobs/` — postings; line 2 is `Company · Location`, which `run.js` uses to know the company
-- `score.js` — the rubric. Resume: shape, sections, word budget and page fill,
-  bullet length, education completeness, mustInclude honoured, no fabricated
-  numbers, JD keyword coverage, action-verb bullets. Cover letter: length,
+- `score.js` — the rubric. Resume (tailoring, scored against the baseline it
+  edited): shape, jobs and education untouched, summary only if the upload had
+  one, no fabricated numbers, core keyword coverage of what the profile can
+  honestly reach, no keyword more than three times, fits one page (by the
+  layout estimate), at most 12 edits, no edits
+  rejected after the repair pass, unedited lines byte-identical. Eval profiles
+  have no uploaded resume; `evalBaseline()` in `run.js` uses the profile minus
+  some held-back material, which becomes the swap pool. Cover letter: length,
   paragraphs, names the company, buzzword and AI-tell lints, no fabricated
   numbers, grounded in ≥2 profile items, sentence variety, em-dash restraint,
   JD keyword coverage.

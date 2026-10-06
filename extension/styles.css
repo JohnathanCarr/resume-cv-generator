@@ -1828,3 +1828,92 @@ body {
         box-shadow 350ms cubic-bezier(0.4, 0, 0.2, 1),
         opacity 350ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 26: RESUME COMPARE BAR & CHANGE HIGHLIGHTS
+   The tailored preview marks every change (generation/highlight.js); the
+   page itself is always white, so the highlight colours are fixed. The PDF
+   is printed from unmarked markup and never carries them.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.resume-compare-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.segmented {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius-full);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+}
+
+.segmented-btn {
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-weight: 600;
+    padding: 4px 14px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+}
+
+.segmented-btn.active {
+    background: var(--accent-primary);
+    color: var(--text-inverse);
+}
+
+.coverage-chip {
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    background: var(--status-success-bg);
+    color: var(--status-success);
+    font-weight: 600;
+}
+
+/* The legend's sample swatch sits on the themed background, not the white
+   page, so it sets its own dark text for both themes. */
+.resume-legend .rs-added {
+    font-family: var(--font-body);
+    color: #14532d;
+    padding: 0 4px;
+}
+
+.rs-added {
+    background: #bbf7d0;
+    color: inherit;
+    border-radius: 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+.rs-added.rs-line {
+    background: #dcfce7;
+    box-shadow: inset 2px 0 0 #16a34a;
+}
+
+.resume-original {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.resume-original canvas {
+    width: 100%;
+    height: auto;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+.resume-original .placeholder-text {
+    background: white;
+    border-radius: var(--radius-lg);
+}

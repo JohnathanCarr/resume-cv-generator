@@ -39,7 +39,8 @@
   };
   // Point the page's relative assets at extension/ and open it in place.
   document.open();
-  document.write(html.replace('<head>', '<head><base href="../extension/">'));
+  // Transitions off: a screenshot must not catch a modal mid-fade.
+  document.write(html.replace('<head>', '<head><base href="../extension/"><style>*, *::before, *::after { transition: none !important; animation: none !important; }</style>'));
   document.close();
 
   // Stage the requested scene once the app has initialised (it waits 100ms).
@@ -69,7 +70,7 @@
       document.getElementById('keywords-modal').classList.remove('hidden');
     } else {
       const status = document.getElementById('generation-status');
-      status.textContent = 'Resume tailored. Kept 6 of 6 bullets from your resume as written. Added to your skills: Kubernetes, Terraform.';
+      status.textContent = 'Resume tailored with 3 edits. Key ATS keywords: 3 of 5 → 4 of 5.';
       status.className = 'status-message status-success';
     }
   }, 400);

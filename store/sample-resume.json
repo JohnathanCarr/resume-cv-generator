@@ -1,11 +1,9 @@
 {
   "resumeContent": {
-    "summary": "Software Engineer II specializing in backend services and distributed systems in Go and TypeScript.",
+    "summary": "Full-stack software engineer with 3+ years building high-throughput distributed systems in Go and TypeScript.",
     "skills": [
-      "Backend & APIs: Go, TypeScript, Node.js, gRPC, SQL",
-      "Infrastructure: Kubernetes, Terraform, Docker, CI/CD",
-      "Data & Observability: PostgreSQL, ClickHouse, Observability",
-      "Development: Python, Rust, React, TDD"
+      "Languages: Go, TypeScript, Python, Rust, SQL",
+      "Infrastructure & Tools: Kubernetes, Terraform, gRPC, Docker, Observability, CI/CD, PostgreSQL, ClickHouse, Node.js, React, TDD"
     ],
     "education": [
       {
@@ -39,7 +37,7 @@
         "location": "San Francisco, CA",
         "bullets": [
           "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
-          "Led Kubernetes upgrades for 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
+          "Led migration and Kubernetes upgrade of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
           "Mentored two interns who converted to full-time offers."
         ]
       },
@@ -55,20 +53,259 @@
     ],
     "projects": [
       {
-        "name": "Latticework",
+        "name": "Latticework | Open-source tracing dashboard",
         "link": null,
         "bullets": [
-          "Built an open-source tracing dashboard with a React + TypeScript front end over a ClickHouse backend.",
-          "Received 1.2K GitHub stars."
+          "React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars."
+        ]
+      },
+      {
+        "name": "Pantry | Rust CLI for recipe scaling",
+        "link": null,
+        "bullets": [
+          "Parses 30+ unit formats and handles fractional conversions with property-based tests."
         ]
       }
     ],
     "programs": [
-      "AWS Certified Solutions Architect \u2013 Associate, Amazon Web Services (Mar 2024)"
+      "AWS Certified Solutions Architect – Associate – Amazon Web Services (Mar 2024)",
+      "President – Women in Computing at UT Austin (Sep 2024 - Present)"
     ]
   },
-  "jobText": "Senior Backend Engineer \u2014 Infrastructure\nVercel \u00b7 San Francisco, CA (Hybrid)\n\nAbout the role\nVercel is seeking a Senior Backend Engineer to join our Infrastructure team. You will design and operate the distributed systems behind our edge network and build the APIs used by millions of developers every day. You'll own services end to end: design, rollout, on-call, and the observability that keeps them honest.\n\nWhat you'll do\n- Design and operate high-throughput backend services in Go and TypeScript\n- Run production workloads on Kubernetes, including upgrades and capacity planning\n- Build observability (metrics, tracing, alerting) and lead incident response\n- Partner with product engineering on API design and platform reliability\n\nRequirements\n- 3+ years building backend services in Go or TypeScript\n- Experience operating Kubernetes in production\n- Strong understanding of observability and incident response\n- Track record of shipping reliable APIs at scale\n\nNice to have\n- Experience with PostgreSQL or ClickHouse\n- Open-source contributions\n- Experience with edge or CDN infrastructure\n",
+  "tailored": {
+    "name": "Maria Lopez-Garcia",
+    "contact": "Email: maria.lopez@example.com\nPhone: (512) 555-0199",
+    "location": "Austin, TX",
+    "summary": "Full-stack software engineer with 3+ years building high-throughput distributed systems in Go and TypeScript.",
+    "skills": [
+      "Go",
+      "TypeScript",
+      "Python",
+      "Rust",
+      "SQL",
+      "Kubernetes",
+      "Terraform",
+      "gRPC",
+      "Docker",
+      "Observability",
+      "CI/CD",
+      "PostgreSQL",
+      "ClickHouse",
+      "Node.js",
+      "React",
+      "TDD"
+    ],
+    "skillGroups": [
+      {
+        "id": "skills:1",
+        "label": "Languages",
+        "items": [
+          "Go",
+          "TypeScript",
+          "Python",
+          "Rust",
+          "SQL"
+        ]
+      },
+      {
+        "id": "skills:2",
+        "label": "Infrastructure & Tools",
+        "items": [
+          "Kubernetes",
+          "Terraform",
+          "gRPC",
+          "Docker",
+          "Observability",
+          "CI/CD",
+          "PostgreSQL",
+          "ClickHouse",
+          "Node.js",
+          "React",
+          "TDD"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "id": "edu:1",
+        "institution": "University of Texas at Austin",
+        "degreeType": "Master of Science",
+        "major": "Computer Science",
+        "minor": "",
+        "location": "Austin, TX",
+        "start": "",
+        "end": "May 2026",
+        "gpa": "3.9/4.0",
+        "honors": "",
+        "coursework": "Distributed Systems, Machine Learning"
+      },
+      {
+        "id": "edu:2",
+        "institution": "Texas A&M University",
+        "degreeType": "B.S.",
+        "major": "Computer Engineering",
+        "minor": "Mathematics",
+        "location": "College Station, TX",
+        "start": "Aug 2018",
+        "end": "May 2022",
+        "gpa": "",
+        "honors": "Magna Cum Laude",
+        "coursework": ""
+      }
+    ],
+    "experiences": [
+      {
+        "id": "exp:1",
+        "title": "Software Engineer II",
+        "company": "Stripe",
+        "start": "Jun 2023",
+        "end": "Present",
+        "location": "San Francisco, CA",
+        "description": "",
+        "bullets": [
+          "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
+          "Led migration and Kubernetes upgrade of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
+          "Mentored two interns who converted to full-time offers."
+        ],
+        "mustInclude": true,
+        "bulletIds": [
+          "exp:1.b1",
+          "exp:1.b2",
+          "exp:1.b3"
+        ]
+      },
+      {
+        "id": "exp:2",
+        "title": "Software Engineering Intern",
+        "company": "Datadog",
+        "start": "May 2022",
+        "end": "Aug 2022",
+        "location": "New York, NY",
+        "description": "",
+        "bullets": [
+          "Built a Go service to deduplicate log ingestion streams, reducing storage costs by $180K annually."
+        ],
+        "mustInclude": false,
+        "bulletIds": [
+          "exp:2.b1"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "id": "proj:1",
+        "name": "Latticework",
+        "description": "Open-source tracing dashboard",
+        "bullets": [
+          "React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars."
+        ],
+        "mustInclude": false,
+        "bulletIds": [
+          "proj:1.b1"
+        ]
+      },
+      {
+        "id": "proj:2",
+        "name": "Pantry",
+        "description": "Rust CLI for recipe scaling",
+        "bullets": [
+          "Parses 30+ unit formats and handles fractional conversions with property-based tests."
+        ],
+        "mustInclude": false,
+        "bulletIds": [
+          "proj:2.b1"
+        ]
+      }
+    ],
+    "extras": [
+      {
+        "id": "extra:1",
+        "title": "AWS Certified Solutions Architect – Associate",
+        "organization": "Amazon Web Services",
+        "type": "certification",
+        "start": "",
+        "end": "Mar 2024",
+        "description": ""
+      },
+      {
+        "id": "extra:2",
+        "title": "President",
+        "organization": "Women in Computing at UT Austin",
+        "type": "leadership",
+        "start": "Sep 2024",
+        "end": "Present",
+        "description": ""
+      }
+    ]
+  },
+  "changes": [
+    {
+      "id": "summary",
+      "op": "rewrite",
+      "before": "Full-stack software engineer with 3+ years building distributed systems in Go and TypeScript.",
+      "after": "Full-stack software engineer with 3+ years building high-throughput distributed systems in Go and TypeScript.",
+      "reason": "High-throughput backend services"
+    },
+    {
+      "id": "exp:1.b2",
+      "op": "rewrite",
+      "before": "Led migration of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
+      "after": "Led migration and Kubernetes upgrade of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
+      "reason": "Kubernetes upgrades"
+    },
+    {
+      "id": "skills:2",
+      "op": "skills",
+      "before": [
+        "React",
+        "Node.js",
+        "gRPC",
+        "Kubernetes",
+        "Docker",
+        "PostgreSQL",
+        "ClickHouse",
+        "CI/CD",
+        "Observability",
+        "TDD"
+      ],
+      "after": [
+        "Kubernetes",
+        "Terraform",
+        "gRPC",
+        "Docker",
+        "Observability",
+        "CI/CD",
+        "PostgreSQL",
+        "ClickHouse",
+        "Node.js",
+        "React",
+        "TDD"
+      ],
+      "added": [
+        "Terraform"
+      ],
+      "reason": "Core infrastructure tools"
+    }
+  ],
+  "coverage": {
+    "before": {
+      "found": 3,
+      "total": 5,
+      "missing": [
+        "Terraform",
+        "incident response"
+      ]
+    },
+    "after": {
+      "found": 4,
+      "total": 5,
+      "missing": [
+        "incident response"
+      ]
+    }
+  },
+  "jobText": "Senior Backend Engineer — Infrastructure\nVercel · San Francisco, CA (Hybrid)\n\nAbout the role\nVercel is seeking a Senior Backend Engineer to join our Infrastructure team. You will design and operate the distributed systems behind our edge network and build the APIs used by millions of developers every day. You'll own services end to end: design, rollout, on-call, and the observability that keeps them honest.\n\nWhat you'll do\n- Design and operate high-throughput backend services in Go and TypeScript\n- Run production workloads on Kubernetes, including upgrades and capacity planning\n- Build observability (metrics, tracing, alerting) and lead incident response\n- Partner with product engineering on API design and platform reliability\n\nRequirements\n- 3+ years building backend services in Go or TypeScript\n- Experience operating Kubernetes in production\n- Strong understanding of observability and incident response\n- Track record of shipping reliable APIs at scale\n\nNice to have\n- Experience with PostgreSQL or ClickHouse\n- Open-source contributions\n- Experience with edge or CDN infrastructure\n",
   "company": "Vercel",
-  "role": "Senior Backend Engineer \u2014 Infrastructure",
-  "generatedAt": "2026-09-21T18:00:00.000Z"
+  "role": "Senior Backend Engineer — Infrastructure",
+  "generatedAt": "2026-10-06T00:00:00.000Z"
 }

@@ -504,7 +504,11 @@ function applyEdits(baseDoc, pool, edits) {
       const before = g.items;
       const after = e.items.map(str).filter(Boolean);
       const had = new Set(before.map(normalizeTerm));
-      const added = after.filter(i => !had.has(normalizeTerm(i)) && !before.some(b => i.toLowerCase().includes(b.toLowerCase())));
+      // A respelling ("PostgreSQL (Postgres)") replaces its original; an item
+      // that merely contains another one still on the line ("gRPC streaming"
+      // next to "gRPC") is new.
+      const respelled = (i) => before.some(b => !after.includes(b) && i.toLowerCase().includes(b.toLowerCase()));
+      const added = after.filter(i => !had.has(normalizeTerm(i)) && !respelled(i));
       g.items = after;
       changes.push({ id: e.target, op: 'skills', before, after, added, reason });
     } else if (/^proj:/.test(e.target)) {

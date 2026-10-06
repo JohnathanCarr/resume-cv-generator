@@ -251,6 +251,10 @@ class CoverLetterApp {
             this.downloadPDF();
         });
 
+        // Tailored / Original toggle above the resume preview
+        document.getElementById('view-tailored')?.addEventListener('click', () => this.showResumeView('tailored'));
+        document.getElementById('view-original')?.addEventListener('click', () => this.showResumeView('original'));
+
         // Resume generation
         document.getElementById('generate-resume-btn')?.addEventListener('click', () => {
             this.generateResume();
@@ -385,6 +389,7 @@ class CoverLetterApp {
             resumeContent: result.resumeContent,
             tailored: result.tailored || null, // tailored resume document, same ids as the baseline
             changes: result.changes || [],     // one record per applied edit, for the preview highlights
+            coverage: result.metadata?.coverage || null,
             jobText,
             company: result.matchAnalysis?.company || '',
             role: result.matchAnalysis?.role || '',
@@ -399,16 +404,102 @@ class CoverLetterApp {
 
     // Puts the last resume back in the preview after a reload, without
     // switching tabs, so it can be downloaded or revised straight away.
-    restoreLastResume() {
+    async restoreLastResume() {
         if (!this.lastResume) return;
-        const previewEl = document.querySelector('.resume-content');
-        if (!previewEl) return;
-        previewEl.innerHTML = this.formatResume(this.lastResume.resumeContent);
-        this.lastRenderedResumeHTML = previewEl.innerHTML;
+        if (!document.querySelector('.resume-content')) return;
+        await this.renderResumePreview(this.lastResume);
         this.lastApiCall = { request: { jobText: this.lastResume.jobText }, response: { resumeContent: this.lastResume.resumeContent }, timestamp: this.lastResume.generatedAt };
         this.switchToResumeView();
         const downloadBtn = document.getElementById('download-resume-pdf');
         if (downloadBtn) downloadBtn.disabled = false;
+    }
+
+    // ---- Tailored preview: highlights, Original/Tailored, coverage --------------
+
+    // Shows a tailored resume with its changes marked, and keeps the unmarked
+    // markup for the PDF. entry: { resumeContent, tailored?, changes?, coverage? }
+    // (a tailorResume() result or lastResume). Older entries without a
+    // tailored document render as they are.
+    async renderResumePreview(entry) {
+        const previewEl = document.querySelector('.resume-content');
+        if (!previewEl) return;
+        let marked = entry.resumeContent;
+        let clean = entry.resumeContent;
+        if (entry.tailored) {
+            const { previewResumes } = await this.generation();
+            ({ marked, clean } = previewResumes(entry.tailored, entry.changes || []));
+        }
+        previewEl.innerHTML = this.formatResume(marked);
+        this.lastRenderedResumeHTML = previewEl.innerHTML;
+        this.lastCleanResumeHTML = this.formatResume(clean);
+        this.renderCompareBar(entry);
+        this.showResumeView('tailored');
+        document.dispatchEvent(new CustomEvent('resume-rendered'));
+    }
+
+    renderCompareBar(entry) {
+        const bar = document.getElementById('resume-compare-bar');
+        if (!bar) return;
+        bar.classList.toggle('hidden', !entry.tailored);
+        const chip = document.getElementById('resume-coverage');
+        const cov = entry.coverage || entry.metadata?.coverage;
+        if (chip) {
+            chip.classList.toggle('hidden', !(cov && cov.after.total));
+            if (cov && cov.after.total) {
+                chip.textContent = `Key ATS keywords ${cov.before.found}/${cov.after.total} → ${cov.after.found}/${cov.after.total}`;
+                chip.title = cov.after.missing?.length ? `Still missing (not in your profile): ${cov.after.missing.join(', ')}` : 'Every key keyword from the posting is on your resume.';
+            }
+        }
+        const legend = document.getElementById('resume-legend');
+        if (legend) legend.classList.toggle('hidden', !(entry.changes || []).some(c => c.op !== 'remove'));
+    }
+
+    // 'tailored' shows the generated resume; 'original' the uploaded PDF.
+    showResumeView(view) {
+        const original = view === 'original';
+        document.getElementById('resume-original')?.classList.toggle('hidden', !original);
+        document.querySelector('#resume-preview .resume-content')?.classList.toggle('hidden', original);
+        for (const [id, on] of [['view-tailored', !original], ['view-original', original]]) {
+            const btn = document.getElementById(id);
+            if (!btn) continue;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-selected', String(on));
+        }
+        if (original) this.renderOriginalResume();
+    }
+
+    // Draws the uploaded PDF's pages with pdf.js, once per upload.
+    async renderOriginalResume() {
+        const host = document.getElementById('resume-original');
+        if (!host || !this.uploadedResume?.dataBase64) {
+            if (host) host.innerHTML = '<p class="placeholder-text">No uploaded resume to show.</p>';
+            return;
+        }
+        const key = this.uploadedResume.uploadedAt || this.uploadedResume.name;
+        if (host.dataset.renderedFor === key) return;
+        host.innerHTML = '<p class="placeholder-text">Loading your resume…</p>';
+        try {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime?.getURL ? chrome.runtime.getURL('pdf.worker.min.js') : 'pdf.worker.min.js';
+            const pdf = await pdfjsLib.getDocument({ data: this.base64ToBytes(this.uploadedResume.dataBase64) }).promise;
+            const width = Math.max(600, host.clientWidth || 800);
+            const canvases = [];
+            for (let n = 1; n <= pdf.numPages; n++) {
+                const page = await pdf.getPage(n);
+                const base = page.getViewport({ scale: 1 });
+                const viewport = page.getViewport({ scale: (width / base.width) * (window.devicePixelRatio || 1) });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                canvas.setAttribute('aria-label', `Uploaded resume, page ${n}`);
+                await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                canvases.push(canvas);
+            }
+            host.replaceChildren(...canvases);
+            host.dataset.renderedFor = key;
+        } catch (error) {
+            console.error('Could not draw the uploaded resume:', error);
+            host.innerHTML = '<p class="placeholder-text">Your uploaded resume could not be displayed.</p>';
+        }
     }
 
     showLoading() {
@@ -1807,7 +1898,9 @@ class CoverLetterApp {
       refits++;
     }
     const overflow = height / CoverLetterApp.PAGE_PX;
-    await this.renderResumeAndMeasure(result.resumeContent);
+    this.switchTab('generate');
+    this.switchToResumeView();
+    await this.renderResumePreview(result);
 
     this.lastApiCall.response = result;
     this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
@@ -2234,9 +2327,12 @@ class CoverLetterApp {
         // Format skills as comprehensive grouped lines like the sample
         if (Array.isArray(skills) && skills.length > 0 && typeof skills[0] === 'string' && skills[0].includes(':')) {
             // Skills already come grouped from API
-            return skills.map(skillLine => 
-                `<p data-kind="skills" style="margin: 0 0 0.2em 0; line-height: 1.3;"><strong>${skillLine.split(':')[0]}:</strong> ${skillLine.split(':')[1]}</p>`
-            ).join('');
+            // Split at the first colon only: items may carry markup (preview
+            // highlights with a title) that contains colons of its own.
+            return skills.map(skillLine => {
+                const at = skillLine.indexOf(':');
+                return `<p data-kind="skills" style="margin: 0 0 0.2em 0; line-height: 1.3;"><strong>${skillLine.slice(0, at)}:</strong> ${skillLine.slice(at + 1).trim()}</p>`;
+            }).join('');
         } else {
             // Fallback: group skills manually
             return `<p style="margin: 0; line-height: 1.3;"><strong>Technical Skills:</strong> ${skills.join(', ')}</p>`;
@@ -2288,7 +2384,10 @@ class CoverLetterApp {
 // extension page cannot be handed a document directly).
 async downloadResumePDF() {
   try {
-    const page = document.querySelector('.resume-content .resume-page');
+    // Print the unmarked resume: preview highlights never reach the PDF.
+    const holder = document.createElement('div');
+    holder.innerHTML = this.lastCleanResumeHTML || this.lastRenderedResumeHTML || '';
+    const page = holder.querySelector('.resume-page') || document.querySelector('.resume-content .resume-page');
     if (!page) throw new Error('No resume preview found.');
 
     const name = (this.profile.name || '').trim().replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ');

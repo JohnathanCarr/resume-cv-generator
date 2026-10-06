@@ -327,6 +327,15 @@
                         </div>
                         
                         <div id="resume-preview" class="resume-preview hidden">
+                            <div id="resume-compare-bar" class="resume-compare-bar hidden">
+                                <div class="segmented" role="tablist" aria-label="Resume view">
+                                    <button id="view-tailored" class="segmented-btn active" role="tab" aria-selected="true">Tailored</button>
+                                    <button id="view-original" class="segmented-btn" role="tab" aria-selected="false">Original</button>
+                                </div>
+                                <span id="resume-coverage" class="coverage-chip hidden"></span>
+                                <span id="resume-legend" class="resume-legend"><span class="rs-added">Green</span> marks what changed for this posting. Hover a change to see the original. The PDF has no highlights.</span>
+                            </div>
+                            <div id="resume-original" class="resume-original hidden"></div>
                             <div class="resume-content">
                                 <p class="placeholder-text">
                                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.3; margin-bottom: 1rem;">

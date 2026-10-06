@@ -2,7 +2,7 @@
 
 **Tailored, honest resumes and cover letters for every job you apply to — built only from your own experience.**
 
-A Chrome extension, nothing else to install. You upload your resume once, keep a complete profile, paste a job posting, and get a one-page ATS-friendly resume and a plainly written cover letter that match the posting's actual requirements. Nothing is invented: every claim traces back to your profile, and everything said about the company comes from the posting or from cited research.
+A Chrome extension, nothing else to install. You upload your resume once, keep a complete profile, paste a job posting, and get *your own resume* tailored to that posting for applicant tracking systems, plus a plainly written cover letter. Nothing is invented: every claim traces back to your profile, and everything said about the company comes from the posting or from cited research.
 
 It uses your own OpenAI API key, so you pay OpenAI directly for what you generate (a few cents per document) and nothing goes through anyone else's server.
 
@@ -10,9 +10,10 @@ It uses your own OpenAI API key, so you pay OpenAI directly for what you generat
 
 - 🎯 **Reads the posting properly**: extracts every requirement and checks which parts of your profile support it before writing a word
 - 🔍 **Researches the company** (optional, cover letters): a few web searches for what they build and what they care about, every fact with its source; if nothing reliable turns up, the letter sticks to the posting
-- 📄 **ATS-friendly resumes**: one page, standard sections, the posting's exact terms where you genuinely have the skill, no invented numbers
-- 🔑 **Keyword check before writing**: terms the posting's ATS would look for that your profile never mentions are listed for you to confirm; the ones you tick join your skills, the rest are never asked about again
-- ♻️ **Revises instead of rewriting**: the next resume starts from the last one and changes only what the new posting needs, so wording you liked stays put
+- 📄 **Tailors your resume, doesn't replace it**: a few targeted edits to the resume you uploaded (the posting's exact terms where you genuinely have the skill, a more relevant bullet or project from your profile, missing skills added); everything else stays word for word
+- 🟩 **See every change**: edits are highlighted green in the preview (hover for the original wording), flip to your original PDF to compare, and watch the posting's key keywords go from e.g. 3/5 to 5/5; the PDF itself is clean
+- 📏 **One page, always**: the page space is measured before editing; if something has to give, the least relevant items go, never half a sentence
+- 🔑 **Keyword check before writing**: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm; the ones you tick join your skills and can go on the resume
 - ✍️ **Cover letters that sound like a person**: 250–350 words, specific, no buzzwords, no "I am excited to apply"
 - 💾 **Smart profile management**: upload your existing resume to autofill your profile, autosave, everything editable
 - 🔒 **Private by construction**: your profile lives in this browser's extension storage; the only outside service it ever talks to is OpenAI, with your key
@@ -70,15 +71,15 @@ Your key is stored only in this browser's extension storage and sent directly to
 2. **Paste any job description**
 3. **Choose your document**. Before either is written, the posting is read against your profile; if its key skills or tools (at most 8, the ones a recruiter would filter on) are missing from your profile, a dialog lists them — tick the ones you actually have (they are added to your skills so the document can use the posting's wording), leave the rest, **Continue**.
    - **Generate Cover Letter** → 250–350 words, grounded in your profile and the posting. Leave **Research the company** ticked for a few web searches about the employer (roughly $0.05–0.10 per letter, cached per company for 30 days); untick it to use the posting only.
-   - **Generate Resume** → one page, ATS-friendly, sized to how much material your profile actually has. After the first one, **Revise the last resume instead of starting over** is ticked by default: the new resume keeps every bullet and line that still fits and changes only what the posting needs. Untick it for a fresh draft.
-4. **Save it**:
+   - **Generate Resume** (needs your uploaded resume) → your resume with a handful of edits for this posting: its exact terms where your lines already show them, a more relevant unused bullet, project or certification from your profile swapped in, confirmed skills added. Jobs and education never change, and it always fits one page. Every posting starts from your uploaded resume, not the last tailored one. Changes are green in the preview; **Original** shows your PDF for comparison.
+4. **Save it**: name the file (it's prefilled with your name, the company and the document type), then
    - **Cover Letter PDF** downloads straight to your Downloads folder
-   - **Resume PDF** opens a print view; choose **Save as PDF** as the destination. The result is a real text PDF (not an image), so applicant tracking systems can read it.
+   - **Resume PDF** opens a print view; choose **Save as PDF** as the destination. There are no highlights in the PDF. The result is a real text PDF (not an image), so applicant tracking systems can read it.
 
-The status line under the buttons tells you what happened: how many searches the research used, whether any sentence couldn't be traced to your profile, how many bullets a revision kept, which keywords were added to your skills, and whether your profile is what's keeping the resume short.
+The status line under the buttons tells you what happened: how many searches the research used, whether any sentence couldn't be traced to your profile, how many edits the resume got and how its keyword coverage changed, which keywords were added to your skills, and whether anything was removed to fit the page.
 
 ### Pro Tips
-- **Mark items "Must Include"** to guarantee they appear on resumes
+- **Put extra material in your profile**: bullets, projects and certifications that aren't on your uploaded resume are what the tailoring can swap in when a posting calls for them
 - **Classify extras** as Research/Program/Certification for better placement
 - **Keep your profile complete** — list every skill you have, not just the ones on one resume; each generated document picks what fits the job
 - **Different jobs = different documents** — each is tailored specifically
@@ -123,7 +124,7 @@ That's it. The extension page holds the UI, your data (in `chrome.storage.local`
 
 1. **Match analysis** — a structured read of the posting against your profile: company, role, every requirement with the profile items that support it and how strongly, and the posting's exact ATS keywords
 2. **Company research** (cover letters, optional) — OpenAI's hosted web search, at most a few searches, every fact with its URL
-3. **The document** — generated against a strict output schema with no-fabrication rules; resumes get a trim or expand pass to fit the page, cover letters get a repair pass for any sentence that can't be traced to a source
+3. **The document** — generated against a strict output schema with no-fabrication rules; resumes come back as a validated list of edits to your own resume, planned against the measured page; cover letters get a repair pass for any sentence that can't be traced to a source
 
 The model, per-call reasoning effort and research limits are pinned in `extension/generation/config.js`.
 

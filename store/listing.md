@@ -8,7 +8,7 @@ Screenshots (`screenshot-*.jpg`, 1280×800, no alpha as the store requires) are 
 **Name:** Resume Studio
 
 **Summary** (132 characters max):
-Tailored, ATS-friendly resumes and cover letters from your own profile and a job posting. Bring your own OpenAI key; nothing else.
+Tailors your own resume to each job posting for ATS, shows every change, and writes the cover letter. Bring your own OpenAI key.
 
 **Category:** Productivity → Workflow & Planning
 
@@ -16,17 +16,18 @@ Tailored, ATS-friendly resumes and cover letters from your own profile and a job
 
 **Description:**
 
-Resume Studio writes a one-page resume and a cover letter for a specific job, from a profile you control, using your own OpenAI API key.
+Resume Studio tailors your own resume to a specific job for applicant tracking systems (ATS), and writes a matching cover letter, using your own OpenAI API key.
 
 HOW IT WORKS
 1. Upload your current resume (PDF). It is parsed in the browser — no upload anywhere — to fill in your profile: education, skills, experience, projects, certifications. Review and add anything missing.
 2. Paste a job posting.
-3. Generate. The posting is read against your profile first: every requirement is matched to the evidence you actually have, and the posting's exact keywords are collected.
+3. Generate. The posting is read against your profile first: every requirement is matched to the evidence you actually have, and the posting's key ATS keywords are collected.
 
 WHAT YOU GET
-• Resumes that pass applicant tracking systems: one page, standard sections, the posting's own terms wherever you genuinely have the skill, past-tense action bullets, no invented numbers or tools.
-• A keyword check before writing: terms the posting looks for that your profile never mentions are listed for you to confirm. Tick the ones you have and they are added to your profile; the rest are never asked about again.
-• Revisions, not rewrites: the next resume starts from your last one and changes only what the new posting needs, so wording you liked stays put.
+• Your resume, tailored, not replaced: a handful of targeted edits to the resume you uploaded. The posting's exact terms where your lines already show the skill, a more relevant bullet, project or certification from your profile swapped in, confirmed skills added. Everything else stays word for word; jobs and education never change; nothing is invented.
+• Every change highlighted: edits are green in the preview (hover for the original wording), one click shows your original PDF, and the key-keyword score shows the gain (e.g. 3/5 → 5/5). The downloaded PDF has no highlights.
+• Always one page: the page is measured before any edit is made; if space runs out, the least relevant items go, never half a sentence.
+• A keyword check before writing: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm. Tick the ones you have and they are added to your profile.
 • Cover letters that sound like a person: 250–350 words, specific, every claim traceable to your profile or the posting. Optionally researches the employer with a few web searches and cites each fact.
 • Real PDFs, not images, so ATS software can read them.
 

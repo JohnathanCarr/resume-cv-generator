@@ -251,6 +251,18 @@ class CoverLetterApp {
             this.downloadPDF();
         });
 
+        // File name prompt before either download: resolved by promptForFilename()
+        document.getElementById('filename-save')?.addEventListener('click', () => this.resolveFilename(true));
+        document.getElementById('filename-cancel')?.addEventListener('click', () => this.resolveFilename(false));
+        document.getElementById('filename-close')?.addEventListener('click', () => this.resolveFilename(false));
+        document.getElementById('filename-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'filename-modal') this.resolveFilename(false);
+        });
+        document.getElementById('filename-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this.resolveFilename(true); }
+            if (e.key === 'Escape') { e.preventDefault(); this.resolveFilename(false); }
+        });
+
         // Tailored / Original toggle above the resume preview
         document.getElementById('view-tailored')?.addEventListener('click', () => this.showResumeView('tailored'));
         document.getElementById('view-original')?.addEventListener('click', () => this.showResumeView('original'));
@@ -412,6 +424,53 @@ class CoverLetterApp {
         this.switchToResumeView();
         const downloadBtn = document.getElementById('download-resume-pdf');
         if (downloadBtn) downloadBtn.disabled = false;
+    }
+
+    // ---- File name before download -----------------------------------------------
+
+    // Characters no OS accepts in a file name become spaces; length capped.
+    sanitizeFilename(name) {
+        return String(name || '')
+            .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/^[\s.]+|[\s.]+$/g, '')
+            .slice(0, 120);
+    }
+
+    // "Name - Company - Resume", leaving out whatever is unknown.
+    defaultFilename(kind) {
+        const company = kind === 'resume'
+            ? (this.lastResume?.company || this.lastMatchAnalysis?.company)
+            : this.lastMatchAnalysis?.company;
+        return this.sanitizeFilename([this.profile.name, company, kind === 'resume' ? 'Resume' : 'Cover Letter'].filter(Boolean).join(' - '));
+    }
+
+    // Asks for the file name (without .pdf). Resolves to the cleaned name, or
+    // null if the user cancelled.
+    promptForFilename(kind) {
+        const modal = document.getElementById('filename-modal');
+        const input = document.getElementById('filename-input');
+        if (!modal || !input) return Promise.resolve(this.defaultFilename(kind));
+        input.value = this.defaultFilename(kind);
+        const help = document.getElementById('filename-help');
+        if (help) {
+            help.textContent = kind === 'resume'
+                ? 'Chrome\'s print window opens next with this name. Choose "Save as PDF" as the destination.'
+                : 'Saved to your Downloads folder.';
+        }
+        modal.classList.remove('hidden');
+        setTimeout(() => { input.focus(); input.select(); }, 0);
+        return new Promise((resolve) => { this._filenameResolve = resolve; this._filenameKind = kind; });
+    }
+
+    resolveFilename(ok) {
+        document.getElementById('filename-modal')?.classList.add('hidden');
+        const resolve = this._filenameResolve;
+        this._filenameResolve = null;
+        if (!resolve) return;
+        if (!ok) return resolve(null);
+        const name = this.sanitizeFilename(document.getElementById('filename-input')?.value);
+        resolve(name || this.defaultFilename(this._filenameKind) || 'Resume');
     }
 
     // ---- Tailored preview: highlights, Original/Tailored, coverage --------------
@@ -1683,6 +1742,12 @@ class CoverLetterApp {
     }
 
     async downloadPDF() {
+        if (!document.querySelector('.letter-content')) {
+            this.showError('No cover letter to download.', false);
+            return;
+        }
+        const chosenName = await this.promptForFilename('cover');
+        if (chosenName === null) return;
         try {
             // Show loading
             this.showStatus('Generating PDF...', 'loading');
@@ -1791,9 +1856,7 @@ class CoverLetterApp {
             currentY += lineHeight * 3;
             doc.text(this.profile.name, leftMargin, currentY);
 
-            // Generate filename
-            const timestamp = new Date().toISOString().split('T')[0];
-            const filename = `cover-letter-${timestamp}.pdf`;
+            const filename = `${chosenName}.pdf`;
 
             // Convert to blob
             const pdfBlob = doc.output('blob');
@@ -2390,9 +2453,11 @@ async downloadResumePDF() {
     const page = holder.querySelector('.resume-page') || document.querySelector('.resume-content .resume-page');
     if (!page) throw new Error('No resume preview found.');
 
-    const name = (this.profile.name || '').trim().replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ');
+    // The print page's title is the name Chrome proposes for "Save as PDF".
+    const title = await this.promptForFilename('resume');
+    if (title === null) return;
     await chrome.storage.session.set({
-      printJob: { html: page.outerHTML, title: name ? `${name} - Resume` : 'Resume' }
+      printJob: { html: page.outerHTML, title }
     });
     await chrome.tabs.create({ url: chrome.runtime.getURL('print.html'), active: true });
 

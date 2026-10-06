@@ -1424,7 +1424,8 @@ body {
 }
 
 .settings-modal .modal-header h3,
-#keywords-modal .modal-header h3 {
+#keywords-modal .modal-header h3,
+#filename-modal .modal-header h3 {
     color: var(--text-primary);
 }
 
@@ -1876,6 +1877,23 @@ body {
     background: var(--status-success-bg);
     color: var(--status-success);
     font-weight: 600;
+}
+
+/* File name prompt before download: the input with a fixed ".pdf" after it. */
+.filename-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.filename-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.filename-ext {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
 }
 
 /* The legend's sample swatch sits on the themed background, not the white

@@ -1,187 +1,140 @@
-# 🚀 Resume Studio — AI Cover Letter & Resume Generator
+# Resume Studio
 
-**Tailored, honest resumes and cover letters for every job you apply to — built only from your own experience.**
+Resume Studio is a Manifest V3 Chrome extension that tailors the user's own resume to a job posting and writes a matching cover letter. It runs entirely in the browser and calls the OpenAI API directly with the user's own key. There is no backend: the profile, the uploaded resume and generated documents stay in the extension's local storage, and the generation code lives in plain ES modules inside the extension.
 
-A Chrome extension, nothing else to install. You upload your resume once, keep a complete profile, paste a job posting, and get *your own resume* tailored to that posting for applicant tracking systems, plus a plainly written cover letter. Nothing is invented: every claim traces back to your profile, and everything said about the company comes from the posting or from cited research.
+**Stack:** JavaScript, Chrome Extensions (MV3), OpenAI API, pdf.js, jsPDF, node:test
 
-It uses your own OpenAI API key, so you pay OpenAI directly for what you generate (a few cents per document) and nothing goes through anyone else's server.
+![The Generate tab: job posting on the left, tailored resume preview on the right with changes highlighted](store/screenshot-generate.jpg)
 
-## ✨ What This Does
+## How it works
 
-- 🎯 **Reads the posting properly**: extracts every requirement and checks which parts of your profile support it before writing a word
-- 🔍 **Researches the company** (optional, cover letters): a few web searches for what they build and what they care about, every fact with its source; if nothing reliable turns up, the letter sticks to the posting
-- 📄 **Tailors your resume, doesn't replace it**: a few targeted edits to the resume you uploaded (the posting's exact terms where you genuinely have the skill, a more relevant bullet or project from your profile, missing skills added); everything else stays word for word
-- 🟩 **See every change**: edits are highlighted green in the preview (hover for the original wording), flip to your original PDF to compare, and watch the posting's key keywords go from e.g. 3/5 to 5/5; the PDF itself is clean
-- 📏 **One page, always**: the page space is measured before editing; if something has to give, the least relevant items go, never half a sentence
-- 🔑 **Keyword check before writing**: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm; the ones you tick join your skills and can go on the resume
-- ✍️ **Cover letters that sound like a person**: 250–350 words, specific, no buzzwords, no "I am excited to apply"
-- 💾 **Smart profile management**: upload your existing resume to autofill your profile, autosave, everything editable
-- 🔒 **Private by construction**: your profile lives in this browser's extension storage; the only outside service it ever talks to is OpenAI, with your key
+### Profile and baseline
 
-## 🎯 What Makes This Different
+The user uploads their existing resume as a PDF. `resumeParser.js` reads it in the browser with pdf.js and heuristics: text positions, font size and weight, and a dictionary of section headings. There is no model call. The parsed result does two things:
 
-**Traditional applications sound like this:**
-> "I am excited to apply for this position. I am passionate about your company and believe I would be a great fit..."
+- It is merged into the profile additively. New items are appended, matching items have their blanks filled in, and nothing the user entered is overwritten.
+- It is frozen as the **baseline**, a snapshot of the uploaded resume that every tailored resume starts from. Only a new upload replaces it, and profile edits never change it.
 
-**This sounds like this:**
-> "At Stripe I designed the idempotency layer for the payments API, which cut duplicate charges by 94% across 40 million daily requests. I also led the migration of 12 services from Kubernetes 1.21 to 1.28 with zero downtime. My observability work has been through a tracing dashboard and an open-source project rather than an on-call ownership role, which is the part of this job I'd want to grow into first."
+### Generation pipeline
 
-Every sentence there came from the candidate's profile, and the letter says so where the match is partial.
+The pipeline is in `extension/generation/`, orchestrated by `pipeline.js`. Every model call goes through a small fetch wrapper (`openai.js`, no SDK), and every generation call asks for strict JSON-schema output. The model, the reasoning effort per call and the research limits are pinned in `config.js`.
 
-## 🚀 Install
+1. **Match analysis** (`matchAnalysis.js`). The posting is read against the profile, which is given to the model with stable ids (`exp:3`, `proj:5`, `skill:Go`). The result lists the company, the role, every requirement with the profile items that support it (strong, partial or none) and the posting's ATS keywords, each marked core or supporting.
 
-**From the Chrome Web Store** (once the listing is live): open the store page, click **Add to Chrome**, then click the extension's icon in the toolbar. Skip to step 3.
+2. **Keyword check** (`keywords.js`). Core keywords that appear nowhere in the profile, at most 8, are shown to the user as checkboxes. The ones they tick are added to their profile skills before anything is written, so the profile stays the only source of material.
 
-**From source** (until then, or to run a development copy) — takes about two minutes:
+   ![The keyword check dialog listing posting keywords missing from the profile](store/screenshot-keywords.jpg)
 
-### 1. Get the code
-- Click the green **Code** button → **Download ZIP**, and extract it somewhere you'll keep it (Chrome loads the extension from this folder, so don't delete it afterwards)
-- or `git clone https://github.com/JohnathanCarr/resume-cv-generator.git`
+3. **Company research** (`companyResearch.js`, cover letters only, optional). This uses the Responses API with OpenAI's hosted web search, capped at 3 searches. It produces a short brief where every fact carries its source URL, or `found: false` when nothing credible turns up. Briefs are cached per company for 30 days.
 
-### 2. Load it in Chrome
-1. Open `chrome://extensions/`
-2. Turn on **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the **`extension`** folder inside the project (not the project folder itself)
-5. Click the extension's icon in the toolbar — it opens in its own tab and walks you through the first steps
+4. **Resume: a validated edit list** (`tailor.js`, `layout.js`). The model never writes a resume from scratch. It sees the baseline with an id on every line, plus a "pool" of profile material that isn't on the resume, and returns a list of edits:
+   - `rewrite`: reword a summary, bullet or coursework line, for example to use the posting's terms
+   - `swap`: replace a bullet with an unused bullet from the same job or project, or a project or extra with an unused one
+   - `skills`: reorder a skill line or add profile skills to it
+   - `remove`: drop a bullet, project, extra or coursework line, used only to fit the page
 
-### 3. Add your OpenAI API key
-1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys), sign in, and **Create new secret key**
-2. In the extension, click the **gear icon** in the header
-3. Paste the key and click **Save key** — the panel shows **Verified** once OpenAI confirms it works
+   `validateEdits()` checks every edit in code. Jobs, education and headings can't be edited. A rewrite can't add a number that isn't in the original line, can't drop a named term from it, and can't grow past about 1.4 times its length. A skills edit must keep every existing item and can only add skills from the profile. Swaps must come from the pool, and each pool item can be used once. Rejected edits go back to the model with the reason, for up to two repair attempts. Any still invalid are dropped.
 
-Your key is stored only in this browser's extension storage and sent directly to OpenAI when you verify or generate. Once saved it can be replaced or removed, but never viewed. You need an OpenAI account with credits; generation is billed to it per document.
+5. **Cover letter** (`coverLetter.js`). The prompt allows nothing about the candidate outside the profile and nothing about the company outside the posting or the brief. Along with the letter, the model returns a `claims` list naming the source of each factual sentence (a profile id, "job posting" or a brief URL). Claims that cite an unknown source trigger one repair attempt, and any left after that are reported to the user in the status line rather than hidden.
 
-## 🎯 How to Use
+### One page
 
-### First Time Setup
-1. **Upload your current resume** (PDF) with the **Upload Resume** button next to Personal Information. Your skills, education, experience, projects and extras are parsed locally (no AI call) and filled in for you. The PDF is kept so you can view it any time.
-2. **Review and complete your Profile**:
-   - Personal info and summary
-   - Education (one entry per institution)
-   - Skills
-   - Work experiences with achievements
-   - Projects with technical details
-   - Certifications & achievements (certifications, awards, research, publications, leadership, volunteering)
+The one-page limit is planned before the resume is edited, not fixed afterwards. The extension renders the baseline off-screen at print size. For each kind of line it measures font, width, line height and spacing, and measures text with a canvas. The prompt gives the model the page's free space and how many characters each line has left before it wraps.
 
-   Uploading another resume later only **adds** what is new — nothing you entered is removed.
+The validator adds up the height of every edit. If the result would go past one page, that becomes another error for the repair attempts. If the edits still don't fit, `fitToPage()` first undoes the edits that add the most height, then removes whole items in a fixed order: extras such as certifications and awards, then projects, then older jobs' later bullets (every job keeps at least one), then coursework. It never cuts a line in half.
 
-### Generate Documents
-1. **Go to the Generate tab**
-2. **Paste any job description**
-3. **Choose your document**. Before either is written, the posting is read against your profile; if its key skills or tools (at most 8, the ones a recruiter would filter on) are missing from your profile, a dialog lists them — tick the ones you actually have (they are added to your skills so the document can use the posting's wording), leave the rest, **Continue**.
-   - **Generate Cover Letter** → 250–350 words, grounded in your profile and the posting. Leave **Research the company** ticked for a few web searches about the employer (roughly $0.05–0.10 per letter, cached per company for 30 days); untick it to use the posting only.
-   - **Generate Resume** (needs your uploaded resume) → your resume with a handful of edits for this posting: its exact terms where your lines already show them, a more relevant unused bullet, project or certification from your profile swapped in, confirmed skills added. Jobs and education never change, and it always fits one page. Every posting starts from your uploaded resume, not the last tailored one. Changes are green in the preview; **Original** shows your PDF for comparison.
-4. **Save it**: name the file (it's prefilled with your name, the company and the document type), then
-   - **Cover Letter PDF** downloads straight to your Downloads folder
-   - **Resume PDF** opens a print view; choose **Save as PDF** as the destination. There are no highlights in the PDF. The result is a real text PDF (not an image), so applicant tracking systems can read it.
+Finally the extension measures the real rendered result. If that still spills over, it runs tailoring again with the measured error added to the budget, at most twice.
 
-The status line under the buttons tells you what happened: how many searches the research used, whether any sentence couldn't be traced to your profile, how many edits the resume got and how its keyword coverage changed, which keywords were added to your skills, and whether anything was removed to fit the page.
+### Preview and export
 
-### Pro Tips
-- **Put extra material in your profile**: bullets, projects and certifications that aren't on your uploaded resume are what the tailoring can swap in when a posting calls for them
-- **Classify extras** as Research/Program/Certification for better placement
-- **Keep your profile complete** — list every skill you have, not just the ones on one resume; each generated document picks what fits the job
-- **Different jobs = different documents** — each is tailored specifically
+`highlight.js` builds two versions of the tailored resume. The preview shows changes in green, with the original wording on hover, and a toggle shows the uploaded PDF for comparison. The clean version, without highlights, is what gets printed. Tailored text is HTML-escaped before rendering.
 
-## 📋 What You Need
+The resume PDF comes from a print view (`print.html`) through Chrome's Save as PDF, so it is a text PDF that applicant tracking systems can read. The cover letter PDF is generated with jsPDF.
 
-- **Google Chrome** (or another Chromium browser that loads unpacked extensions)
-- **OpenAI API account** with credits
+## Testing
 
-## 🛠️ Troubleshooting
+Unit tests cover the code that runs without the API: the baseline snapshot, the keyword check, edit validation and application, page fitting, line wrapping and the preview diff. They make no network calls.
 
-**❌ Extension won't load**
-- Enable "Developer mode" in `chrome://extensions/`
-- Make sure you selected the `extension` folder, not the project folder
-- Check for error messages on the extension's card
-
-**❌ Key shows an error instead of Verified**
-- *OpenAI rejected this key* — the key is wrong, revoked, or from a different account; create a new one and use **Replace key**
-- *Could not reach OpenAI* — check your connection; corporate networks sometimes block `api.openai.com`
-
-**❌ "Failed to generate" errors**
-- Open Settings (gear icon) and check the key shows **Verified**
-- Check your OpenAI account has credits and hasn't hit a rate limit
-- *The model ran out of room before finishing* — try again, or shorten a very long job posting
-- Open the browser console on the extension tab (F12) for the full error
-
-**❌ Resume PDF has a date or URL printed on it**
-- In the print dialog, open **More settings** and untick **Headers and footers**. The page uses zero margins so this shouldn't happen, but some Chrome versions ignore that.
-
-**❌ Generic/poor quality output**
-- Fill out a complete profile with detailed experiences
-- Include specific achievements and metrics — the generator won't invent any
-- The resume only gets as long as your profile has material; add coursework, projects or certifications to fill a page
-
-## 🏗️ Architecture
-
-```
-Chrome extension ──→ api.openai.com (with your key)
+```bash
+node --test test/unit/
 ```
 
-That's it. The extension page holds the UI, your data (in `chrome.storage.local`) and the generation pipeline:
+The prompt eval set in `test/eval/` runs the real pipeline in Node against 2 synthetic profiles and 5 job postings, then scores each document against a fixed rubric. For resumes the rubric checks, among other things, that jobs and education are untouched, no numbers were invented, unedited lines are identical and the page fits. For cover letters it checks length, grounding in the profile, buzzwords and invented numbers. Summaries are saved under `test/eval/baselines/` so prompt changes can be compared. A full run costs about $1 and needs an OpenAI key in `OPENAI_API_KEY` or `test/eval/.env`.
 
-1. **Match analysis** — a structured read of the posting against your profile: company, role, every requirement with the profile items that support it and how strongly, and the posting's exact ATS keywords
-2. **Company research** (cover letters, optional) — OpenAI's hosted web search, at most a few searches, every fact with its URL
-3. **The document** — generated against a strict output schema with no-fabrication rules; resumes come back as a validated list of edits to your own resume, planned against the measured page; cover letters get a repair pass for any sentence that can't be traced to a source
+```bash
+node test/eval/run.js --profiles david --jobs 02           # one profile and posting
+node test/eval/run.js --label my-change --baseline         # full set, saves a summary
+node test/eval/run.js --rescore test/eval/runs/<dir>       # re-score saved outputs, no API calls
+```
 
-The model, per-call reasoning effort and research limits are pinned in `extension/generation/config.js`.
+See `test/eval/README.md` for the full rubric.
 
-## 📊 Data Privacy & Security
+The PDF parser is checked by hand. Serve the repo root (`python3 -m http.server 8790`), open `http://localhost:8790/test/parser.html` and pick one of the synthetic resume PDFs in `test/fixtures/`.
 
-- ✅ **All data stays local** — profile, uploaded resume and generated documents live in Chrome's extension storage on this device
-- ✅ **One outside service** — the only network calls are to `api.openai.com`, and only when you verify a key or generate; that's the extension's only host permission
-- ✅ **API key never exposed** — stored in the extension, never displayed once saved
-- ✅ **Uploaded resume stays on your device** — parsed in the browser, never sent to the AI (your *profile* is sent when you generate)
-- ✅ **No accounts, no tracking, no analytics**
+## Install from source
 
-## 🔧 Advanced Configuration
+1. Clone the repository: `git clone https://github.com/JohnathanCarr/resume-cv-generator.git`
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Click **Load unpacked** and select the `extension/` folder, not the repository root.
+4. Click the extension's toolbar icon. The app opens in its own tab and starts a short first-run tour.
 
-### Model and prompts
-- The model, reasoning effort per call and research limits live in `extension/generation/config.js`
-- Prompts live in `extension/generation/` — `matchAnalysis.js`, `companyResearch.js`, `tailor.js`, `coverLetter.js`
-- Before changing a prompt, run the eval set (`test/eval/README.md`) so you can compare before and after; it runs the same code the extension does
+After editing `app.js`, `manifest.json` or anything in `generation/`, click the reload icon on the extension's card. Changes to `app.html` or `styles.css` only need a tab refresh.
 
-### Extension customization
-- Modify `extension/styles.css` for the app's look; resume output styling is inline in `formatResume()` in `app.js`, page geometry in `print.html`
-- Reload the extension in Chrome after editing `app.js`, `manifest.json` or anything in `generation/`; `app.html` and `styles.css` only need a tab refresh
+## API key setup
 
-## 📝 File Structure
+1. Create a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys). The account needs credits, because generation is billed to it.
+2. In the extension, open Settings (the gear icon), paste the key and click **Save key**.
+3. Settings shows **Verified** once a test call to OpenAI succeeds.
+
+Once saved, the key is shown masked: it can be replaced or removed, but not viewed.
+
+## Privacy
+
+Everything is stored in `chrome.storage.local` on the user's machine: the profile, the uploaded PDF, the API key, the last generated resume and cached company briefs. The only network host the extension can reach is `api.openai.com`, its only host permission. When generating, it sends OpenAI the job posting, the profile, the parsed text of the uploaded resume (for tailoring), and the company name and posting (for research). The PDF file itself is never uploaded. There is no analytics or tracking. The full policy is in [PRIVACY.md](PRIVACY.md).
+
+## Troubleshooting
+
+**The extension won't load.** Make sure Developer mode is on and that you selected the `extension/` folder rather than the repository root. Errors appear on the extension's card in `chrome://extensions`.
+
+**The key shows an error instead of Verified.** "OpenAI rejected this key" means the key is wrong or revoked: create a new one and use **Replace key**. "Could not reach OpenAI" is a network problem; some corporate networks block `api.openai.com`.
+
+**Generation fails.** Check that the key shows Verified and that the OpenAI account has credits and isn't rate-limited. Occasionally a cover letter fails with "The model ran out of room before finishing"; running it again usually works. The full error is in the console of the extension tab (F12).
+
+**"Upload your current resume in the Profile tab first."** Tailoring edits your uploaded resume, so a resume needs a PDF upload; cover letters don't.
+
+**Upload filled in little or nothing.** The parser needs a PDF with selectable text; scanned PDFs have none. Multi-column and table layouts parse poorly because their text comes out of the PDF in the wrong order. Section headings it doesn't recognise are reported in the status message and either filed under extras or skipped.
+
+**The resume PDF has a date or URL printed on it.** In the print dialog, open **More settings** and turn off **Headers and footers**.
+
+## File structure
 
 ```
 resume-cv-generator/
-├── extension/               # The whole product — load this folder in Chrome
-│   ├── manifest.json        # Extension configuration (MV3)
-│   ├── app.html / app.js    # Main application UI and logic
-│   ├── styles.css           # App styling
-│   ├── background.js        # Opens the app tab, seeds first-run state
-│   ├── onboarding.js        # First-run tour
-│   ├── theme.js             # Light/dark theme
-│   ├── resumeParser.js      # Heuristic PDF → profile parser (no AI)
-│   ├── profileMerge.js      # Additive profile merge with dedup
-│   ├── print.html / print.js# Resume print view (Save as PDF)
-│   ├── generation/          # OpenAI client, prompts and pipeline
-│   ├── jspdf.min.js         # Cover letter PDF
-│   └── pdf.min.js           # pdf.js for reading uploaded resumes
+├── extension/                # Load this folder in Chrome
+│   ├── manifest.json         # MV3 manifest: storage, unlimitedStorage, downloads, api.openai.com
+│   ├── app.html, app.js      # App UI, storage, page measurement, PDF export
+│   ├── styles.css
+│   ├── background.js         # Opens or focuses the app tab
+│   ├── onboarding.js         # First-run tour
+│   ├── theme.js              # Light/dark theme
+│   ├── resumeParser.js       # PDF → profile, heuristic, no model call
+│   ├── profileMerge.js       # Additive profile merge
+│   ├── print.html, print.js  # Resume print view (Save as PDF)
+│   ├── generation/           # Pipeline, prompts, validators, layout model, OpenAI client
+│   ├── icons/
+│   └── jspdf.min.js, pdf.min.js, pdf.worker.min.js   # Bundled libraries
 ├── test/
-│   ├── parser.html          # Parser harness against fixture PDFs
-│   ├── fixtures/            # Synthetic resume PDFs
-│   ├── unit/                # node:test for the pure generation helpers
-│   └── eval/                # Prompt evals: profiles × postings, scored by rubric
-├── store/                   # Web Store listing copy, icon source, screenshot harness
-├── scripts/                 # package.sh (store zip), screenshots.sh
-├── PRIVACY.md               # Privacy policy linked from the store listing
-├── CLAUDE.md                # Architecture notes for contributors
-└── README.md                # This file
+│   ├── unit/                 # node:test unit tests
+│   ├── eval/                 # Prompt eval set: profiles, postings, rubric, baselines
+│   ├── fixtures/             # Synthetic resume PDFs and their HTML sources
+│   └── parser.html           # Parser test page
+├── store/                    # Chrome Web Store listing copy, icon source, screenshots
+├── scripts/                  # package.sh (store zip), screenshots.sh
+├── PRIVACY.md
+├── QUICK_START.md
+└── CLAUDE.md                 # Architecture notes for contributors
 ```
 
-## 📄 License
+## License
 
-This project is provided for educational and personal use. Please comply with OpenAI's usage policies when using their API.
-
-## 🆘 Need Help?
-
-1. Check the troubleshooting section above
-2. Open the browser console on the extension tab (F12) for errors
-3. Open an issue on GitHub with the error text (never paste your API key)
+Provided for educational and personal use. Use of the OpenAI API is subject to OpenAI's usage policies.

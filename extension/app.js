@@ -1476,7 +1476,8 @@ class CoverLetterApp {
             parts.push(`— used saved research for ${result.companyBrief?.company || 'the company'}`);
         }
         if (Array.isArray(result.unsourcedClaims) && result.unsourcedClaims.length) {
-            parts.push(`· ${result.unsourcedClaims.length} sentence(s) could not be traced to your profile — check them before sending`);
+            const note = meta.repairFailed ? ' (the automatic fix did not finish)' : '';
+            parts.push(`· ${result.unsourcedClaims.length} sentence(s) could not be traced to your profile${note} — check them before sending`);
         }
         return parts.join(' ') + '.';
     }
@@ -1712,7 +1713,9 @@ class CoverLetterApp {
             const result = await generateCoverLetter(this.apiKey.value, requestData);
             this.lastApiCall.response = result;
             this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
-            if (result.companyBrief && result.companyBrief.company) await this.cacheBrief(result.companyBrief);
+            // Only fresh web research is cached; a posting-only brief must not
+            // stand in for research on the next letter to this company.
+            if (result.metadata?.briefSource === 'research' && result.companyBrief?.company) await this.cacheBrief(result.companyBrief);
 
             // Display the cover letter
             this.displayCoverLetter(result.coverLetter);

@@ -1,4 +1,4 @@
-// node --test test/unit/
+// node --test 'test/unit/*.test.mjs'
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBaseline } from '../../extension/generation/baseline.js';

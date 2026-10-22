@@ -23,11 +23,16 @@ class LiquidGlassTheme {
         // Set up event listeners
         this.setupEventListeners();
         
-        // Initialize micro-animations
-        this.initializeAnimations();
+        // Initialize micro-animations (none for prefers-reduced-motion)
+        if (!this.reducedMotion()) this.initializeAnimations();
         
         // Listen for system theme changes
         this.watchSystemTheme();
+    }
+
+    // Read live, so a change in system settings applies without a reload.
+    reducedMotion() {
+        return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     }
 
     /**
@@ -65,6 +70,7 @@ class LiquidGlassTheme {
     applySavedTheme() {
         const theme = this.getSavedTheme();
         document.documentElement.setAttribute('data-theme', theme);
+        document.getElementById('theme-toggle')?.setAttribute('aria-pressed', String(theme === 'dark'));
     }
 
     /**
@@ -86,6 +92,7 @@ class LiquidGlassTheme {
         
         // Apply the new theme
         document.documentElement.setAttribute('data-theme', theme);
+        document.getElementById('theme-toggle')?.setAttribute('aria-pressed', String(theme === 'dark'));
         this.saveTheme(theme);
         
         // Remove transition class after animation completes
@@ -110,7 +117,7 @@ class LiquidGlassTheme {
         // Add ripple effect to all buttons with .btn-ripple class
         document.addEventListener('click', (e) => {
             const button = e.target.closest('.btn-ripple');
-            if (button) {
+            if (button && !this.reducedMotion()) {
                 this.createRipple(e, button);
             }
         });
@@ -144,7 +151,7 @@ class LiquidGlassTheme {
      */
     animateToggleButton() {
         const toggleBtn = document.getElementById('theme-toggle');
-        if (toggleBtn) {
+        if (toggleBtn && !this.reducedMotion()) {
             toggleBtn.style.transform = 'scale(0.9) rotate(180deg)';
             setTimeout(() => {
                 toggleBtn.style.transform = 'scale(1) rotate(360deg)';

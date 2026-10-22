@@ -28,10 +28,13 @@
         const spotlight = el('div', 'tour-spotlight');
         const tooltip = el('div', 'tour-tooltip glass-floating');
         tooltip.setAttribute('role', 'dialog');
+        tooltip.setAttribute('aria-modal', 'true');
+        tooltip.setAttribute('aria-labelledby', 'tour-title');
+        tooltip.setAttribute('aria-describedby', 'tour-body');
         tooltip.innerHTML = `
             <div class="tour-progress"></div>
-            <h3 class="tour-title"></h3>
-            <div class="tour-body"></div>
+            <h3 class="tour-title" id="tour-title"></h3>
+            <div class="tour-body" id="tour-body"></div>
             <div class="tour-actions">
                 <button class="btn btn-secondary btn-sm tour-skip">Skip tour</button>
                 <span class="tour-spacer"></span>
@@ -52,11 +55,22 @@
         return { overlay, spotlight, tooltip };
     }
 
+    // Enter on a focused button (Skip, Back) activates that button; only
+    // Enter elsewhere means Next. Tab stays inside the tooltip.
     function onKey(e) {
         if (!state) return;
+        const { tooltip } = state.els;
+        const onButton = e.target instanceof Element && e.target.closest('button') && tooltip.contains(e.target);
         if (e.key === 'Escape') { e.preventDefault(); finish(true); }
-        else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); state.els.tooltip.querySelector('.tour-next').click(); }
+        else if (e.key === 'ArrowRight' || (e.key === 'Enter' && !onButton)) { e.preventDefault(); tooltip.querySelector('.tour-next').click(); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); go(state.index - 1); }
+        else if (e.key === 'Tab') {
+            const buttons = [...tooltip.querySelectorAll('button')].filter(b => b.getClientRects().length);
+            const i = buttons.indexOf(document.activeElement);
+            e.preventDefault();
+            const next = i === -1 ? 0 : (i + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+            buttons[next]?.focus();
+        }
     }
 
     function position() {
@@ -146,14 +160,16 @@
         window.removeEventListener('scroll', position, true);
         document.removeEventListener('keydown', onKey);
         const cb = state.opts.onFinish;
+        const returnFocus = state.returnFocus;
         state = null;
         if (cb) cb({ skipped });
+        if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     }
 
     function start(steps, opts = {}) {
         if (state) finish(true);
         if (!steps || !steps.length) return;
-        state = { steps, index: 0, opts, els: build() };
+        state = { steps, index: 0, opts, els: build(), returnFocus: document.activeElement };
         window.addEventListener('resize', position);
         window.addEventListener('scroll', position, true);
         document.addEventListener('keydown', onKey);

@@ -151,8 +151,18 @@ class CoverLetterApp {
     setupEventListeners() {
         // Tab navigation
         document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.switchTab(e.target.dataset.tab);
+            btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
+            // Arrow keys move between tabs, as in any tablist.
+            btn.addEventListener('keydown', (e) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+                e.preventDefault();
+                const tabs = [...document.querySelectorAll('.tab-btn')];
+                const i = tabs.indexOf(btn);
+                const next = e.key === 'Home' ? tabs[0]
+                    : e.key === 'End' ? tabs[tabs.length - 1]
+                    : tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+                this.switchTab(next.dataset.tab);
+                next.focus();
             });
         });
 
@@ -301,12 +311,13 @@ class CoverLetterApp {
     // UI Management
     switchTab(tabName) {
         try {
-            // Update tab buttons
+            // Update tab buttons (roving tabindex: only the selected tab is a Tab stop)
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
+                const on = btn.dataset.tab === tabName;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-selected', String(on));
+                btn.tabIndex = on ? 0 : -1;
             });
-            const activeTabBtn = document.querySelector(`[data-tab="${tabName}"]`);
-            if (activeTabBtn) activeTabBtn.classList.add('active');
 
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => {
@@ -511,7 +522,7 @@ class CoverLetterApp {
             const btn = document.getElementById(id);
             if (!btn) continue;
             btn.classList.toggle('active', on);
-            btn.setAttribute('aria-selected', String(on));
+            btn.setAttribute('aria-pressed', String(on));
         }
         if (original) this.renderOriginalResume();
     }
@@ -550,14 +561,39 @@ class CoverLetterApp {
         }
     }
 
+    // While generating, the page behind the overlay is inert: no clicks,
+    // no keyboard focus, so a second generation cannot start underneath.
     showLoading() {
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+        this.setPageInert(true);
     }
 
     hideLoading() {
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) loadingOverlay.classList.add('hidden');
+        this.setPageInert(false);
+    }
+
+    // Making the focused button inert drops focus to <body>; put it back
+    // afterwards unless something else (a dialog) has taken it meanwhile.
+    setPageInert(on) {
+        if (on && !this._inertFocus) this._inertFocus = document.activeElement;
+        document.querySelectorAll('.app-header, .app-main').forEach(el => { el.inert = on; });
+        if (!on) {
+            const back = this._inertFocus;
+            this._inertFocus = null;
+            if (back?.isConnected && (document.activeElement === document.body || !document.activeElement)) back.focus();
+        }
+    }
+
+    // Repeats a status message in the screen-reader live region.
+    announce(message) {
+        const live = document.getElementById('sr-status');
+        if (!live) return;
+        live.textContent = '';
+        // A fresh text node after a tick, so the same message twice is re-read.
+        setTimeout(() => { live.textContent = message; }, 50);
     }
 
     // retry: the action the Retry button repeats, or false to hide it.
@@ -599,7 +635,10 @@ class CoverLetterApp {
         const modal = document.getElementById(id);
         if (!modal) return;
         this._modalStack = (this._modalStack || []).filter(m => m.id !== id);
-        this._modalStack.push({ id, returnFocus: document.activeElement });
+        // During generation focus sits on <body> (the page is inert); return
+        // to the control that started it instead.
+        const opener = document.activeElement === document.body && this._inertFocus ? this._inertFocus : document.activeElement;
+        this._modalStack.push({ id, returnFocus: opener });
         modal.classList.remove('hidden');
         const first = this.focusableIn(modal)[0];
         if (first && !modal.contains(document.activeElement)) first.focus();
@@ -618,6 +657,16 @@ class CoverLetterApp {
     focusableIn(el) {
         return [...el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
             .filter(n => !n.disabled && n.getClientRects().length);
+    }
+
+    // Card fields have placeholders, not <label>s: give each an accessible
+    // name from its placeholder ("Start Date", "Job Title"), minus examples.
+    labelFields(root) {
+        root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el => {
+            if (el.labels?.length || el.hasAttribute('aria-label')) return;
+            const name = el.placeholder.replace(/\s*\(e\.g\..*$/i, '').replace(/\.{3}$|…$/, '').trim();
+            if (name) el.setAttribute('aria-label', name);
+        });
     }
 
     setupModals() {
@@ -653,6 +702,7 @@ class CoverLetterApp {
         statusEl.textContent = message;
         statusEl.className = `status-message status-${type}`;
         statusEl.classList.remove('hidden');
+        this.announce(message);
         if (type !== 'loading') {
             this._profileStatusTimer = setTimeout(() => statusEl.classList.add('hidden'), 8000);
         }
@@ -664,6 +714,7 @@ class CoverLetterApp {
             statusEl.textContent = message;
             statusEl.className = `status-message status-${type}`;
             statusEl.classList.remove('hidden');
+            this.announce(message);
             
             // Auto-hide success messages after 3 seconds
             if (type === 'success') {
@@ -781,7 +832,7 @@ class CoverLetterApp {
                 ${(exp.bullets || []).map((bullet, bulletIndex) => `
                     <div class="bullet-item">
                         <input type="text" placeholder="Specific achievement with metrics if possible..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
-                        <button class="bullet-remove" data-exp-index="${index}" data-bullet-index="${bulletIndex}">&times;</button>
+                        <button class="bullet-remove" data-exp-index="${index}" data-bullet-index="${bulletIndex}" aria-label="Remove achievement ${bulletIndex + 1}">&times;</button>
                     </div>
                 `).join('')}
             </div>
@@ -827,6 +878,7 @@ class CoverLetterApp {
             });
         });
 
+        this.labelFields(div);
         return div;
     }
 
@@ -906,6 +958,7 @@ class CoverLetterApp {
             this.removeEducation(index);
         });
 
+        this.labelFields(div);
         return div;
     }
 
@@ -1010,7 +1063,7 @@ class CoverLetterApp {
                 ${(project.bullets || []).map((bullet, bulletIndex) => `
                     <div class="bullet-item">
                         <input type="text" placeholder="Technical detail, impact, or achievement..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
-                        <button class="bullet-remove" data-proj-index="${index}" data-bullet-index="${bulletIndex}">&times;</button>
+                        <button class="bullet-remove" data-proj-index="${index}" data-bullet-index="${bulletIndex}" aria-label="Remove detail ${bulletIndex + 1}">&times;</button>
                     </div>
                 `).join('')}
             </div>
@@ -1054,6 +1107,7 @@ class CoverLetterApp {
             });
         });
 
+        this.labelFields(div);
         return div;
     }
 
@@ -1114,7 +1168,7 @@ class CoverLetterApp {
                     <input type="text" placeholder="Title/Type (e.g., Research Assistant, Certification)" value="${esc(extra.title)}" data-field="title" data-index="${index}">
                     <input type="text" placeholder="Organization/Institution" value="${esc(extra.organization)}" data-field="organization" data-index="${index}">
                     <div class="input-row input-row-3">
-                        <select data-field="type" data-index="${index}">
+                        <select data-field="type" data-index="${index}" aria-label="Type">
                             ${CoverLetterApp.EXTRA_TYPES.map(([value, label]) =>
                                 `<option value="${value}" ${extra.type === value ? 'selected' : ''}>${label}</option>`
                             ).join('')}
@@ -1151,6 +1205,7 @@ class CoverLetterApp {
             this.removeExtra(index);
         });
 
+        this.labelFields(div);
         return div;
     }
 

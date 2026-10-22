@@ -482,8 +482,9 @@ class CoverLetterApp {
     async renderResumePreview(entry) {
         const previewEl = document.querySelector('.resume-content');
         if (!previewEl) return;
-        let marked = entry.resumeContent;
-        let clean = entry.resumeContent;
+        // Older entries have no tailored document: render their text escaped.
+        let marked = this.escapeResume(entry.resumeContent);
+        let clean = marked;
         if (entry.tailored) {
             const { previewResumes } = await this.generation();
             ({ marked, clean } = previewResumes(entry.tailored, entry.changes || []));
@@ -539,7 +540,7 @@ class CoverLetterApp {
         host.innerHTML = '<p class="placeholder-text">Loading your resume…</p>';
         try {
             pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime?.getURL ? chrome.runtime.getURL('pdf.worker.min.js') : 'pdf.worker.min.js';
-            const pdf = await pdfjsLib.getDocument({ data: this.base64ToBytes(this.uploadedResume.dataBase64) }).promise;
+            const pdf = await pdfjsLib.getDocument({ data: this.base64ToBytes(this.uploadedResume.dataBase64), isEvalSupported: false }).promise;
             const width = Math.max(600, host.clientWidth || 800);
             const canvases = [];
             for (let n = 1; n <= pdf.numPages; n++) {
@@ -646,10 +647,12 @@ class CoverLetterApp {
         this.profile.skills.forEach((skill, index) => {
             const skillEl = document.createElement('div');
             skillEl.className = 'skill-tag';
-            skillEl.innerHTML = `
-                ${skill}
-                <button class="skill-remove" data-index="${index}">&times;</button>
-            `;
+            const remove = document.createElement('button');
+            remove.className = 'skill-remove';
+            remove.dataset.index = String(index);
+            remove.setAttribute('aria-label', `Remove ${skill}`);
+            remove.textContent = '×';
+            skillEl.append(skill, remove);
             container.appendChild(skillEl);
         });
 
@@ -688,19 +691,20 @@ class CoverLetterApp {
     }
 
     createExperienceElement(exp, index) {
+        const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
         div.className = 'experience-card glass-elevated';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
-                    <input type="text" placeholder="Job Title" value="${exp.title || ''}" data-field="title" data-index="${index}">
-                    <input type="text" placeholder="Company" value="${exp.company || ''}" data-field="company" data-index="${index}">
+                    <input type="text" placeholder="Job Title" value="${esc(exp.title)}" data-field="title" data-index="${index}">
+                    <input type="text" placeholder="Company" value="${esc(exp.company)}" data-field="company" data-index="${index}">
                     <div class="input-row input-row-3">
-                        <input type="text" placeholder="Start Date" value="${exp.start || ''}" data-field="start" data-index="${index}">
-                        <input type="text" placeholder="End Date" value="${exp.end || ''}" data-field="end" data-index="${index}">
-                        <input type="text" placeholder="Location" value="${exp.location || ''}" data-field="location" data-index="${index}">
+                        <input type="text" placeholder="Start Date" value="${esc(exp.start)}" data-field="start" data-index="${index}">
+                        <input type="text" placeholder="End Date" value="${esc(exp.end)}" data-field="end" data-index="${index}">
+                        <input type="text" placeholder="Location" value="${esc(exp.location)}" data-field="location" data-index="${index}">
                     </div>
-                    <textarea placeholder="Role description (what you did in this role)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${(exp.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <textarea placeholder="Role description (what you did in this role)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${esc(exp.description)}</textarea>
                 </div>
                 <div class="card-actions">
                     <label class="must-include-label">
@@ -718,7 +722,7 @@ class CoverLetterApp {
                 <label>Key Achievements</label>
                 ${(exp.bullets || []).map((bullet, bulletIndex) => `
                     <div class="bullet-item">
-                        <input type="text" placeholder="Specific achievement with metrics if possible..." value="${bullet}" data-bullet-index="${bulletIndex}">
+                        <input type="text" placeholder="Specific achievement with metrics if possible..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
                         <button class="bullet-remove" data-exp-index="${index}" data-bullet-index="${bulletIndex}">&times;</button>
                     </div>
                 `).join('')}
@@ -802,7 +806,7 @@ class CoverLetterApp {
     }
 
     createEducationElement(edu, index) {
-        const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
         div.className = 'experience-card glass-elevated';
         div.innerHTML = `
@@ -922,13 +926,14 @@ class CoverLetterApp {
     }
 
     createProjectElement(project, index) {
+        const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
         div.className = 'project-card glass-elevated';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
-                    <input type="text" placeholder="Project Name" value="${project.name || ''}" data-field="name" data-index="${index}">
-                    <textarea placeholder="Project description (what it does, technologies used)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${(project.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <input type="text" placeholder="Project Name" value="${esc(project.name)}" data-field="name" data-index="${index}">
+                    <textarea placeholder="Project description (what it does, technologies used)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${esc(project.description)}</textarea>
                 </div>
                 <div class="card-actions">
                     <label class="must-include-label">
@@ -946,7 +951,7 @@ class CoverLetterApp {
                 <label>Key Details / Achievements</label>
                 ${(project.bullets || []).map((bullet, bulletIndex) => `
                     <div class="bullet-item">
-                        <input type="text" placeholder="Technical detail, impact, or achievement..." value="${bullet}" data-bullet-index="${bulletIndex}">
+                        <input type="text" placeholder="Technical detail, impact, or achievement..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
                         <button class="bullet-remove" data-proj-index="${index}" data-bullet-index="${bulletIndex}">&times;</button>
                     </div>
                 `).join('')}
@@ -1042,23 +1047,24 @@ class CoverLetterApp {
     }
 
     createExtraElement(extra, index) {
+        const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
         div.className = 'experience-card glass-elevated';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
-                    <input type="text" placeholder="Title/Type (e.g., Research Assistant, Certification)" value="${extra.title || ''}" data-field="title" data-index="${index}">
-                    <input type="text" placeholder="Organization/Institution" value="${extra.organization || ''}" data-field="organization" data-index="${index}">
+                    <input type="text" placeholder="Title/Type (e.g., Research Assistant, Certification)" value="${esc(extra.title)}" data-field="title" data-index="${index}">
+                    <input type="text" placeholder="Organization/Institution" value="${esc(extra.organization)}" data-field="organization" data-index="${index}">
                     <div class="input-row input-row-3">
                         <select data-field="type" data-index="${index}">
                             ${CoverLetterApp.EXTRA_TYPES.map(([value, label]) =>
                                 `<option value="${value}" ${extra.type === value ? 'selected' : ''}>${label}</option>`
                             ).join('')}
                         </select>
-                        <input type="text" placeholder="Start Date" value="${extra.start || ''}" data-field="start" data-index="${index}">
-                        <input type="text" placeholder="End Date (or 'Present')" value="${extra.end || ''}" data-field="end" data-index="${index}">
+                        <input type="text" placeholder="Start Date" value="${esc(extra.start)}" data-field="start" data-index="${index}">
+                        <input type="text" placeholder="End Date (or 'Present')" value="${esc(extra.end)}" data-field="end" data-index="${index}">
                     </div>
-                    <textarea placeholder="Description of the experience, achievement, or certification..." style="margin-top: 0.5rem; min-height: 80px;" data-field="description" data-index="${index}">${(extra.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <textarea placeholder="Description of the experience, achievement, or certification..." style="margin-top: 0.5rem; min-height: 80px;" data-field="description" data-index="${index}">${esc(extra.description)}</textarea>
                 </div>
                 <div class="card-actions">
                     <button class="btn btn-danger btn-sm btn-ripple remove-extra" data-index="${index}">Remove</button>
@@ -1703,8 +1709,8 @@ class CoverLetterApp {
         
         let formatted = `
             <div class="letter-header">
-                <p><strong>${this.profile.name}</strong></p>
-                <p>${this.profile.contact.replace(/\n/g, '<br>')}</p>
+                <p><strong>${this.escapeHTML(this.profile.name)}</strong></p>
+                <p>${this.escapeHTML(this.profile.contact || '').replace(/\n/g, '<br>')}</p>
             </div>
             
             <div class="letter-date">
@@ -1724,7 +1730,7 @@ class CoverLetterApp {
         paragraphs.forEach((paragraph, index) => {
             if (paragraph.trim()) {
                 console.log(`Paragraph ${index + 1}:`, paragraph.substring(0, 100) + '...');
-                formatted += `<p style="margin-bottom: 1.5em; text-align: justify; line-height: 1.6;">${paragraph}</p>`;
+                formatted += `<p style="margin-bottom: 1.5em; text-align: justify; line-height: 1.6;">${this.escapeHTML(paragraph)}</p>`;
             }
         });
 
@@ -1734,7 +1740,7 @@ class CoverLetterApp {
             <div class="letter-closing" style="margin-top: 2em;">
                 <p>Sincerely,</p>
                 <br>
-                <p>${this.profile.name}</p>
+                <p>${this.escapeHTML(this.profile.name)}</p>
             </div>
         `;
 
@@ -1993,23 +1999,6 @@ class CoverLetterApp {
         return tailorResume(this.apiKey.value, body);
     }
 
-    // Renders the resume and returns rendered height / one Letter page (1.0 = exactly fits).
-    renderResumeAndMeasure(resumeContent) {
-        return new Promise((resolve) => {
-            const onRendered = () => {
-                document.removeEventListener('resume-rendered', onRendered);
-                const page = document.querySelector('.resume-content .resume-page');
-                if (!page) return resolve(0);
-                // 11in at CSS 96dpi. Padding is inside the page box, so scrollHeight is the whole thing.
-                resolve(page.scrollHeight / 1056);
-            };
-            document.addEventListener('resume-rendered', onRendered);
-            // A display:none container has no height; show the resume view before rendering.
-            this.switchToResumeView();
-            this.displayResume(resumeContent);
-        });
-    }
-
     describeResumeResult(result, { overflow, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
@@ -2048,7 +2037,7 @@ class CoverLetterApp {
         const host = document.createElement('div');
         host.setAttribute('aria-hidden', 'true');
         host.style.cssText = 'position:absolute;left:-10000px;top:0;width:8.5in;visibility:hidden;pointer-events:none;';
-        host.innerHTML = this.formatResume(resumeContent);
+        host.innerHTML = this.formatResume(this.escapeResume(resumeContent));
         document.body.appendChild(host);
         try {
             const page = host.querySelector('.resume-page');
@@ -2095,42 +2084,26 @@ class CoverLetterApp {
         });
     }
 
-    displayResume(resumeContent) {
-        // Switch to generate tab to ensure the preview element is visible
-        this.switchTab('generate');
-        
-        // Wait a bit for tab switch to complete
-        setTimeout(() => {
-            const previewEl = document.querySelector('.resume-content');
-            
-            if (!previewEl) {
-                console.error('Resume content element not found even after tab switch');
-                return;
-            }
-            
-            // Format the resume with proper structure
-            const formattedResume = this.formatResume(resumeContent);
-            previewEl.innerHTML = formattedResume;
-
-            // cache + log exactly what the user sees
-            this.lastRenderedResumeHTML = previewEl.innerHTML;
-            console.log('[PREVIEW] render len:', this.lastRenderedResumeHTML.length);
-            console.log('[PREVIEW] head:', this.lastRenderedResumeHTML.slice(0, 180));
-
-            // notify that the preview is ready (optional; useful to re-enable the PDF button)
-            document.dispatchEvent(new CustomEvent('resume-rendered'));
-
-
-            // cache + log the exact preview HTML we just rendered
-            this.lastRenderedResumeHTML = previewEl.innerHTML;
-            console.log('[PREVIEW] render len:', this.lastRenderedResumeHTML.length);
-            document.dispatchEvent(new CustomEvent('resume-rendered'));
-        }, 100);
-
-
-
+    escapeHTML(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    // A copy of resume data (or its JSON text) with every string escaped,
+    // for formatResume(). Profile text and model output can hold markup: a
+    // pasted posting can steer what the model returns.
+    escapeResume(value) {
+        if (typeof value === 'string') {
+            try { value = JSON.parse(value); } catch { return this.escapeHTML(value); }
+        }
+        const walk = (v) => typeof v === 'string' ? this.escapeHTML(v)
+            : Array.isArray(v) ? v.map(walk)
+            : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
+            : v;
+        return walk(value);
+    }
+
+    // Text in resumeContent must already be HTML-escaped (highlight.js output,
+    // or escapeResume() for raw data); profile fields are escaped here.
     formatResume(resumeContent) {
         // Parse the JSON resume content
         let resume;
@@ -2145,7 +2118,7 @@ class CoverLetterApp {
             const fromModel = Array.isArray(resume.education)
                 ? resume.education
                 : (resume.education ? [resume.education] : []);
-            const source = fromModel.length ? fromModel : (this.profile.education || []);
+            const source = fromModel.length ? fromModel : this.escapeResume(this.profile.education || []);
             eduList = source.map(e => ({
                 school: e.school || e.university || e.institution || '',
                 location: e.location || '',
@@ -2192,7 +2165,7 @@ class CoverLetterApp {
                         font-size: ${headerFontSize};
                         font-weight: bold;
                         letter-spacing: 0.5pt;
-                    ">${this.profile.name}</h1>
+                    ">${this.escapeHTML(this.profile.name)}</h1>
                     <div style="
                         margin: 0;
                         font-size: ${contactFontSize};
@@ -2383,7 +2356,7 @@ class CoverLetterApp {
             part && part.trim() && part !== 'undefined' && part !== 'null'
         );
         
-        return validParts.join(' | ');
+        return validParts.map(part => this.escapeHTML(part)).join(' | ');
     }
 
     formatSkillsComprehensive(skills) {

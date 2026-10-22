@@ -360,12 +360,12 @@
         </div>
 
         <!-- ═══════════════════════════════════════════════════════════════════
-             ERROR MODAL
+             DIALOGS (app.js openModal/closeModal: Escape, backdrop, focus trap)
              ═══════════════════════════════════════════════════════════════════ -->
         <div id="settings-modal" class="modal settings-modal hidden">
-            <div class="modal-content glass-floating">
+            <div class="modal-content glass-floating" role="dialog" aria-modal="true" aria-labelledby="settings-title">
                 <div class="modal-header">
-                    <h3>Settings</h3>
+                    <h3 id="settings-title">Settings</h3>
                     <button class="modal-close" id="settings-close" aria-label="Close settings">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -401,9 +401,9 @@
         </div>
 
         <div id="keywords-modal" class="modal hidden">
-            <div class="modal-content glass-floating">
+            <div class="modal-content glass-floating" role="dialog" aria-modal="true" aria-labelledby="keywords-title" aria-describedby="keywords-intro">
                 <div class="modal-header">
-                    <h3>
+                    <h3 id="keywords-title">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -424,9 +424,9 @@
         </div>
 
         <div id="filename-modal" class="modal hidden">
-            <div class="modal-content glass-floating">
+            <div class="modal-content glass-floating" role="dialog" aria-modal="true" aria-labelledby="filename-title">
                 <div class="modal-header">
-                    <h3>
+                    <h3 id="filename-title">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
@@ -453,9 +453,9 @@
         </div>
 
         <div id="error-modal" class="modal hidden">
-            <div class="modal-content glass-floating">
+            <div class="modal-content glass-floating" role="alertdialog" aria-modal="true" aria-labelledby="error-title" aria-describedby="error-message">
                 <div class="modal-header">
-                    <h3>
+                    <h3 id="error-title">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--status-error);">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -463,7 +463,7 @@
                         </svg>
                         Error
                     </h3>
-                    <button class="modal-close">&times;</button>
+                    <button class="modal-close" id="error-close" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <p id="error-message">An error occurred.</p>

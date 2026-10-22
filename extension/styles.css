@@ -26,16 +26,19 @@
     --glass-blur-strong: 40px;
     
     /* Accent Colors */
-    --accent-primary: rgb(67, 124, 255);
-    --accent-primary-hover: rgb(47, 104, 235);
+    /* Contrast (WCAG AA, 4.5:1): --accent-primary is for text and icons on
+       the glass; --accent-fill is a background under --text-inverse. */
+    --accent-primary: rgb(44, 90, 220);
+    --accent-primary-hover: rgb(34, 74, 196);
     --accent-primary-glow: rgba(67, 124, 255, 0.4);
+    --accent-fill: rgb(44, 90, 220);
     --accent-secondary: rgb(147, 51, 234);
-    --accent-gradient: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    --accent-gradient: linear-gradient(135deg, var(--accent-fill), var(--accent-secondary));
     
     /* Text Colors */
     --text-primary: rgba(0, 0, 0, 0.87);
     --text-secondary: rgba(0, 0, 0, 0.6);
-    --text-tertiary: rgba(0, 0, 0, 0.4);
+    --text-tertiary: rgba(0, 0, 0, 0.58);
     --text-inverse: rgba(255, 255, 255, 0.95);
     
     /* Surface Colors */
@@ -50,6 +53,10 @@
     --status-warning: rgb(245, 158, 11);
     --status-loading: var(--accent-primary);
     --status-loading-bg: rgba(67, 124, 255, 0.15);
+    /* Status text: the status hues above are too light to read as text. */
+    --status-success-text: rgb(22, 101, 52);
+    --status-error-text: rgb(185, 28, 28);
+    --status-loading-text: var(--accent-primary);
     
     /* Specular Highlights */
     --specular-top: rgba(255, 255, 255, 0.8);
@@ -111,15 +118,20 @@
     --glass-shadow-floating: 0 30px 80px rgba(0, 0, 0, 0.5);
     
     /* Accent Colors - Dark */
-    --accent-primary: rgb(94, 134, 255);
-    --accent-primary-hover: rgb(114, 154, 255);
+    --accent-primary: rgb(150, 178, 255);
+    --accent-primary-hover: rgb(175, 198, 255);
     --accent-primary-glow: rgba(94, 134, 255, 0.5);
+    --accent-fill: rgb(52, 90, 220);
     
     /* Text Colors - Dark */
     --text-primary: rgba(255, 255, 255, 0.92);
     --text-secondary: rgba(255, 255, 255, 0.65);
-    --text-tertiary: rgba(255, 255, 255, 0.4);
+    --text-tertiary: rgba(255, 255, 255, 0.65);
     
+    --status-success-text: rgb(74, 222, 128);
+    --status-error-text: rgb(252, 165, 165);
+    --status-loading-text: rgb(165, 185, 255);
+
     /* Surface Colors - Dark */
     --surface-overlay: rgba(0, 0, 0, 0.7);
     --surface-divider: rgba(255, 255, 255, 0.1);
@@ -192,7 +204,7 @@ body {
 .app-background::before {
     width: 600px;
     height: 600px;
-    background: var(--accent-primary);
+    background: var(--accent-fill);
     top: -200px;
     right: -200px;
     opacity: 0.15;
@@ -762,7 +774,7 @@ body {
 
 /* Danger Button */
 .btn-danger {
-    background: linear-gradient(135deg, var(--status-error), #dc2626);
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
     color: var(--text-inverse);
     box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
 }
@@ -1041,7 +1053,7 @@ body {
 
 .bullet-remove:hover {
     background: var(--status-error-bg);
-    color: var(--status-error);
+    color: var(--status-error-text);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1226,19 +1238,19 @@ body {
 
 .status-success {
     background: var(--status-success-bg);
-    color: var(--status-success);
+    color: var(--status-success-text);
     border: 1px solid var(--status-success);
 }
 
 .status-error {
     background: var(--status-error-bg);
-    color: var(--status-error);
+    color: var(--status-error-text);
     border: 1px solid var(--status-error);
 }
 
 .status-loading {
     background: var(--status-loading-bg);
-    color: var(--status-loading);
+    color: var(--status-loading-text);
     border: 1px solid var(--status-loading);
 }
 
@@ -1347,7 +1359,7 @@ body {
     font-family: var(--font-display);
     font-size: 1.25rem;
     font-weight: 600;
-    color: var(--status-error);
+    color: var(--status-error-text);
 }
 
 .modal-close {
@@ -1367,7 +1379,7 @@ body {
 
 .modal-close:hover {
     background: var(--status-error-bg);
-    color: var(--status-error);
+    color: var(--status-error-text);
 }
 
 .modal-body {
@@ -1453,8 +1465,8 @@ body {
     margin-bottom: var(--space-md);
 }
 
-.api-key-status.ok { color: var(--status-success); }
-.api-key-status.error { color: var(--status-error); }
+.api-key-status.ok { color: var(--status-success-text); }
+.api-key-status.error { color: var(--status-error-text); }
 
 .api-key-entry input {
     margin-bottom: var(--space-md);
@@ -1867,7 +1879,7 @@ body {
 }
 
 .segmented-btn.active {
-    background: var(--accent-primary);
+    background: var(--accent-fill);
     color: var(--text-inverse);
 }
 
@@ -1875,7 +1887,7 @@ body {
     padding: 3px 10px;
     border-radius: var(--radius-full);
     background: var(--status-success-bg);
-    color: var(--status-success);
+    color: var(--status-success-text);
     font-weight: 600;
 }
 
@@ -1907,6 +1919,11 @@ body {
 .rs-added {
     background: #bbf7d0;
     color: inherit;
+    /* Not colour alone: changed words are also underlined. */
+    text-decoration: underline;
+    text-decoration-color: #15803d;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 2px;
     border-radius: 2px;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
@@ -1934,4 +1951,25 @@ body {
 .resume-original .placeholder-text {
     background: white;
     border-radius: var(--radius-lg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 27: REDUCED MOTION
+   Users who ask for less motion get no floating background, entrance
+   animations, ripples or slides. The loading spinner keeps turning (slowly):
+   it is the only sign that a long generation is still running.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .loading-spinner {
+        animation-duration: 2s !important;
+        animation-iteration-count: infinite !important;
+    }
 }

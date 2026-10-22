@@ -64,6 +64,7 @@ ${String(jobText || '').slice(0, 1500)}`;
 
   const brief = JSON.parse(response.output_text);
   brief.company = company;
+  brief.source = 'research';
   brief.researchedAt = new Date().toISOString();
   brief.searches = countSearches(response);
   brief.tokens = response.usage ? { input: response.usage.input_tokens, output: response.usage.output_tokens } : null;
@@ -81,10 +82,19 @@ function briefFromPostingOnly({ company, aboutCompany }) {
     current_priorities: [],
     challenges_or_context: [],
     notes: 'No web research; only the job posting was used.',
+    source: 'posting',
     researchedAt: new Date().toISOString(),
     searches: 0,
     tokens: null
   };
+}
+
+// Only a brief from web research is worth caching. Briefs saved before
+// `source` existed: posting-only ones have no searches and no token usage.
+function isResearchedBrief(brief) {
+  if (!brief) return false;
+  if (brief.source) return brief.source === 'research';
+  return !(brief.searches === 0 && brief.tokens == null);
 }
 
 function renderBriefForPrompt(brief) {
@@ -106,4 +116,4 @@ function renderBriefForPrompt(brief) {
   return lines.join('\n');
 }
 
-export { researchCompany, briefFromPostingOnly, renderBriefForPrompt, BRIEF_SCHEMA };
+export { researchCompany, briefFromPostingOnly, isResearchedBrief, renderBriefForPrompt, BRIEF_SCHEMA };

@@ -10,12 +10,25 @@ import { EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits
 import { makeLayout } from './layout.js';
 import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
-import { researchCompany, briefFromPostingOnly, renderBriefForPrompt } from './companyResearch.js';
+import { researchCompany, briefFromPostingOnly, isResearchedBrief, renderBriefForPrompt } from './companyResearch.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
 export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
 export { previewResumes, changeCounts } from './highlight.js';
+export { isResearchedBrief } from './companyResearch.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
+
+// A truncated answer (the model spent the token cap reasoning) is
+// transient: the same request almost always fits on a second try.
+export async function retryTruncated(call) {
+  try {
+    return await call();
+  } catch (error) {
+    if (error?.code !== 'output_truncated') throw error;
+    console.warn('Output truncated; retrying once');
+    return call();
+  }
+}
 
 function requireInputs(profile, jobText) {
   if (!profile || !jobText) throw new Error('Missing required fields: profile and jobText');
@@ -51,7 +64,7 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
   const L = makeLayout(layout || {});
   const pool = buildPool(base, profile);
   const messages = buildTailorMessages({ doc: base, pool, jobText, matchText: renderMatchForPrompt(match), match, layout: L });
-  const request = (msgs) => generateStructured(openai, { messages: msgs, schema: EDITS_SCHEMA, schemaName: 'resume_edits', maxTokens: MAX_COMPLETION_TOKENS.resume });
+  const request = (msgs) => retryTruncated(() => generateStructured(openai, { messages: msgs, schema: EDITS_SCHEMA, schemaName: 'resume_edits', maxTokens: MAX_COMPLETION_TOKENS.resume }));
 
   let { data } = await request(messages);
   let { valid, errors } = validateEdits(data.edits, base, pool, L);
@@ -112,7 +125,9 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
   let brief;
   let briefSource = 'posting';
   const cacheKey = (match.company || '').trim().toLowerCase();
-  if (cacheKey && briefCache && briefCache[cacheKey]) {
+  // Posting-only briefs are never reused: older versions cached them, which
+  // kept research off for that company for 30 days.
+  if (cacheKey && isResearchedBrief(briefCache?.[cacheKey])) {
     brief = briefCache[cacheKey];
     briefSource = 'cache';
   } else if (research && match.company) {
@@ -130,27 +145,32 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
   const briefText = renderBriefForPrompt(brief);
 
   const messages = buildCoverLetterMessages({ profile, jobText, match, matchText, briefText });
-  let { data } = await generateStructured(openai, {
-    messages, schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
-  });
+  const request = (msgs) => retryTruncated(() => generateStructured(openai, {
+    messages: msgs, schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
+  }));
+  let { data } = await request(messages);
 
   // Every claim must trace to the profile, the posting, or the brief. One
-  // repair pass; whatever is still unsourced is reported, not hidden.
+  // repair pass; whatever is still unsourced is reported, not hidden. If
+  // the repair itself fails, the first draft stands with its claims flagged.
   let bad = unsourcedClaims(data.claims, profile, brief);
   let repaired = false;
+  let repairFailed = false;
   if (bad.length) {
     console.log(`Cover letter: ${bad.length} unsourced claim(s); requesting a repair`);
-    const repair = await generateStructured(openai, {
-      messages: [
+    try {
+      const repair = await request([
         ...messages,
         { role: 'assistant', content: JSON.stringify(data) },
         { role: 'user', content: `These sentences make claims that cannot be traced to the profile, the job posting, or the company brief:\n${bad.map(c => `- "${c.sentence}" (cited: ${c.source || 'nothing'})`).join('\n')}\n\nRewrite the letter so each of them is either removed or replaced with something you can source, keep everything else, and return the full letter and claims again.` }
-      ],
-      schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
-    });
-    data = repair.data;
-    bad = unsourcedClaims(data.claims, profile, brief);
-    repaired = true;
+      ]);
+      data = repair.data;
+      bad = unsourcedClaims(data.claims, profile, brief);
+      repaired = true;
+    } catch (error) {
+      console.warn('Cover letter repair failed; keeping the first draft:', safeErrorMessage(error));
+      repairFailed = true;
+    }
   }
 
   const endTime = Date.now();
@@ -166,7 +186,8 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
       processingTime: endTime - startTime,
       briefSource,
       searches: briefSource === 'research' ? brief.searches : 0,
-      repaired
+      repaired,
+      repairFailed
     }
   };
 }

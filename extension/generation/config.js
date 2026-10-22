@@ -15,11 +15,12 @@ export const CONFIG = {
     extract: 'low',
     generate: 'medium'
   },
-  // Output caps (completion tokens, reasoning included).
+  // Output caps (completion tokens, reasoning included). At 4000 about one
+  // cover letter in 15 spent the whole cap reasoning and came back truncated.
   MAX_COMPLETION_TOKENS: {
     verify: 16,
     resume: 6000,
-    coverLetter: 4000
+    coverLetter: 6000
   },
   // Company research via the hosted web-search tool (cover letters only).
   // Each search is billed separately and its results count as input tokens,

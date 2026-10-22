@@ -56,7 +56,7 @@ The resume PDF comes from a print view (`print.html`) through Chrome's Save as P
 Unit tests cover the code that runs without the API: the baseline snapshot, the keyword check, edit validation and application, page fitting, line wrapping and the preview diff. They make no network calls.
 
 ```bash
-node --test test/unit/
+node --test 'test/unit/*.test.mjs'
 ```
 
 The prompt eval set in `test/eval/` runs the real pipeline in Node against 2 synthetic profiles and 5 job postings, then scores each document against a fixed rubric. For resumes the rubric checks, among other things, that jobs and education are untouched, no numbers were invented, unedited lines are identical and the page fits. For cover letters it checks length, grounding in the profile, buzzwords and invented numbers. Summaries are saved under `test/eval/baselines/` so prompt changes can be compared. A full run costs about $1 and needs an OpenAI key in `OPENAI_API_KEY` or `test/eval/.env`.
@@ -98,7 +98,7 @@ Everything is stored in `chrome.storage.local` on the user's machine: the profil
 
 **The key shows an error instead of Verified.** "OpenAI rejected this key" means the key is wrong or revoked: create a new one and use **Replace key**. "Could not reach OpenAI" is a network problem; some corporate networks block `api.openai.com`.
 
-**Generation fails.** Check that the key shows Verified and that the OpenAI account has credits and isn't rate-limited. Occasionally a cover letter fails with "The model ran out of room before finishing"; running it again usually works. The full error is in the console of the extension tab (F12).
+**Generation fails.** Check that the key shows Verified and that the OpenAI account has credits and isn't rate-limited. If the model runs out of room ("The model ran out of room before finishing") the request is retried once automatically; if it still fails, run it again. The full error is in the console of the extension tab (F12).
 
 **"Upload your current resume in the Profile tab first."** Tailoring edits your uploaded resume, so a resume needs a PDF upload; cover letters don't.
 

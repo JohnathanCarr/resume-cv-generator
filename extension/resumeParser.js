@@ -101,7 +101,9 @@
     // ── Stage 1: positioned lines from pdf.js ──────────────────────────────
 
     async function extractLines(pdfjsLib, data) {
-        const pdf = await pdfjsLib.getDocument({ data }).promise;
+        // isEvalSupported off: pdf.js 3.x font code can be steered by a crafted
+        // PDF into eval (CVE-2024-4367); MV3's CSP blocks it anyway.
+        const pdf = await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise;
         const lines = [];
         let pageWidth = 612;
         let pageHeight = 792;

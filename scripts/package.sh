@@ -25,6 +25,15 @@ if HITS="$(grep -rEon "$REMOTE_CODE" "$SRC" --include='*.js' --include='*.html')
   exit 1
 fi
 
+# The privacy policy says the extension contacts api.openai.com only, so a
+# page may not load styles or fonts from anywhere else either.
+REMOTE_ASSET='(fonts\.googleapis\.com|fonts\.gstatic\.com|<link[^>]+href=["'"'"']?https?:|@import[^;]*https?:|url\(["'"'"']?https?:)'
+if HITS="$(grep -rEon "$REMOTE_ASSET" "$SRC" --include='*.html' --include='*.css')"; then
+  echo "Remote stylesheet or font found (contradicts PRIVACY.md):" >&2
+  echo "$HITS" | cut -c1-200 >&2
+  exit 1
+fi
+
 mkdir -p "$OUT_DIR"
 rm -f "$OUT"
 ( cd "$SRC" && zip -qr -X "$OUT" . -x '.DS_Store' '*/.DS_Store' '*.md' '.*' )

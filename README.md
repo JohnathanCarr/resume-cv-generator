@@ -130,6 +130,7 @@ resume-cv-generator/
 │   └── parser.html           # Parser test page
 ├── store/                    # Chrome Web Store listing copy, icon source, screenshots
 ├── scripts/                  # package.sh (store zip), screenshots.sh
+├── LICENSE
 ├── PRIVACY.md
 ├── QUICK_START.md
 └── CLAUDE.md                 # Architecture notes for contributors
@@ -137,4 +138,4 @@ resume-cv-generator/
 
 ## License
 
-Provided for educational and personal use. Use of the OpenAI API is subject to OpenAI's usage policies.
+[MIT](LICENSE). The bundled libraries keep their own licenses: pdf.js (Apache 2.0) and jsPDF (MIT), with notices at the top of each file in `extension/`. Use of the OpenAI API is subject to [OpenAI's usage policies](https://openai.com/policies/usage-policies).

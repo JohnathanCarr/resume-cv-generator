@@ -12,6 +12,11 @@
     <div class="app-background"></div>
     <div class="noise-overlay"></div>
 
+    <!-- Status messages are repeated here for screen readers: the visible
+         status elements are display:none between messages, and a live
+         region that appears with its text is often not announced. -->
+    <div id="sr-status" class="sr-only" role="status" aria-live="polite"></div>
+
     <div class="app-container">
         <!-- ═══════════════════════════════════════════════════════════════════
              HEADER - Navigation & Theme Toggle
@@ -31,11 +36,11 @@
             </div>
 
             <div class="header-controls">
-                <nav class="tab-nav">
-                    <button class="tab-btn active" data-tab="profile">
+                <nav class="tab-nav" role="tablist" aria-label="Sections">
+                    <button class="tab-btn active" data-tab="profile" role="tab" id="tab-profile" aria-controls="profile-tab" aria-selected="true">
                         <span>Profile</span>
                     </button>
-                    <button class="tab-btn" data-tab="generate">
+                    <button class="tab-btn" data-tab="generate" role="tab" id="tab-generate" aria-controls="generate-tab" aria-selected="false" tabindex="-1">
                         <span>Generate</span>
                     </button>
                 </nav>
@@ -55,7 +60,7 @@
                     </svg>
                 </button>
 
-                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                <button class="theme-toggle" id="theme-toggle" aria-label="Dark theme" aria-pressed="false">
                     <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="5"></circle>
                         <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -82,7 +87,7 @@
             <!-- ═══════════════════════════════════════════════════════════════
                  PROFILE TAB
                  ═══════════════════════════════════════════════════════════════ -->
-            <div id="profile-tab" class="tab-content active">
+            <div id="profile-tab" class="tab-content active" role="tabpanel" aria-labelledby="tab-profile">
 
                 <!-- Getting Started checklist (hidden once complete or dismissed) -->
                 <section id="getting-started" class="section glass checklist hidden">
@@ -234,16 +239,16 @@
             <!-- ═══════════════════════════════════════════════════════════════
                  GENERATE TAB
                  ═══════════════════════════════════════════════════════════════ -->
-            <div id="generate-tab" class="tab-content">
+            <div id="generate-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-generate">
                 <div class="generate-layout">
                     
                     <!-- Job Input Section -->
                     <div class="job-input-section">
                         <section class="section glass glass-shimmer" style="flex: 1; display: flex; flex-direction: column;">
-                            <h2>Job Description</h2>
+                            <h2 id="job-heading">Job Description</h2>
                             <p class="section-description">Paste the job posting to generate a tailored resume or cover letter.</p>
                             
-                            <textarea id="job-text" placeholder="Paste the complete job description here...&#10;&#10;Include the job title, company name, requirements, responsibilities, and any other relevant details for best results."></textarea>
+                            <textarea id="job-text" aria-labelledby="job-heading" placeholder="Paste the complete job description here...&#10;&#10;Include the job title, company name, requirements, responsibilities, and any other relevant details for best results."></textarea>
                             
                             <div class="generation-buttons">
                                 <button id="generate-btn" class="btn btn-primary btn-ripple">
@@ -323,12 +328,12 @@
                         
                         <div id="resume-preview" class="resume-preview hidden">
                             <div id="resume-compare-bar" class="resume-compare-bar hidden">
-                                <div class="segmented" role="tablist" aria-label="Resume view">
-                                    <button id="view-tailored" class="segmented-btn active" role="tab" aria-selected="true">Tailored</button>
-                                    <button id="view-original" class="segmented-btn" role="tab" aria-selected="false">Original</button>
+                                <div class="segmented" role="group" aria-label="Resume view">
+                                    <button id="view-tailored" class="segmented-btn active" aria-pressed="true">Tailored</button>
+                                    <button id="view-original" class="segmented-btn" aria-pressed="false">Original</button>
                                 </div>
                                 <span id="resume-coverage" class="coverage-chip hidden"></span>
-                                <span id="resume-legend" class="resume-legend"><span class="rs-added">Green</span> marks what changed for this posting. Hover a change to see the original. The PDF has no highlights.</span>
+                                <span id="resume-legend" class="resume-legend"><span class="rs-added">Underlined green</span> marks what changed for this posting. Hover a change to see the original. The PDF has no highlights.</span>
                             </div>
                             <div id="resume-original" class="resume-original hidden"></div>
                             <div class="resume-content">
@@ -352,7 +357,7 @@
         <!-- ═══════════════════════════════════════════════════════════════════
              LOADING OVERLAY
              ═══════════════════════════════════════════════════════════════════ -->
-        <div id="loading-overlay" class="loading-overlay hidden">
+        <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
             <div class="loading-content glass-floating">
                 <div class="loading-spinner"></div>
                 <p>Generating your document...</p>

@@ -122,9 +122,11 @@ html {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* body keeps the 16px default: measureResumeHeight() renders the resume
+   offscreen in <body>, and its em-based spacing must match the print view.
+   The app's own 15px base is set on .app-container. */
 body {
     font-family: var(--font-body);
-    font-size: 0.9375rem;
     line-height: 1.55;
     color: var(--text);
     background: var(--bg);
@@ -145,6 +147,7 @@ a { color: var(--primary-text); text-underline-offset: 2px; }
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .app-container {
+    font-size: 0.9375rem;
     max-width: 1400px;
     margin: 0 auto;
     padding: var(--space-lg);

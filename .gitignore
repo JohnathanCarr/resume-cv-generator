@@ -6,6 +6,7 @@ package-lock.json
 .env
 .env.local
 .env.production
+.env.example
 test/eval/.env
 **/.env
 
@@ -43,14 +44,6 @@ Thumbs.db
 # Chrome extension private keys
 *.pem
 *.crx
-
-# Debug files
-debug.log
-.env
-.env.local
-.env.example
-.env
-.env.example
 
 # Local resume fixtures with real contact details (never commit)
 test/fixtures/local/

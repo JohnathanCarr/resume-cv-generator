@@ -88,6 +88,8 @@ After editing `app.js`, `manifest.json` or anything in `generation/`, click the 
 
 Once saved, the key is shown masked: it can be replaced or removed, but not viewed.
 
+Generation is billed to that OpenAI account, and use of the API is subject to [OpenAI's usage policies](https://openai.com/policies/usage-policies). Resume Studio charges nothing. Generated documents are drafts: AI can get details wrong, so read each one before sending it. Settings repeats this under the key, and the preview shows a reminder.
+
 ## Privacy
 
 Everything is stored in `chrome.storage.local` on the user's machine: the profile, the uploaded PDF, the API key, the last generated resume and cached company briefs. The only network host the extension can reach is `api.openai.com`, its only host permission. When generating, it sends OpenAI the job posting, the profile, the parsed text of the uploaded resume (for tailoring), and the company name and posting (for research). The PDF file itself is never uploaded. There is no analytics or tracking. The full policy is in [PRIVACY.md](PRIVACY.md).

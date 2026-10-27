@@ -35,7 +35,8 @@ YOUR DATA
 Your profile, uploaded resume and documents live in this browser's extension storage. The extension talks to exactly one outside service: OpenAI's API, with your key, when you click Generate. There are no accounts, no servers of ours, no analytics.
 
 YOU NEED
-• An OpenAI API key (platform.openai.com). You pay OpenAI directly for usage — typically a few cents per resume and $0.05–0.20 per cover letter with research on. Resume Studio itself is free and open source: github.com/JohnathanCarr/resume-cv-generator
+• An OpenAI API key (platform.openai.com). You pay OpenAI directly for usage — typically a few cents per resume and $0.05–0.20 per cover letter with research on — and OpenAI's usage policies apply. Resume Studio itself is free and open source: github.com/JohnathanCarr/resume-cv-generator
+• A few minutes to read what it writes. AI can get things wrong: check every resume and cover letter before you send it.
 
 ## Privacy
 

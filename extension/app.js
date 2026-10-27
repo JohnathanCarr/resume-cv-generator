@@ -1446,7 +1446,7 @@ class CoverLetterApp {
                 target: '#open-settings',
                 title: 'Add your OpenAI API key',
                 placement: 'bottom',
-                body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p>'
+                body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p><p>You pay OpenAI directly for what you generate, under OpenAI\'s usage policies; Resume Studio charges nothing.</p>'
             },
             {
                 target: '#upload-resume',
@@ -1481,7 +1481,7 @@ class CoverLetterApp {
                 tab: 'generate',
                 title: 'Generate and download',
                 placement: 'top',
-                body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
+                body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>Read every document before you send it: AI can get things wrong.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
             }
         ];
     }

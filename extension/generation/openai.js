@@ -9,7 +9,8 @@
 import { CONFIG } from './config.js';
 
 const API_BASE = 'https://api.openai.com/v1';
-// The proxy used a 2-minute request timeout; keep the same ceiling per call.
+// Two minutes per call: room for a reasoning model with web search, and a
+// stalled request still fails instead of hanging the progress bar.
 const CALL_TIMEOUT_MS = 120000;
 
 // OpenAI errors can carry the key in some messages' request details; strip anything key-shaped.

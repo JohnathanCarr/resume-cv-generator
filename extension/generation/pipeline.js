@@ -1,7 +1,6 @@
 // Document generation pipelines: match analysis → (research) → generate →
-// one repair pass. Resumes are tailored as an edit list (tailor.js). Ported from the local proxy's /generateResume and
-// /generateCoverLetter routes; the return values keep the same shape the
-// extension already consumes.
+// one repair pass. Resumes are tailored as an edit list (tailor.js). The
+// return values are the shapes app.js consumes.
 
 import { CONFIG } from './config.js';
 import { createClient, generateStructured, safeErrorMessage } from './openai.js';

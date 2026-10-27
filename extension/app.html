@@ -8,10 +8,6 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Background Layers -->
-    <div class="app-background"></div>
-    <div class="noise-overlay"></div>
-
     <!-- Status messages are repeated here for screen readers: the visible
          status elements are display:none between messages, and a live
          region that appears with its text is often not announced. -->
@@ -21,7 +17,7 @@
         <!-- ═══════════════════════════════════════════════════════════════════
              HEADER - Navigation & Theme Toggle
              ═══════════════════════════════════════════════════════════════════ -->
-        <header class="app-header glass-elevated">
+        <header class="app-header">
             <div class="header-brand">
                 <div class="header-logo">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -90,30 +86,30 @@
             <div id="profile-tab" class="tab-content active" role="tabpanel" aria-labelledby="tab-profile">
 
                 <!-- Getting Started checklist (hidden once complete or dismissed) -->
-                <section id="getting-started" class="section glass checklist hidden">
+                <section id="getting-started" class="section checklist hidden">
                     <div class="checklist-header">
-                        <h2>Getting Started</h2>
+                        <h2>Getting started</h2>
                         <button id="checklist-dismiss" class="modal-close" aria-label="Dismiss checklist" title="Dismiss">&times;</button>
                     </div>
                     <ul class="checklist-items">
                         <li data-item="resume"><span class="checklist-mark"></span><span>Upload your current resume</span></li>
-                        <li data-item="name"><span class="checklist-mark"></span><span>Add your name to Personal Information</span></li>
+                        <li data-item="name"><span class="checklist-mark"></span><span>Add your name to Personal information</span></li>
                         <li data-item="key"><span class="checklist-mark"></span><span>Add your OpenAI API key in Settings <span class="checklist-hint" id="checklist-key-hint"></span></span></li>
                         <li data-item="generated"><span class="checklist-mark"></span><span>Generate your first document</span></li>
                     </ul>
                 </section>
                 
                 <!-- Personal Information Section -->
-                <section class="section glass glass-shimmer">
+                <section class="section">
                     <h2>
-                        Personal Information
+                        Personal information
                         <button id="upload-resume" class="btn btn-secondary btn-sm btn-ripple header-action">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="17 8 12 3 7 8"></polyline>
                                 <line x1="12" y1="3" x2="12" y2="15"></line>
                             </svg>
-                            <span id="upload-resume-label">Upload Resume</span>
+                            <span id="upload-resume-label">Upload resume</span>
                         </button>
                     </h2>
                     <input type="file" id="resume-file" accept=".pdf,application/pdf" style="display: none;">
@@ -130,12 +126,12 @@
                     <div id="profile-status" class="status-message hidden"></div>
                     
                     <div class="form-group">
-                        <label for="profile-name">Full Name</label>
+                        <label for="profile-name">Full name</label>
                         <input type="text" id="profile-name" placeholder="Enter your full name">
                     </div>
                     
                     <div class="form-group">
-                        <label for="profile-contact">Contact Information</label>
+                        <label for="profile-contact">Contact information</label>
                         <textarea id="profile-contact" rows="4" placeholder="Email: you@example.com&#10;Phone: (555) 123-4567&#10;LinkedIn: linkedin.com/in/yourprofile&#10;GitHub: github.com/yourusername&#10;Portfolio: yoursite.dev"></textarea>
                     </div>
                     
@@ -145,13 +141,13 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="profile-summary">Professional Summary</label>
+                        <label for="profile-summary">Professional summary</label>
                         <textarea id="profile-summary" rows="3" placeholder="A short summary or objective (optional). Used as the headline on generated resumes."></textarea>
                     </div>
                 </section>
 
                 <!-- Education Section -->
-                <section class="section glass glass-shimmer">
+                <section class="section">
                     <h2>Education</h2>
                     <p class="section-description">Add each institution you attended. Degrees, honors, and coursework are used to tailor your resume.</p>
                     
@@ -160,39 +156,39 @@
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        Add Education
+                        Add education
                     </button>
                     <div id="education-container"></div>
                 </section>
 
                 <!-- Skills Section -->
-                <section class="section glass glass-shimmer">
-                    <h2>Skills & Expertise</h2>
+                <section class="section">
+                    <h2>Skills &amp; expertise</h2>
                     
                     <div class="form-group">
-                        <label for="skills-input">Add Skills</label>
+                        <label for="skills-input">Add skills</label>
                         <input type="text" id="skills-input" placeholder="Type a skill and press Enter (e.g., JavaScript, Python, React)">
                         <div id="skills-list" class="skills-container"></div>
                     </div>
                 </section>
 
                 <!-- Experience Section -->
-                <section class="section glass glass-shimmer">
-                    <h2>Work Experience</h2>
-                    <p class="section-description">Add your professional experience. Mark items as "Must Include" to prioritize them on your resume.</p>
+                <section class="section">
+                    <h2>Work experience</h2>
+                    <p class="section-description">Add your professional experience. Mark items as "Must include" to prioritize them on your resume.</p>
                     
                     <button id="add-experience" class="btn btn-secondary btn-ripple">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        Add Experience
+                        Add experience
                     </button>
                     <div id="experiences-container"></div>
                 </section>
 
                 <!-- Projects Section -->
-                <section class="section glass glass-shimmer">
+                <section class="section">
                     <h2>Projects</h2>
                     <p class="section-description">Showcase your best projects with descriptions and key achievements.</p>
                     
@@ -201,14 +197,14 @@
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        Add Project
+                        Add project
                     </button>
                     <div id="projects-container"></div>
                 </section>
 
                 <!-- Certifications & Achievements Section -->
-                <section class="section glass glass-shimmer">
-                    <h2>Certifications &amp; Achievements</h2>
+                <section class="section">
+                    <h2>Certifications &amp; achievements</h2>
                     <p class="section-description">Anything outside employment and projects: certifications, awards, research, publications, leadership roles, volunteering, and programs.</p>
                     
                     <button id="add-extra" class="btn btn-secondary btn-ripple">
@@ -216,13 +212,13 @@
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        Add Certification or Achievement
+                        Add certification or achievement
                     </button>
                     <div id="extras-container"></div>
                 </section>
 
                 <!-- Actions Section -->
-                <section class="section glass">
+                <section class="section">
                     <div class="actions">
                         <button id="save-profile" class="btn btn-primary btn-ripple">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -230,7 +226,7 @@
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                                 <polyline points="7 3 7 8 15 8"></polyline>
                             </svg>
-                            Save Profile
+                            Save profile
                         </button>
                     </div>
                 </section>
@@ -241,11 +237,22 @@
                  ═══════════════════════════════════════════════════════════════ -->
             <div id="generate-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-generate">
                 <div class="generate-layout">
+                    <!-- Generation progress (progress.js): hidden until Generate
+                         is clicked; spans both columns. -->
+                    <div id="gen-progress" class="gen-progress" hidden>
+                        <div class="progress-card" data-state="running">
+                            <span class="progress-label" id="progress-label" aria-live="polite">Generating</span>
+                            <div class="progress-track" role="progressbar" aria-labelledby="progress-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div class="progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     
                     <!-- Job Input Section -->
                     <div class="job-input-section">
-                        <section class="section glass glass-shimmer" style="flex: 1; display: flex; flex-direction: column;">
-                            <h2 id="job-heading">Job Description</h2>
+                        <section class="section" style="flex: 1; display: flex; flex-direction: column;">
+                            <h2 id="job-heading">Job description</h2>
                             <p class="section-description">Paste the job posting to generate a tailored resume or cover letter.</p>
                             
                             <textarea id="job-text" aria-labelledby="job-heading" placeholder="Paste the complete job description here...&#10;&#10;Include the job title, company name, requirements, responsibilities, and any other relevant details for best results."></textarea>
@@ -258,7 +265,7 @@
                                         <line x1="16" y1="13" x2="8" y2="13"></line>
                                         <line x1="16" y1="17" x2="8" y2="17"></line>
                                     </svg>
-                                    Generate Cover Letter
+                                    Generate cover letter
                                 </button>
                                 
                                 <button id="generate-resume-btn" class="btn btn-primary btn-ripple">
@@ -267,7 +274,7 @@
                                         <line x1="3" y1="9" x2="21" y2="9"></line>
                                         <line x1="9" y1="21" x2="9" y2="9"></line>
                                     </svg>
-                                    Generate Resume
+                                    Generate resume
                                 </button>
                             </div>
                             
@@ -282,7 +289,7 @@
                     </div>
                     
                     <!-- Preview Section -->
-                    <div class="preview-section glass-elevated">
+                    <div class="preview-section">
                         <div class="preview-header">
                             <h2 id="preview-title">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -301,7 +308,7 @@
                                         <polyline points="7 10 12 15 17 10"></polyline>
                                         <line x1="12" y1="15" x2="12" y2="3"></line>
                                     </svg>
-                                    Cover Letter PDF
+                                    Cover letter PDF
                                 </button>
                                 
                                 <button id="download-resume-pdf" class="btn btn-secondary btn-sm btn-ripple hidden" disabled>
@@ -357,20 +364,10 @@
         </main>
 
         <!-- ═══════════════════════════════════════════════════════════════════
-             LOADING OVERLAY
-             ═══════════════════════════════════════════════════════════════════ -->
-        <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
-            <div class="loading-content glass-floating">
-                <div class="loading-spinner"></div>
-                <p>Generating your document...</p>
-            </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════════════════════════
              DIALOGS (app.js openModal/closeModal: Escape, backdrop, focus trap)
              ═══════════════════════════════════════════════════════════════════ -->
         <div id="settings-modal" class="modal settings-modal hidden">
-            <div class="modal-content glass-floating" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="settings-title">
                 <div class="modal-header">
                     <h3 id="settings-title">Settings</h3>
                     <button class="modal-close" id="settings-close" aria-label="Close settings">&times;</button>
@@ -417,10 +414,10 @@
         </div>
 
         <div id="keywords-modal" class="modal hidden">
-            <div class="modal-content glass-floating" role="dialog" aria-modal="true" aria-labelledby="keywords-title" aria-describedby="keywords-intro">
+            <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="keywords-title" aria-describedby="keywords-intro">
                 <div class="modal-header">
                     <h3 id="keywords-title">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
@@ -440,10 +437,10 @@
         </div>
 
         <div id="filename-modal" class="modal hidden">
-            <div class="modal-content glass-floating" role="dialog" aria-modal="true" aria-labelledby="filename-title">
+            <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="filename-title">
                 <div class="modal-header">
                     <h3 id="filename-title">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
                         </svg>
@@ -469,10 +466,10 @@
         </div>
 
         <div id="error-modal" class="modal hidden">
-            <div class="modal-content glass-floating" role="alertdialog" aria-modal="true" aria-labelledby="error-title" aria-describedby="error-message">
+            <div class="modal-content" role="alertdialog" aria-modal="true" aria-labelledby="error-title" aria-describedby="error-message">
                 <div class="modal-header">
                     <h3 id="error-title">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--status-error);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="8" x2="12" y2="12"></line>
                             <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -497,7 +494,7 @@
                                 <polyline points="7 10 12 15 17 10"></polyline>
                                 <line x1="12" y1="15" x2="12" y2="3"></line>
                             </svg>
-                            Save Logs
+                            Save logs
                         </button>
                     </div>
                 </div>
@@ -513,6 +510,7 @@
     <script src="profileMerge.js"></script>
     <script src="onboarding.js"></script>
     <script src="theme.js"></script>
+    <script src="progress.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

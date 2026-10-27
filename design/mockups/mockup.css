@@ -1,0 +1,269 @@
+/* Resume Studio redesign mockups. Tokens are copied as is from
+   progress-bar-reference.html; class names match extension/app.html and the
+   templates in app.js, so this file maps onto styles.css one rule at a time.
+   Mockups only load Google Fonts; the extension will bundle them locally. */
+
+/* ── Tokens: light (default) ───────────────────────────────────────── */
+:root {
+  --ivory: #F8F3E8; --beige: #EADFCB; --taupe: #A39383; --cognac: #8A4B2A; --espresso: #2E2119;
+  --teal: #2F7F7A; --turquoise: #3FB8AF; --green: #5E8C4A; --blue: #3C6FB0; --navy: #1F3A5F; --brick: #B5452E;
+
+  --bg: var(--ivory);
+  --surface: var(--beige);
+  --surface-input: var(--ivory);
+  --text: var(--espresso);
+  --text-heading: var(--navy);
+  --text-label: var(--cognac);
+  --frame: var(--navy);
+  --shadow-card: var(--turquoise);
+  --primary: var(--teal);  --on-primary: var(--ivory);
+  --success: var(--green); --on-success: var(--ivory);
+  --info: var(--blue);     --on-info: var(--ivory);
+  --danger: var(--brick);  --on-danger: var(--ivory);
+  /* Text-only shades: the locked teal, green and brick are under 4.5:1 as
+     text on ivory and beige, so text uses these; fills and borders do not. */
+  --primary-text: #286C68; --success-text: #476A38; --danger-text: #A8402B; --placeholder: #776B60;
+  --on-primary: #FFFFFF;   /* 4.73:1 on teal; ivory is 4.28 */
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  --border-w: 2px; --shadow-btn: 3px 3px 0 var(--frame); --shadow-card-off: 4px 4px 0 var(--shadow-card);
+  --focus: 0 0 0 3px var(--turquoise);
+}
+/* ── Dark: espresso ────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg: #231A14; --surface: #2E2119; --surface-input: #231A14;
+  --text: var(--beige); --text-heading: var(--ivory); --text-label: #D89A6E;
+  --frame: var(--turquoise); --shadow-card: #0F1B2B;
+  --primary: var(--turquoise); --on-primary: var(--navy);
+  --success: #7FB069; --on-success: #1F2A14; --info: #7FA6DB; --on-info: #0F1B2B;
+  --danger: #D46A52; --on-danger: #2E2119;
+  --primary-text: var(--turquoise); --success-text: #7FB069; --danger-text: #D67059; --placeholder: #A39383;
+  --focus: 0 0 0 3px var(--ivory);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-body); }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 500; color: var(--text-heading); margin: 0; }
+a { color: var(--primary-text); text-underline-offset: 2px; }
+.hidden, [hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+
+.app-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.app-main { display: block; }
+
+/* ── Header ────────────────────────────────────────────────────────── */
+.app-header { display: flex; align-items: center; gap: 14px; padding-bottom: 14px; border-bottom: var(--border-w) solid var(--frame); margin-bottom: 24px; flex-wrap: wrap; }
+.header-brand { display: flex; align-items: center; gap: 12px; }
+.header-logo { width: 34px; height: 34px; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; box-shadow: 2px 2px 0 var(--frame); }
+.header-logo svg { width: 20px; height: 20px; }
+.header-brand h1 { font-size: 24px; color: var(--primary-text); }
+.header-controls { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tab-nav { display: flex; gap: 6px; margin-right: 8px; }
+.tab-btn { font: inherit; font-size: 14px; padding: 8px 14px; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); cursor: pointer; }
+.tab-btn:hover { background: var(--surface); }
+.tab-btn[aria-selected="true"] { background: var(--primary); color: var(--on-primary); box-shadow: 2px 2px 0 var(--frame); }
+/* Settings, tour and theme: square icon buttons (class kept from the app) */
+.theme-toggle { width: 38px; height: 38px; display: grid; place-items: center; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); cursor: pointer; padding: 0; }
+.theme-toggle:hover { background: var(--surface); }
+.theme-toggle svg { width: 18px; height: 18px; }
+.theme-icon-dark { display: none; }
+[data-theme="dark"] .theme-icon-light { display: none; }
+[data-theme="dark"] .theme-icon-dark { display: block; }
+
+/* ── Sections (cards) ──────────────────────────────────────────────── */
+.section { background: var(--surface); border: var(--border-w) solid var(--frame); box-shadow: var(--shadow-card-off); padding: 20px 22px; margin-bottom: 24px; }
+.section > h2 { font-size: 22px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+.section > h2 .header-action { margin-left: auto; }
+.section-description { margin: 0 0 14px; font-size: 14px; }
+
+/* ── Forms ─────────────────────────────────────────────────────────── */
+.form-group { margin-bottom: 16px; }
+label, .field-label { display: block; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--text-label); margin-bottom: 6px; }
+input[type="text"], input[type="password"], textarea, select {
+  width: 100%; font: 14px/1.5 var(--font-body); color: var(--text); background: var(--surface-input);
+  border: var(--border-w) solid var(--frame); border-radius: 0; padding: 9px 11px;
+}
+textarea { resize: vertical; min-height: 80px; }
+input::placeholder, textarea::placeholder { color: var(--placeholder); }
+input:focus-visible, textarea:focus-visible, select:focus-visible { border-color: var(--primary); box-shadow: var(--focus); }
+select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%); background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 28px; }
+input[type="checkbox"] { appearance: none; width: 18px; height: 18px; margin: 0; flex: none; border: var(--border-w) solid var(--frame); background: var(--surface-input); display: inline-grid; place-content: center; cursor: pointer; }
+input[type="checkbox"]::after { content: ''; width: 9px; height: 5px; border: solid var(--on-primary); border-width: 0 0 2px 2px; transform: rotate(-45deg) translate(1px, -1px); opacity: 0; }
+input[type="checkbox"]:checked { background: var(--primary); border-color: var(--primary); }
+input[type="checkbox"]:checked::after { opacity: 1; }
+.input-row { display: grid; gap: 10px; margin-top: 10px; }
+.input-row-2 { grid-template-columns: 1fr 1fr; }
+.input-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 640px) { .input-row-2, .input-row-3 { grid-template-columns: 1fr; } }
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.btn { font: inherit; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); box-shadow: var(--shadow-btn); cursor: pointer; }
+.btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--frame); }
+.btn:hover:not(:disabled) { background: var(--surface-input); }
+.btn-primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.btn-primary:hover:not(:disabled) { background: var(--primary); filter: brightness(1.08); }
+.btn-secondary { background: var(--surface-input); }
+.btn-danger { color: var(--danger-text); border-color: var(--danger); background: transparent; box-shadow: 3px 3px 0 var(--danger); }
+.btn-danger:active:not(:disabled) { box-shadow: 1px 1px 0 var(--danger); }
+.btn-danger.btn-solid { background: var(--danger); color: var(--on-danger); }
+.btn-sm { font-size: 13px; padding: 6px 11px; gap: 6px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.btn svg { flex: none; }
+
+/* ── Profile: uploaded resume, status, checklist ───────────────────── */
+.uploaded-resume { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 16px; background: var(--surface-input); border: var(--border-w) solid var(--frame); }
+.uploaded-resume-name { font-weight: 500; }
+.uploaded-resume-meta { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
+.uploaded-resume .btn { margin-left: auto; }
+
+.status-message { margin-top: 14px; padding: 9px 12px; font-size: 14px; border: var(--border-w) solid; border-left-width: 8px; background: var(--surface-input); }
+.status-success { border-color: var(--success); }
+.status-error { border-color: var(--danger); }
+.status-loading { border-color: var(--primary); }
+
+.checklist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.checklist-header h2 { font-size: 22px; }
+.checklist-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.checklist-items li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.checklist-mark { width: 18px; height: 18px; flex: none; border: var(--border-w) solid var(--frame); background: var(--surface-input); display: grid; place-content: center; }
+.checklist-items li.done { text-decoration: line-through; text-decoration-color: var(--taupe); }
+.checklist-items li.done .checklist-mark { background: var(--success); border-color: var(--success); }
+.checklist-items li.done .checklist-mark::after { content: ''; width: 9px; height: 5px; border: solid var(--on-success); border-width: 0 0 2px 2px; transform: rotate(-45deg) translate(1px, -1px); }
+.checklist-hint { font-size: 12px; color: var(--text-label); }
+.modal-close { font: 22px/1 var(--font-body); width: 32px; height: 32px; display: grid; place-items: center; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); cursor: pointer; padding: 0; }
+.modal-close:hover { background: var(--surface-input); }
+
+/* ── Profile: skills ───────────────────────────────────────────────── */
+.skills-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.skill-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; font-size: 13px; font-weight: 500; background: var(--info); color: var(--on-info); border: var(--border-w) solid var(--info); }
+.skill-remove { font: 16px/1 var(--font-body); width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.skill-remove:hover { background: var(--on-info); color: var(--info); }
+
+/* ── Profile: entry cards (education, experience, projects, extras) ── */
+#education-container, #experiences-container, #projects-container, #extras-container { display: grid; gap: 18px; margin-top: 16px; }
+.experience-card, .project-card { background: var(--bg); border: var(--border-w) solid var(--frame); padding: 16px; }
+.card-header { display: grid; grid-template-columns: 1fr auto; gap: 16px; }
+.card-title { display: grid; gap: 10px; }
+.card-title > .input-row { margin-top: 0; }
+.card-title input[data-field="title"], .card-title input[data-field="name"], .card-title input[data-field="institution"] { font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--text-heading); }
+.card-actions { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 150px; }
+.must-include-label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 8px; border: var(--border-w) dashed var(--frame); cursor: pointer; }
+.bullet-list { margin-top: 14px; padding-top: 12px; border-top: var(--border-w) dashed var(--frame); }
+.bullet-item { display: flex; gap: 8px; margin-bottom: 8px; }
+.bullet-item::before { content: ''; width: 8px; height: 8px; flex: none; margin-top: 15px; background: var(--primary); }
+.bullet-remove { font: 18px/1 var(--font-body); width: 38px; flex: none; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); cursor: pointer; }
+.bullet-remove:hover { color: var(--danger-text); border-color: var(--danger); }
+@media (max-width: 720px) { .card-header { grid-template-columns: 1fr; } .card-actions { flex-direction: row; flex-wrap: wrap; } }
+
+.actions { display: flex; justify-content: flex-end; }
+.actions-section { padding: 16px 22px; }
+
+/* ── Generate layout ───────────────────────────────────────────────── */
+.generate-layout { display: grid; grid-template-columns: 1fr 1.2fr; gap: 24px; align-items: start; }
+.gen-progress { grid-column: 1 / -1; }
+@media (max-width: 1024px) { .generate-layout { grid-template-columns: 1fr; } }
+.job-input-section .section { margin-bottom: 0; }
+#job-text { min-height: 360px; line-height: 1.6; }
+.generation-buttons { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.research-toggle { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0 0; font-size: 14px; letter-spacing: 0; text-transform: none; font-weight: 400; color: var(--text); cursor: pointer; }
+.research-toggle input { margin-top: 2px; }
+.research-hint { color: var(--text-label); }
+
+/* ── Progress strip (the reference component, unchanged) ───────────── */
+.progress-card { background: var(--surface); border: var(--border-w) solid var(--frame); box-shadow: var(--shadow-card-off); padding: 14px 18px; }
+.progress-label { display: block; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-label); margin: 0 0 8px; }
+.progress-card[data-state="done"] .progress-label { color: var(--success-text); }
+.progress-card[data-state="error"] .progress-label { color: var(--danger-text); }
+.progress-track { height: 14px; border: var(--border-w) solid var(--frame); background: var(--surface-input); }
+.progress-fill { height: 100%; width: 0%; background: var(--primary); transition: background-color .2s; }
+.progress-card[data-state="done"] .progress-fill { background: var(--success); }
+.progress-card[data-state="error"] .progress-fill { background: var(--danger); }
+
+/* ── Preview panel ─────────────────────────────────────────────────── */
+.preview-section { background: var(--surface); border: var(--border-w) solid var(--frame); box-shadow: var(--shadow-card-off); padding: 20px 22px; }
+.preview-header { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.preview-header h2 { font-size: 22px; display: flex; align-items: center; gap: 8px; }
+.review-hint { flex-basis: 100%; order: 3; margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-label); }
+.preview-controls { margin-left: auto; display: flex; gap: 8px; }
+
+/* The paper stays white with black serif text in both themes */
+.letter-preview, .resume-content, .resume-original { background: #FFFFFF; color: #111; border: var(--border-w) solid var(--frame); padding: 28px 32px; font: 14px/1.6 Georgia, 'Times New Roman', serif; min-height: 520px; }
+.letter-preview p { margin: 0 0 12px; }
+.placeholder-text { min-height: 460px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #6B5E52; font-family: var(--font-body); font-size: 14px; margin: 0; }
+.placeholder-text svg { color: #A39383; margin-bottom: 12px; }
+
+.resume-compare-bar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.segmented { display: inline-flex; border: var(--border-w) solid var(--frame); box-shadow: 2px 2px 0 var(--frame); }
+.segmented-btn { font: inherit; font-size: 13px; padding: 6px 12px; border: 0; background: var(--surface-input); color: var(--text); cursor: pointer; }
+.segmented-btn + .segmented-btn { border-left: var(--border-w) solid var(--frame); }
+.segmented-btn[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+/* ATS keyword coverage: a small meter in the progress strip's style */
+.coverage-chip { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; }
+.coverage-chip .coverage-meter { width: 110px; height: 10px; border: var(--border-w) solid var(--frame); background: var(--surface-input); position: relative; }
+.coverage-chip .coverage-meter span { position: absolute; inset: 0 auto 0 0; background: var(--success); }
+.coverage-chip .coverage-meter i { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--frame); }
+.coverage-chip b { font-weight: 500; }
+.resume-legend { flex-basis: 100%; font-size: 13px; }
+/* Changes: underlined green on the paper, readable without color */
+.rs-added { background: #E7F0E1; text-decoration: underline; text-decoration-color: #5E8C4A; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.resume-legend .rs-added { color: #111; padding: 0 3px; }
+
+/* Resume paper typography (mirrors formatResume's inline styles) */
+.resume-header { text-align: center; margin-bottom: 12px; }
+.resume-header .rs-name { font-size: 22px; font-weight: bold; letter-spacing: .02em; }
+.resume-header .rs-contact { font-size: 12px; }
+.resume-section-title { font-size: 12.5px; font-weight: bold; text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid #111; margin: 12px 0 6px; }
+.rs-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.resume-content ul { margin: 4px 0 8px; padding-left: 18px; font-size: 13px; }
+
+/* ── Dialogs ───────────────────────────────────────────────────────── */
+.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(46, 33, 25, .55); }
+[data-theme="dark"] .modal { background: rgba(10, 7, 5, .7); }
+.modal.inline { position: static; background: none; padding: 0; display: block; }
+.modal-content { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--surface); border: var(--border-w) solid var(--frame); box-shadow: 6px 6px 0 var(--shadow-card); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: var(--border-w) solid var(--frame); }
+.modal-header h3 { font-size: 20px; display: flex; align-items: center; gap: 10px; }
+.modal-body { padding: 18px 20px 20px; font-size: 14px; }
+.modal-body > p { margin: 0 0 14px; }
+.modal-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.modal-error .modal-content { box-shadow: 6px 6px 0 var(--danger); }
+.modal-error .modal-header { border-bottom-color: var(--danger); }
+.modal-error .modal-header svg { color: var(--danger); }
+
+.api-key-masked { display: block; font: 14px ui-monospace, Menlo, monospace; padding: 9px 11px; background: var(--surface-input); border: var(--border-w) solid var(--frame); }
+.api-key-status { margin-top: 8px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.api-key-status::before { content: ''; width: 10px; height: 10px; background: var(--success); }
+.api-key-help { font-size: 13px; margin: 12px 0 0; }
+.usage-notice { margin-top: 20px; padding: 14px 16px; border: var(--border-w) solid var(--frame); background: var(--surface-input); }
+.usage-notice h4 { font-size: 16px; margin-bottom: 6px; }
+.usage-notice ul { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 4px; }
+
+.keywords-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.keyword-chip { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 6px 10px; font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text); background: var(--surface-input); border: var(--border-w) solid var(--frame); cursor: pointer; }
+.keyword-chip:has(input:checked) { border-color: var(--success); color: var(--success-text); box-shadow: 2px 2px 0 var(--success); }
+.keyword-chip:has(input:checked) input { background: var(--success); border-color: var(--success); }
+.keyword-chip:has(input:checked) input::after { border-color: var(--on-success); }
+
+.filename-row { display: flex; }
+.filename-row input { flex: 1; }
+.filename-ext { display: grid; place-items: center; padding: 0 12px; border: var(--border-w) solid var(--frame); border-left: 0; background: var(--surface); font-size: 14px; }
+
+/* ── Onboarding tour ───────────────────────────────────────────────── */
+.tour-spotlight { outline: 3px solid var(--primary); outline-offset: 6px; box-shadow: 0 0 0 9999px rgba(46, 33, 25, .45); position: relative; z-index: 40; }
+.tour-tooltip { position: relative; z-index: 45; width: 340px; max-width: calc(100vw - 32px); background: var(--surface); border: var(--border-w) solid var(--frame); box-shadow: 4px 4px 0 var(--shadow-card); padding: 16px 18px; }
+.tour-progress { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-label); margin-bottom: 4px; }
+.tour-title { font-size: 19px; margin-bottom: 6px; }
+.tour-body { font-size: 14px; }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.tour-spacer { flex: 1; }
+
+/* ── Mockup chrome (not part of the design) ────────────────────────── */
+.mock-note { max-width: 1400px; margin: 0 auto; padding: 10px 24px; font-size: 12px; border-bottom: 1px dashed var(--taupe); color: var(--text-label); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.mock-note a { color: var(--text-label); }
+.mock-note strong { color: var(--text); font-weight: 500; }
+.mock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 28px; align-items: start; }
+.mock-caption { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-label); margin: 0 0 8px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

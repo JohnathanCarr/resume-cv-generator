@@ -140,4 +140,4 @@ resume-cv-generator/
 
 ## License
 
-[MIT](LICENSE). The bundled libraries keep their own licenses: pdf.js (Apache 2.0) and jsPDF (MIT), with notices at the top of each file in `extension/`. Use of the OpenAI API is subject to [OpenAI's usage policies](https://openai.com/policies/usage-policies).
+[MIT](LICENSE). The bundled libraries keep their own licenses: pdf.js (Apache 2.0) and jsPDF (MIT), with notices at the top of each file in `extension/`. The bundled fonts, Fraunces and Space Grotesk, are under the SIL Open Font License 1.1 (`extension/fonts/`). Use of the OpenAI API is subject to [OpenAI's usage policies](https://openai.com/policies/usage-policies).

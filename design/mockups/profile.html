@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resume Studio mockup: Profile</title>
+<!-- Mockups only. The extension bundles these fonts under extension/fonts/. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Fraunces:wght@500&display=swap">
+<link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+<div class="mock-note"><a href="index.html">All mockups</a><a href="generate-idle.html">Generate: idle</a><a href="generate-running.html">Generate: running</a><a href="generate-done.html">Generate: done</a><a href="generate-error.html">Generate: error</a><strong>Profile</strong><a href="dialogs.html">Dialogs and tour</a><span>· Checklist half done, resume uploaded</span></div>
+<div class="app-container">
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="header-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div>
+      <h1>Resume Studio</h1>
+    </div>
+    <div class="header-controls">
+      <nav class="tab-nav" role="tablist" aria-label="Sections">
+        <button class="tab-btn" role="tab" id="tab-profile" aria-selected="true" data-href="profile.html">Profile</button>
+        <button class="tab-btn" role="tab" id="tab-generate" aria-selected="false" data-href="generate-idle.html">Generate</button>
+      </nav>
+      <button class="theme-toggle" id="open-settings" aria-label="Settings" title="Settings" data-href="dialogs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+      <button class="theme-toggle" id="help-tour" aria-label="Replay the guided tour" title="Guided tour" data-href="dialogs.html#tour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Dark theme" aria-pressed="false"><svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg><svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button>
+    </div>
+  </header>
+  <main class="app-main">
+
+    <div id="profile-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-profile">
+      <section id="getting-started" class="section checklist">
+        <div class="checklist-header">
+          <h2>Getting started</h2>
+          <button id="checklist-dismiss" class="modal-close" aria-label="Dismiss checklist" title="Dismiss">&times;</button>
+        </div>
+        <ul class="checklist-items">
+          <li data-item="resume" class="done"><span class="checklist-mark"></span><span>Upload your current resume</span></li>
+          <li data-item="name" class="done"><span class="checklist-mark"></span><span>Add your name to Personal information</span></li>
+          <li data-item="key"><span class="checklist-mark"></span><span>Add your OpenAI API key in Settings <span class="checklist-hint">(the gear icon, top right)</span></span></li>
+          <li data-item="generated"><span class="checklist-mark"></span><span>Generate your first document</span></li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Personal information
+          <button id="upload-resume" class="btn btn-secondary btn-sm header-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> <span id="upload-resume-label">Replace resume</span></button>
+        </h2>
+        <div id="uploaded-resume" class="uploaded-resume">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span id="uploaded-resume-name" class="uploaded-resume-name">Dana_Diaz_Resume.pdf</span>
+          <span id="uploaded-resume-meta" class="uploaded-resume-meta">Uploaded Oct 22 · 1 page</span>
+          <button id="view-resume" class="btn btn-secondary btn-sm">View</button>
+        </div>
+        <div id="profile-status" class="status-message status-success" role="status">Resume read: 2 jobs, 1 school, 14 skills added to your profile.</div>
+        <div class="form-group" style="margin-top:16px">
+          <label for="profile-name">Full name</label>
+          <input type="text" id="profile-name" placeholder="Enter your full name" value="Dana Diaz">
+        </div>
+        <div class="form-group">
+          <label for="profile-contact">Contact information</label>
+          <textarea id="profile-contact" rows="4">Email: dana@example.com
+Phone: (555) 010-0199
+GitHub: github.com/danadiaz</textarea>
+        </div>
+        <div class="form-group">
+          <label for="profile-location">Location</label>
+          <input type="text" id="profile-location" placeholder="City, State (e.g., San Francisco, CA)" value="Austin, TX">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="profile-summary">Professional summary</label>
+          <textarea id="profile-summary" rows="3" placeholder="A short summary or objective (optional). Used as the headline on generated resumes."></textarea>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Education</h2>
+        <p class="section-description">Add each institution you attended. Degrees, honors, and coursework are used to tailor your resume.</p>
+        <button id="add-education" class="btn btn-secondary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add education</button>
+        <div id="education-container">
+          <div class="experience-card">
+            <div class="card-header">
+              <div class="card-title">
+                <input type="text" placeholder="Institution (e.g., Stanford University)" value="University of Texas at Austin" data-field="institution" aria-label="Institution">
+                <div class="input-row input-row-2">
+                  <input type="text" placeholder="Degree Type (e.g., Bachelor of Science)" value="Bachelor of Science" aria-label="Degree Type">
+                  <input type="text" placeholder="Major (e.g., Computer Science)" value="Computer Science" aria-label="Major">
+                </div>
+                <div class="input-row input-row-2">
+                  <input type="text" placeholder="Minor (optional)" aria-label="Minor">
+                  <input type="text" placeholder="Location (e.g., Stanford, CA)" value="Austin, TX" aria-label="Location">
+                </div>
+                <div class="input-row input-row-3">
+                  <input type="text" placeholder="Start Year" value="2016" aria-label="Start Year">
+                  <input type="text" placeholder="End Year" value="2020" aria-label="End Year">
+                  <input type="text" placeholder="GPA (e.g., 3.8/4.0)" aria-label="GPA">
+                </div>
+                <div class="input-row input-row-2">
+                  <input type="text" placeholder="Honors (e.g., Dean's List, Magna Cum Laude)" aria-label="Honors">
+                  <input type="text" placeholder="Relevant Coursework" value="Distributed Systems, Databases" aria-label="Relevant Coursework">
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-danger btn-sm">Remove</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Skills &amp; expertise</h2>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="skills-input">Add skills</label>
+          <input type="text" id="skills-input" placeholder="Type a skill and press Enter (e.g., JavaScript, Python, React)">
+          <div id="skills-list" class="skills-container">
+            <div class="skill-tag">Go<button class="skill-remove" aria-label="Remove Go">×</button></div>
+            <div class="skill-tag">TypeScript<button class="skill-remove" aria-label="Remove TypeScript">×</button></div>
+            <div class="skill-tag">PostgreSQL<button class="skill-remove" aria-label="Remove PostgreSQL">×</button></div>
+            <div class="skill-tag">Docker<button class="skill-remove" aria-label="Remove Docker">×</button></div>
+            <div class="skill-tag">Terraform<button class="skill-remove" aria-label="Remove Terraform">×</button></div>
+            <div class="skill-tag">AWS<button class="skill-remove" aria-label="Remove AWS">×</button></div>
+            <div class="skill-tag">CI/CD<button class="skill-remove" aria-label="Remove CI/CD">×</button></div>
+            <div class="skill-tag">Grafana<button class="skill-remove" aria-label="Remove Grafana">×</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Work experience</h2>
+        <p class="section-description">Add your professional experience. Mark items as "Must Include" to prioritize them on your resume.</p>
+        <button id="add-experience" class="btn btn-secondary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add experience</button>
+        <div id="experiences-container">
+          <div class="experience-card">
+            <div class="card-header">
+              <div class="card-title">
+                <input type="text" placeholder="Job Title" value="Backend Engineer" data-field="title" aria-label="Job Title">
+                <input type="text" placeholder="Company" value="Harbor Health" aria-label="Company">
+                <div class="input-row input-row-3">
+                  <input type="text" placeholder="Start Date" value="Mar 2022" aria-label="Start Date">
+                  <input type="text" placeholder="End Date" value="Present" aria-label="End Date">
+                  <input type="text" placeholder="Location" value="Austin, TX" aria-label="Location">
+                </div>
+                <textarea placeholder="Role description (what you did in this role)..." style="min-height:60px" aria-label="Role description">Platform team for a clinic scheduling product.</textarea>
+              </div>
+              <div class="card-actions">
+                <label class="must-include-label"><input type="checkbox" checked> Must include</label>
+                <button class="btn btn-secondary btn-sm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add achievement</button>
+                <button class="btn btn-danger btn-sm">Remove</button>
+              </div>
+            </div>
+            <div class="bullet-list">
+              <label>Key achievements</label>
+              <div class="bullet-item">
+                <input type="text" placeholder="Specific achievement with metrics if possible..." value="Built the scheduling API, serving 2M requests a day" aria-label="Achievement 1">
+                <button class="bullet-remove" aria-label="Remove achievement 1">&times;</button>
+              </div>
+              <div class="bullet-item">
+                <input type="text" placeholder="Specific achievement with metrics if possible..." value="Moved servers to the cloud, cutting deploy time from 40 to 8 minutes" aria-label="Achievement 2">
+                <button class="bullet-remove" aria-label="Remove achievement 2">&times;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Projects</h2>
+        <p class="section-description">Showcase your best projects with descriptions and key achievements.</p>
+        <button id="add-project" class="btn btn-secondary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add project</button>
+        <div id="projects-container">
+          <div class="project-card">
+            <div class="card-header">
+              <div class="card-title">
+                <input type="text" placeholder="Project Name" value="tidepool" data-field="name" aria-label="Project Name">
+                <textarea placeholder="Project description (what it does, technologies used)..." style="min-height:60px" aria-label="Project description">A small Go job queue backed by PostgreSQL advisory locks.</textarea>
+              </div>
+              <div class="card-actions">
+                <label class="must-include-label"><input type="checkbox"> Must include</label>
+                <button class="btn btn-secondary btn-sm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add detail</button>
+                <button class="btn btn-danger btn-sm">Remove</button>
+              </div>
+            </div>
+            <div class="bullet-list">
+              <label>Key details / achievements</label>
+              <div class="bullet-item">
+                <input type="text" placeholder="Technical detail, impact, or achievement..." value="300 stars on GitHub; used by two local nonprofits" aria-label="Detail 1">
+                <button class="bullet-remove" aria-label="Remove detail 1">&times;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Certifications &amp; achievements</h2>
+        <p class="section-description">Anything outside employment and projects: certifications, awards, research, publications, leadership roles, volunteering, and programs.</p>
+        <button id="add-extra" class="btn btn-secondary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add certification or achievement</button>
+        <div id="extras-container">
+          <div class="experience-card">
+            <div class="card-header">
+              <div class="card-title">
+                <input type="text" placeholder="Title/Type (e.g., Research Assistant, Certification)" value="AWS Certified Developer – Associate" data-field="title" aria-label="Title/Type">
+                <input type="text" placeholder="Organization/Institution" value="Amazon Web Services" aria-label="Organization/Institution">
+                <div class="input-row input-row-3">
+                  <select aria-label="Type"><option>Certification</option><option>Award</option><option>Research</option><option>Leadership</option><option>Volunteering</option></select>
+                  <input type="text" placeholder="Start Date" value="2023" aria-label="Start Date">
+                  <input type="text" placeholder="End Date (or 'Present')" aria-label="End Date">
+                </div>
+                <textarea placeholder="Description of the experience, achievement, or certification..." style="min-height:60px" aria-label="Description"></textarea>
+              </div>
+              <div class="card-actions">
+                <button class="btn btn-danger btn-sm">Remove</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section actions-section">
+        <div class="actions">
+          <button id="save-profile" class="btn btn-primary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save profile</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="mockup.js"></script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resume Studio mockup: Dialogs and tour</title>
+<!-- Mockups only. The extension bundles these fonts under extension/fonts/. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Fraunces:wght@500&display=swap">
+<link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+<div class="mock-note"><a href="index.html">All mockups</a><a href="generate-idle.html">Generate: idle</a><a href="generate-running.html">Generate: running</a><a href="generate-done.html">Generate: done</a><a href="generate-error.html">Generate: error</a><a href="profile.html">Profile</a><strong>Dialogs and tour</strong><span>· Shown side by side; in the app each opens over a dimmed page</span></div>
+<div class="app-container">
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="header-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div>
+      <h1>Resume Studio</h1>
+    </div>
+    <div class="header-controls">
+      <nav class="tab-nav" role="tablist" aria-label="Sections">
+        <button class="tab-btn" role="tab" id="tab-profile" aria-selected="false" data-href="profile.html">Profile</button>
+        <button class="tab-btn" role="tab" id="tab-generate" aria-selected="true" data-href="generate-idle.html">Generate</button>
+      </nav>
+      <button class="theme-toggle" id="open-settings" aria-label="Settings" title="Settings" data-href="dialogs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+      <button class="theme-toggle" id="help-tour" aria-label="Replay the guided tour" title="Guided tour" data-href="dialogs.html#tour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></button>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Dark theme" aria-pressed="false"><svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg><svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button>
+    </div>
+  </header>
+  <main class="app-main">
+
+    <div class="mock-grid">
+      <div>
+        <p class="mock-caption">Settings: key saved</p>
+        <div class="modal inline"><div class="modal-content" role="dialog" aria-labelledby="settings-title">
+          <div class="modal-header"><h3 id="settings-title">Settings</h3><button class="modal-close" aria-label="Close settings">&times;</button></div>
+          <div class="modal-body">
+            <div class="form-group" style="margin:0">
+              <label>OpenAI API key</label>
+              <div class="api-key-saved">
+                <code class="api-key-masked">sk-proj-••••••••••••••••7Q2a</code>
+                <div class="api-key-status">Verified Oct 22</div>
+                <div class="modal-actions">
+                  <button class="btn btn-secondary btn-sm">Replace key</button>
+                  <button class="btn btn-danger btn-sm">Remove key</button>
+                </div>
+              </div>
+            </div>
+            <section class="usage-notice" aria-labelledby="usage-notice-title">
+              <h4 id="usage-notice-title">Before you generate</h4>
+              <ul>
+                <li>Generation is billed to your OpenAI account at <a href="#">OpenAI's API prices</a>. Resume Studio itself is free and charges nothing.</li>
+                <li>Your use of the API is subject to <a href="#">OpenAI's usage policies</a>.</li>
+                <li>AI can get things wrong. Read every resume and cover letter, and check names, dates and numbers, before you send it.</li>
+              </ul>
+            </section>
+          </div>
+        </div></div>
+      </div>
+
+      <div>
+        <p class="mock-caption">Settings: entering a key</p>
+        <div class="modal inline"><div class="modal-content" role="dialog" aria-label="Settings">
+          <div class="modal-header"><h3>Settings</h3><button class="modal-close" aria-label="Close settings">&times;</button></div>
+          <div class="modal-body">
+            <div class="form-group" style="margin:0">
+              <label for="api-key-input">OpenAI API key</label>
+              <div class="api-key-entry">
+                <input type="password" id="api-key-input" placeholder="sk-..." autocomplete="off">
+                <div class="modal-actions">
+                  <button class="btn btn-primary btn-sm">Save key</button>
+                  <button class="btn btn-secondary btn-sm">Cancel</button>
+                </div>
+                <p class="api-key-help">Create a key at <a href="#">platform.openai.com/api-keys</a>. It is stored only in this browser and sent directly to OpenAI when you verify or generate. Once saved it can be replaced but not viewed.</p>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <div>
+        <p class="mock-caption">Keyword check (before generating)</p>
+        <div class="modal inline"><div class="modal-content" role="dialog" aria-labelledby="keywords-title">
+          <div class="modal-header"><h3 id="keywords-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Keywords not in your profile</h3><button class="modal-close" aria-label="Close">&times;</button></div>
+          <div class="modal-body">
+            <p>The posting's key requirements include these, and your profile does not mention them. Check the ones you actually have; they are added to your skills so the resume can use the posting's exact wording.</p>
+            <div class="keywords-list">
+              <label class="keyword-chip"><input type="checkbox" checked>PostgreSQL</label>
+              <label class="keyword-chip"><input type="checkbox" checked>CI/CD</label>
+              <label class="keyword-chip"><input type="checkbox">Kubernetes</label>
+              <label class="keyword-chip"><input type="checkbox">Observability</label>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-primary">Continue</button>
+              <button class="btn btn-secondary">Cancel</button>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <div>
+        <p class="mock-caption">Name your file (PDF download)</p>
+        <div class="modal inline"><div class="modal-content" role="dialog" aria-labelledby="filename-title">
+          <div class="modal-header"><h3 id="filename-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg> Name your file</h3><button class="modal-close" aria-label="Close">&times;</button></div>
+          <div class="modal-body">
+            <div class="form-group" style="margin:0">
+              <label for="filename-input">File name</label>
+              <div class="filename-row"><input type="text" id="filename-input" value="Dana_Diaz_Cover_Letter_Northwind_Labs"><span class="filename-ext">.pdf</span></div>
+              <p class="api-key-help">Saved to your Downloads folder.</p>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-primary">Download</button>
+              <button class="btn btn-secondary">Cancel</button>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <div>
+        <p class="mock-caption">Error, with Retry</p>
+        <div class="modal inline modal-error"><div class="modal-content" role="alertdialog" aria-labelledby="error-title-2">
+          <div class="modal-header"><h3 id="error-title-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Error</h3><button class="modal-close" aria-label="Close">&times;</button></div>
+          <div class="modal-body">
+            <p>Failed to generate resume: Your OpenAI account has run out of credit. Add credit at platform.openai.com, then retry.</p>
+            <div class="modal-actions">
+              <button class="btn btn-primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg> Retry</button>
+              <button class="btn btn-secondary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Save logs</button>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <div id="tour">
+        <p class="mock-caption">Guided tour step (spotlight on the target)</p>
+        <div style="display:grid;gap:22px;justify-items:start;padding:20px;overflow:hidden;border:2px dashed var(--taupe)">
+          <button class="btn btn-secondary btn-sm tour-spotlight"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Upload resume</button>
+          <div class="tour-tooltip" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
+            <div class="tour-progress">2 / 7</div>
+            <h3 class="tour-title" id="tour-title">Start from your resume</h3>
+            <div class="tour-body" id="tour-body">Upload the PDF you use today. Resume Studio reads it in your browser and fills in your profile; tailored resumes start from it.</div>
+            <div class="tour-actions">
+              <button class="btn btn-secondary btn-sm">Skip tour</button>
+              <span class="tour-spacer"></span>
+              <button class="btn btn-secondary btn-sm">Back</button>
+              <button class="btn btn-primary btn-sm">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="mockup.js"></script>
+</body>
+</html>

@@ -1482,6 +1482,41 @@ body {
 
 .api-key-help a { color: var(--accent-primary); }
 
+/* Billing, usage policy and review notice: shown in Settings whether or
+   not a key is saved. */
+.usage-notice {
+    margin-top: var(--space-lg);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--surface-divider);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.usage-notice h4 {
+    margin: 0 0 var(--space-xs) 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.usage-notice ul {
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.usage-notice li + li { margin-top: var(--space-xs); }
+
+.usage-notice a { color: var(--accent-primary); }
+
+/* "Read it before you send it" beside the preview title. */
+.review-hint {
+    flex: 1;
+    margin: 0 var(--space-md);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SECTION 17b: GUIDED TOUR
    ═══════════════════════════════════════════════════════════════════════════ */

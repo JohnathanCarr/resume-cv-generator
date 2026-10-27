@@ -1479,7 +1479,7 @@ class CoverLetterApp {
                 tab: 'profile',
                 title: 'Add and edit anything',
                 placement: 'bottom',
-                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to guarantee it appears on generated resumes.</p>'
+                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to tell the generator it matters most; it is a strong hint, not a guarantee.</p>'
             },
             {
                 target: '#job-text',

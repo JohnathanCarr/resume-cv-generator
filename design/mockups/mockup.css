@@ -20,6 +20,10 @@
   --success: var(--green); --on-success: var(--ivory);
   --info: var(--blue);     --on-info: var(--ivory);
   --danger: var(--brick);  --on-danger: var(--ivory);
+  /* Text-only shades: the locked teal, green and brick are under 4.5:1 as
+     text on ivory and beige, so text uses these; fills and borders do not. */
+  --primary-text: #286C68; --success-text: #476A38; --danger-text: #A8402B; --placeholder: #776B60;
+  --on-primary: #FFFFFF;   /* 4.73:1 on teal; ivory is 4.28 */
 
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Space Grotesk', system-ui, sans-serif;
@@ -34,13 +38,14 @@
   --primary: var(--turquoise); --on-primary: var(--navy);
   --success: #7FB069; --on-success: #1F2A14; --info: #7FA6DB; --on-info: #0F1B2B;
   --danger: #D46A52; --on-danger: #2E2119;
+  --primary-text: var(--turquoise); --success-text: #7FB069; --danger-text: #D67059; --placeholder: #A39383;
   --focus: 0 0 0 3px var(--ivory);
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-body); }
 h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 500; color: var(--text-heading); margin: 0; }
-a { color: var(--primary); text-underline-offset: 2px; }
+a { color: var(--primary-text); text-underline-offset: 2px; }
 .hidden, [hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 :focus-visible { outline: none; box-shadow: var(--focus); }
@@ -53,7 +58,7 @@ a { color: var(--primary); text-underline-offset: 2px; }
 .header-brand { display: flex; align-items: center; gap: 12px; }
 .header-logo { width: 34px; height: 34px; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; box-shadow: 2px 2px 0 var(--frame); }
 .header-logo svg { width: 20px; height: 20px; }
-.header-brand h1 { font-size: 24px; color: var(--primary); }
+.header-brand h1 { font-size: 24px; color: var(--primary-text); }
 .header-controls { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tab-nav { display: flex; gap: 6px; margin-right: 8px; }
 .tab-btn { font: inherit; font-size: 14px; padding: 8px 14px; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); cursor: pointer; }
@@ -81,8 +86,7 @@ input[type="text"], input[type="password"], textarea, select {
   border: var(--border-w) solid var(--frame); border-radius: 0; padding: 9px 11px;
 }
 textarea { resize: vertical; min-height: 80px; }
-input::placeholder, textarea::placeholder { color: var(--taupe); }
-[data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder { color: #A39383; }
+input::placeholder, textarea::placeholder { color: var(--placeholder); }
 input:focus-visible, textarea:focus-visible, select:focus-visible { border-color: var(--primary); box-shadow: var(--focus); }
 select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%); background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 28px; }
 input[type="checkbox"] { appearance: none; width: 18px; height: 18px; margin: 0; flex: none; border: var(--border-w) solid var(--frame); background: var(--surface-input); display: inline-grid; place-content: center; cursor: pointer; }
@@ -101,7 +105,7 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 .btn-primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .btn-primary:hover:not(:disabled) { background: var(--primary); filter: brightness(1.08); }
 .btn-secondary { background: var(--surface-input); }
-.btn-danger { color: var(--danger); border-color: var(--danger); background: transparent; box-shadow: 3px 3px 0 var(--danger); }
+.btn-danger { color: var(--danger-text); border-color: var(--danger); background: transparent; box-shadow: 3px 3px 0 var(--danger); }
 .btn-danger:active:not(:disabled) { box-shadow: 1px 1px 0 var(--danger); }
 .btn-danger.btn-solid { background: var(--danger); color: var(--on-danger); }
 .btn-sm { font-size: 13px; padding: 6px 11px; gap: 6px; }
@@ -150,7 +154,7 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 .bullet-item { display: flex; gap: 8px; margin-bottom: 8px; }
 .bullet-item::before { content: ''; width: 8px; height: 8px; flex: none; margin-top: 15px; background: var(--primary); }
 .bullet-remove { font: 18px/1 var(--font-body); width: 38px; flex: none; border: var(--border-w) solid var(--frame); background: transparent; color: var(--text); cursor: pointer; }
-.bullet-remove:hover { color: var(--danger); border-color: var(--danger); }
+.bullet-remove:hover { color: var(--danger-text); border-color: var(--danger); }
 @media (max-width: 720px) { .card-header { grid-template-columns: 1fr; } .card-actions { flex-direction: row; flex-wrap: wrap; } }
 
 .actions { display: flex; justify-content: flex-end; }
@@ -170,8 +174,8 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 /* ── Progress strip (the reference component, unchanged) ───────────── */
 .progress-card { background: var(--surface); border: var(--border-w) solid var(--frame); box-shadow: var(--shadow-card-off); padding: 14px 18px; }
 .progress-label { display: block; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-label); margin: 0 0 8px; }
-.progress-card[data-state="done"] .progress-label { color: var(--success); }
-.progress-card[data-state="error"] .progress-label { color: var(--danger); }
+.progress-card[data-state="done"] .progress-label { color: var(--success-text); }
+.progress-card[data-state="error"] .progress-label { color: var(--danger-text); }
 .progress-track { height: 14px; border: var(--border-w) solid var(--frame); background: var(--surface-input); }
 .progress-fill { height: 100%; width: 0%; background: var(--primary); transition: background-color .2s; }
 .progress-card[data-state="done"] .progress-fill { background: var(--success); }
@@ -238,9 +242,9 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 
 .keywords-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .keyword-chip { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 6px 10px; font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text); background: var(--surface-input); border: var(--border-w) solid var(--frame); cursor: pointer; }
-.keyword-chip:has(input:checked) { background: var(--success); border-color: var(--success); color: var(--on-success); }
-.keyword-chip:has(input:checked) input { background: var(--on-success); border-color: var(--on-success); }
-.keyword-chip:has(input:checked) input::after { border-color: var(--success); }
+.keyword-chip:has(input:checked) { border-color: var(--success); color: var(--success-text); box-shadow: 2px 2px 0 var(--success); }
+.keyword-chip:has(input:checked) input { background: var(--success); border-color: var(--success); }
+.keyword-chip:has(input:checked) input::after { border-color: var(--on-success); }
 
 .filename-row { display: flex; }
 .filename-row input { flex: 1; }

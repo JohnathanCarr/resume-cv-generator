@@ -339,14 +339,18 @@ class CoverLetterApp {
     // the user cancelled. Accepted terms are saved to the profile's skills.
     async checkKeywords(jobText) {
         this.showStatus('Reading the posting…', 'loading');
+        this.progress.mark(0, 0.25, 2500);
         const { analyzeJob, missingKeywords, applyKeywords } = await this.generation();
         const match = await analyzeJob(this.apiKey.value, { profile: this.profile, jobText });
         const missing = missingKeywords(match, this.profile);
         if (!missing.length) return { match, profile: this.profile, added: [] };
 
-        this.hideLoading();
+        // The bar freezes, rather than disappearing, while the dialog is open.
+        this.progress.pause();
+        this.setPageInert(false);
         const choice = await this.promptForKeywords(missing);
-        this.showLoading();
+        this.setPageInert(true);
+        this.progress.resume();
         if (!choice) return null;
 
         const applied = applyKeywords(match, this.profile, choice.accepted);
@@ -561,17 +565,25 @@ class CoverLetterApp {
         }
     }
 
-    // While generating, the page behind the overlay is inert: no clicks,
-    // no keyboard focus, so a second generation cannot start underneath.
+    // The progress strip above the job description and preview (progress.js).
+    get progress() {
+        if (!this._progress) {
+            const root = document.getElementById('gen-progress');
+            this._progress = root ? new GenerationProgress(root) : GenerationProgress.none;
+        }
+        return this._progress;
+    }
+
+    // While generating, the page is inert: no clicks, no keyboard focus, so a
+    // second generation cannot start underneath. The progress strip stays
+    // out of it so screen readers can still read it. Each generator ends the
+    // strip itself with done(), fail() or hide().
     showLoading() {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+        this.progress.start();
         this.setPageInert(true);
     }
 
     hideLoading() {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) loadingOverlay.classList.add('hidden');
         this.setPageInert(false);
     }
 
@@ -579,7 +591,7 @@ class CoverLetterApp {
     // afterwards unless something else (a dialog) has taken it meanwhile.
     setPageInert(on) {
         if (on && !this._inertFocus) this._inertFocus = document.activeElement;
-        document.querySelectorAll('.app-header, .app-main').forEach(el => { el.inert = on; });
+        document.querySelectorAll('.app-header, #profile-tab, .generate-layout > :not(.gen-progress)').forEach(el => { el.inert = on; });
         if (!on) {
             const back = this._inertFocus;
             this._inertFocus = null;
@@ -818,17 +830,17 @@ class CoverLetterApp {
                 <div class="card-actions">
                     <label class="must-include-label">
                         <input type="checkbox" class="must-include-exp" data-index="${index}" ${exp.mustInclude ? 'checked' : ''}>
-                        Must Include
+                        Must include
                     </label>
                     <button class="btn btn-secondary btn-sm btn-ripple add-bullet" data-index="${index}">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add Achievement
+                        Add achievement
                     </button>
                     <button class="btn btn-danger btn-sm btn-ripple remove-experience" data-index="${index}">Remove</button>
                 </div>
             </div>
             <div class="bullet-list" data-index="${index}">
-                <label>Key Achievements</label>
+                <label>Key achievements</label>
                 ${(exp.bullets || []).map((bullet, bulletIndex) => `
                     <div class="bullet-item">
                         <input type="text" placeholder="Specific achievement with metrics if possible..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
@@ -1049,17 +1061,17 @@ class CoverLetterApp {
                 <div class="card-actions">
                     <label class="must-include-label">
                         <input type="checkbox" class="must-include-proj" data-index="${index}" ${project.mustInclude ? 'checked' : ''}>
-                        Must Include
+                        Must include
                     </label>
                     <button class="btn btn-secondary btn-sm btn-ripple add-bullet" data-index="${index}">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add Detail
+                        Add detail
                     </button>
                     <button class="btn btn-danger btn-sm btn-ripple remove-project" data-index="${index}">Remove</button>
                 </div>
             </div>
             <div class="bullet-list" data-index="${index}">
-                <label>Key Details / Achievements</label>
+                <label>Key details / achievements</label>
                 ${(project.bullets || []).map((bullet, bulletIndex) => `
                     <div class="bullet-item">
                         <input type="text" placeholder="Technical detail, impact, or achievement..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
@@ -1467,7 +1479,7 @@ class CoverLetterApp {
                 tab: 'profile',
                 title: 'Add and edit anything',
                 placement: 'bottom',
-                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must Include</strong> on an experience or project to guarantee it appears on generated resumes.</p>'
+                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to guarantee it appears on generated resumes.</p>'
             },
             {
                 target: '#job-text',
@@ -1677,7 +1689,7 @@ class CoverLetterApp {
 
         if (!this.uploadedResume) {
             chip.classList.add('hidden');
-            if (label) label.textContent = 'Upload Resume';
+            if (label) label.textContent = 'Upload resume';
             return;
         }
 
@@ -1692,7 +1704,7 @@ class CoverLetterApp {
             metaEl.textContent = `${kb} KB${date ? ` · ${date}` : ''}`;
         }
         chip.classList.remove('hidden');
-        if (label) label.textContent = 'Replace Resume';
+        if (label) label.textContent = 'Replace resume';
     }
 
     viewUploadedResume() {
@@ -1748,7 +1760,7 @@ class CoverLetterApp {
 
         try {
             const checked = await this.checkKeywords(jobText);
-            if (!checked) { this.showStatus('Cancelled.', 'error'); return; }
+            if (!checked) { this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
             this.showStatus('Generating cover letter...', 'loading');
 
             const requestData = {
@@ -1765,6 +1777,7 @@ class CoverLetterApp {
             };
 
             const { generateCoverLetter } = await this.generation();
+            this.progress.mark(0.3, 0.85, this.researchEnabled ? 12000 : 7000);
             const result = await generateCoverLetter(this.apiKey.value, requestData);
             this.lastApiCall.response = result;
             this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
@@ -1780,12 +1793,14 @@ class CoverLetterApp {
             await this.saveData();
 
             this.showStatus(this.describeCoverLetterResult(result), 'success');
+            this.progress.done();
             this.recordFirstGeneration();
             const downloadBtn = document.getElementById('download-pdf');
             if (downloadBtn) downloadBtn.disabled = false;
 
         } catch (error) {
             console.error('Generation error:', error);
+            this.progress.fail();
             this.showError(`Failed to generate cover letter: ${error.message}`, () => this.generateCoverLetter());
             this.showStatus('Generation failed', 'error');
         } finally {
@@ -2057,7 +2072,7 @@ class CoverLetterApp {
       throw new Error('your uploaded resume could not be read. Try uploading it again in the Profile tab.');
     }
     const checked = await this.checkKeywords(jobText);
-    if (!checked) { this.showStatus('Cancelled.', 'error'); return; }
+    if (!checked) { this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
     const { match, profile } = checked;
 
     // Every posting starts from the user's own resume, never from the last
@@ -2067,17 +2082,20 @@ class CoverLetterApp {
     // the model each line's room and the page's free space.
     this.showStatus('Tailoring your resume…', 'loading');
     const layout = await this.measureLayout(this.baselineResume.resume);
+    this.progress.mark(0.3, 0.7, 9000);
     let result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout });
 
     // Confirm on the real layout. The pipeline works from per-line estimates;
     // if the result still spills over, fold the measured error into the
     // budget and ask again (twice at most).
+    this.progress.mark(0.75, 0.9, 4000);
     let height = await this.measureResumeHeight(result.resumeContent);
     let refits = 0;
     while (height > CoverLetterApp.PAGE_PX && refits < 2) {
       const predicted = result.metadata?.page?.afterPx || layout.usedPx;
       layout.usedPx += (height - predicted) * (refits + 1);
       this.showStatus('Fitting it to one page…', 'loading');
+      this.progress.mark(0.75, 0.9, 4000);
       result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout });
       height = await this.measureResumeHeight(result.resumeContent);
       refits++;
@@ -2095,12 +2113,14 @@ class CoverLetterApp {
     await this.rememberResume(result, jobText);
 
     this.showStatus(this.describeResumeResult(result, { overflow, added: checked.added }), overflow > 1 ? 'error' : 'success');
+    this.progress.done();
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
 
   } catch (error) {
     console.error('Resume generation error:', error);
+    this.progress.fail();
     this.showError(`Failed to generate resume: ${error.message}`, () => this.generateResume());
     this.showStatus('Resume generation failed', 'error');
   } finally {
@@ -2508,7 +2528,7 @@ class CoverLetterApp {
         
         if (resumePreview) resumePreview.classList.remove('hidden');
         if (downloadResumeBtn) downloadResumeBtn.classList.remove('hidden');
-        if (previewTitle) previewTitle.textContent = 'Resume Preview';
+        if (previewTitle) previewTitle.textContent = 'Resume preview';
     }
 
     switchToCoverLetterView() {
@@ -2528,7 +2548,7 @@ class CoverLetterApp {
         
         if (resumePreview) resumePreview.classList.add('hidden');
         if (downloadResumeBtn) downloadResumeBtn.classList.add('hidden');
-        if (previewTitle) previewTitle.textContent = 'Cover Letter Preview';
+        if (previewTitle) previewTitle.textContent = 'Cover letter preview';
     }
 
 // Opens the rendered resume in print.html, where Chrome's print dialog saves

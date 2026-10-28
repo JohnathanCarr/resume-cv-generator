@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SMOKE RUNNING</title>
+<!--
+  Smoke test: runs the real extension/app.html over a stubbed `chrome` API
+  and a stubbed OpenAI, then clicks through the main flows the way a person
+  would. Nothing is sent to OpenAI and nothing is billed. Run it with
+  scripts/smoke.sh (headless Chrome), or open it in a browser from the
+  repository root served over HTTP (python3 -m http.server 8790) and read the
+  result at the bottom of the page.
+-->
+</head>
+<body>
+<script>
+(async () => {
+  // Everything the page needs is fetched before document.write: afterwards
+  // the <base> points relative URLs at extension/.
+  const [profile, sample, pdf, html] = await Promise.all([
+    fetch('../eval/profiles/maria_backend_ms.json').then(r => r.json()),
+    fetch('../../store/sample-resume.json').then(r => r.json()),
+    fetch('../fixtures/resume_sans_title_first.pdf').then(r => r.arrayBuffer()),
+    fetch('../../extension/app.html').then(r => r.text())
+  ]);
+  const bytes = new Uint8Array(pdf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+
+  // ── Stubbed chrome API (records what the app asked for) ─────────────────
+  const store = {
+    profile,
+    uploadedResume: { name: 'resume_sans_title_first.pdf', size: bytes.length, uploadedAt: '2026-09-01T00:00:00.000Z', dataBase64: btoa(binary) },
+    onboarding: { seen: true, installedAt: '2026-09-01T00:00:00.000Z', completedAt: '2026-09-01T00:00:00.000Z', checklistDismissed: true, firstGeneratedAt: '2026-09-01T00:00:00.000Z' },
+    apiKey: { value: 'sk-smoke-test', last4: 'test', savedAt: '2026-09-01T00:00:00.000Z', verifiedAt: '2026-09-01T00:00:00.000Z' },
+    researchEnabled: false
+  };
+  const session = {};
+  const calls = { downloads: [], tabs: [] };
+  const pick = (area, keys) => Object.fromEntries((keys == null ? Object.keys(area) : Array.isArray(keys) ? keys : [keys]).filter(k => k in area).map(k => [k, area[k]]));
+  window.chrome = {
+    storage: {
+      local: { get: async (k) => pick(store, k), set: async (o) => { Object.assign(store, o); }, remove: async (k) => { [].concat(k).forEach(x => delete store[x]); } },
+      session: { get: async (k) => pick(session, k), set: async (o) => { Object.assign(session, o); }, remove: async (k) => { [].concat(k).forEach(x => delete session[x]); } }
+    },
+    runtime: { id: 'smoke', getURL: (p) => `../extension/${p}`, connect: () => ({ onDisconnect: { addListener() {} } }), lastError: undefined },
+    downloads: { download: (opts, cb) => { calls.downloads.push(opts.filename); cb && cb(1); } },
+    tabs: { create: async (opts) => { calls.tabs.push(opts.url); return { id: 2 }; } }
+  };
+
+  // ── Stubbed OpenAI: answers by the requested schema ─────────────────────
+  // Two posting keywords the profile does not have, so the keyword dialog appears.
+  const MISSING = ['Quokka DB', 'Zebra Orchestrator'];
+  const stub = { failNext: false, requests: [] };
+  const answers = {
+    match_analysis: () => ({
+      company: 'Northwind Labs', role: 'Backend Engineer', seniority: 'mid', location: 'Remote',
+      about_company: 'Northwind Labs builds scheduling software for clinics.',
+      requirements: [{ text: 'Backend services in Go', kind: 'required', evidence: [], strength: 'partial' }],
+      keywords: [{ term: 'Go', importance: 'core' }, ...MISSING.map(term => ({ term, importance: 'core' }))]
+    }),
+    resume_edits: () => ({ edits: [] }),
+    cover_letter: () => ({
+      coverLetter: 'I am applying for the Backend Engineer role at Northwind Labs.\n\nThe posting asks for backend services in Go, which is the work I do every day.',
+      claims: [{ sentence: 'I am applying for the Backend Engineer role at Northwind Labs.', source: 'job posting' }]
+    })
+  };
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (url, init) => {
+    if (!String(url).startsWith('https://api.openai.com/')) return realFetch(url, init);
+    const body = JSON.parse(init.body);
+    const name = body.response_format?.json_schema?.name;
+    stub.requests.push(name || String(url));
+    await new Promise(r => setTimeout(r, 300));   // a model call takes time
+    if (stub.failNext) { stub.failNext = false; return new Response(JSON.stringify({ error: { message: 'Stubbed server error' } }), { status: 500 }); }
+    const answer = answers[name];
+    if (!answer) return new Response(JSON.stringify({ error: { message: `No stub for ${name || url}` } }), { status: 400 });
+    return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(answer()) } }], usage: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  // ── Console capture ─────────────────────────────────────────────────────
+  const errors = [];
+  const infos = [];
+  let expectErrors = false;
+  const origError = console.error.bind(console);
+  console.error = (...a) => { if (!expectErrors) errors.push(a.map(String).join(' ')); origError(...a); };
+  const origInfo = console.info.bind(console);
+  console.info = (...a) => { infos.push(a.map(String).join(' ')); origInfo(...a); };
+  window.addEventListener('error', e => errors.push(`uncaught: ${e.message}`));
+  window.addEventListener('unhandledrejection', e => errors.push(`unhandled rejection: ${e.reason?.message || e.reason}`));
+
+  // Open the app in place. Transitions off, as in store/screenshots.html.
+  document.open();
+  document.write(html.replace('<head>', '<head><base href="../../extension/"><style>*, *::before, *::after { transition: none !important; animation: none !important; }</style>'));
+  document.close();
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  const $ = (sel) => document.querySelector(sel);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const visible = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); };
+  // showError() hides Retry with style.display, not the hidden class.
+  const retryShown = () => getComputedStyle(document.getElementById('retry-btn')).display !== 'none';
+  const errorText = () => document.getElementById('error-message')?.textContent || '';
+  async function waitFor(what, cond, timeout = 15000) {
+    const start = Date.now();
+    while (!cond()) {
+      if (Date.now() - start > timeout) throw new Error(`timed out waiting for ${what}`);
+      await sleep(50);
+    }
+  }
+  const progressState = () => $('#gen-progress .progress-card')?.dataset.state;
+  const progressHidden = () => $('#gen-progress')?.hidden;
+  const pageInert = () => !!$('.job-input-section')?.inert;
+  const status = () => $('#generation-status')?.textContent.trim() || '';
+  const results = [];
+  async function check(name, fn) {
+    const errorsBefore = errors.length;
+    try {
+      await fn();
+      if (errors.length > errorsBefore) throw new Error(`console errors: ${errors.slice(errorsBefore).join(' | ')}`);
+      results.push({ name, ok: true });
+    } catch (e) {
+      results.push({ name, ok: false, error: e.message });
+      // A failed check must not leave a dialog open for the next one to find.
+      document.querySelectorAll('.modal:not(.hidden) .modal-close').forEach(b => b.click());
+      document.querySelector('.tour-skip')?.click();
+      await sleep(200);
+    }
+  }
+  const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+
+  // Same offscreen render as app.js measureResumeHeight(): the tailored page
+  // at print width with its min-height dropped.
+  function measurePage() {
+    const page = $('.resume-content .resume-page');
+    if (!page) return null;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:8.5in;visibility:hidden;pointer-events:none;';
+    host.innerHTML = page.outerHTML;
+    document.body.appendChild(host);
+    const copy = host.querySelector('.resume-page');
+    copy.style.minHeight = '0';
+    const h = copy.getBoundingClientRect().height;
+    host.remove();
+    return Math.round(h * 10) / 10;
+  }
+
+  // ── Scenarios ───────────────────────────────────────────────────────────
+  let pageHeight = null;
+  await waitFor('the app to start', () => $('#job-text') && document.getElementById('theme-toggle'));
+  await sleep(600);
+
+  await check('app starts without errors', async () => {
+    assert(document.title === 'Resume Studio', `title is "${document.title}"`);
+    assert(!$('#loading-overlay'), 'old loading overlay is back');
+    assert(progressHidden(), 'progress strip visible before any generation');
+  });
+
+  await check('theme toggles and comes back', async () => {
+    const before = document.documentElement.dataset.theme;
+    $('#theme-toggle').click();
+    assert(document.documentElement.dataset.theme !== before, 'theme did not change');
+    assert($('#theme-toggle').getAttribute('aria-pressed') === String(document.documentElement.dataset.theme === 'dark'), 'aria-pressed out of step');
+    $('#theme-toggle').click();
+    assert(document.documentElement.dataset.theme === before, 'theme did not change back');
+  });
+
+  await check('settings opens and Escape closes it', async () => {
+    $('#open-settings').click();
+    await waitFor('settings', () => visible('settings-modal'));
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await waitFor('settings to close', () => !visible('settings-modal'));
+  });
+
+  await check('error without Retry can be closed (empty posting)', async () => {
+    $('[data-tab="generate"]').click();
+    $('#job-text').value = '';
+    $('#generate-btn').click();
+    await waitFor('error dialog', () => visible('error-modal'));
+    const shown = retryShown();
+    $('#error-close').click();
+    assert(!shown, 'Retry shown for a validation error');
+    await waitFor('error dialog to close', () => !visible('error-modal'));
+  });
+
+  $('#job-text').value = sample.jobText;
+
+  await check('resume: keyword dialog, Continue with none ticked, done', async () => {
+    $('#generate-resume-btn').click();
+    await waitFor('keyword dialog', () => visible('keywords-modal'), 30000);
+    assert(progressState() === 'running' && !progressHidden(), 'progress strip not running');
+    const chips = [...document.querySelectorAll('#keywords-list .keyword-chip')].map(c => c.textContent.trim());
+    assert(MISSING.every(k => chips.includes(k)), `chips were ${chips.join(', ')}`);
+    $('#keywords-continue').click();
+    await waitFor('resume to finish', () => progressState() === 'done', 30000);
+    assert($('.resume-content .resume-page'), 'no resume page in the preview');
+    assert(!document.getElementById('download-resume-pdf').disabled, 'Resume PDF still disabled');
+    assert(!pageInert(), 'page still inert');
+    await waitFor('strip to hide after Done', () => progressHidden(), 3000);
+    const line = infos.find(l => l.startsWith('[timing] resume done'));
+    assert(line && /tailor \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
+    pageHeight = measurePage();
+  });
+
+  await check('resume PDF: file name dialog, then print view', async () => {
+    $('#download-resume-pdf').click();
+    await waitFor('file name dialog', () => visible('filename-modal'));
+    assert(/Resume/.test($('#filename-input').value), `file name was "${$('#filename-input').value}"`);
+    $('#filename-save').click();
+    await waitFor('print view to open', () => calls.tabs.length === 1);
+    assert(session.printJob?.html?.includes('resume-page'), 'no print job in session storage');
+    assert(!session.printJob.html.includes('rs-added'), 'highlights reached the PDF');
+  });
+
+  await check('cover letter: Cancel in the keyword dialog stops the run', async () => {
+    $('#generate-btn').click();
+    await waitFor('keyword dialog', () => visible('keywords-modal'), 30000);
+    $('#keywords-cancel').click();
+    await waitFor('cancel', () => status() === 'Cancelled.');
+    assert(progressHidden(), 'progress strip still visible after cancel');
+    assert(!pageInert(), 'page still inert after cancel');
+  });
+
+  await check('cover letter: tick both keywords, done', async () => {
+    $('#generate-btn').click();
+    await waitFor('keyword dialog', () => visible('keywords-modal'), 30000);
+    document.querySelectorAll('#keywords-list input').forEach(i => { i.checked = true; });
+    $('#keywords-continue').click();
+    await waitFor('letter to finish', () => progressState() === 'done', 30000);
+    await waitFor('letter text', () => /Northwind Labs/.test($('.letter-content')?.textContent || ''));
+    assert(!document.getElementById('download-pdf').disabled, 'Cover letter PDF still disabled');
+    const skills = [...document.querySelectorAll('#skills-list .skill-tag')].map(t => t.firstChild.textContent);
+    assert(MISSING.every(k => skills.includes(k)), 'ticked keywords not added to skills');
+    const line = infos.find(l => l.startsWith('[timing] cover letter done'));
+    assert(line && /cover letter \d.*\(letter \d/.test(line), `timing line missing: ${line}`);
+  });
+
+  await check('cover letter PDF: file name dialog, then download', async () => {
+    $('#download-pdf').click();
+    await waitFor('file name dialog', () => visible('filename-modal'));
+    $('#filename-save').click();
+    await waitFor('download', () => calls.downloads.length === 1);
+    assert(/\.pdf$/.test(calls.downloads[0]), `download name was ${calls.downloads[0]}`);
+  });
+
+  await check('failure shows the error dialog, Retry succeeds', async () => {
+    expectErrors = true;
+    stub.failNext = true;
+    $('#generate-btn').click();
+    await waitFor('error dialog', () => visible('error-modal') && errorText().includes('Stubbed server error'), 30000);
+    assert(progressState() === 'error' && !progressHidden(), 'strip not showing the failure');
+    assert(retryShown(), 'no Retry button');
+    expectErrors = false;
+    $('#retry-btn').click();
+    await waitFor('retry to finish', () => progressState() === 'done', 30000);
+    assert(!visible('error-modal'), 'error dialog still open');
+  });
+
+  await check('guided tour opens and Escape exits', async () => {
+    $('#help-tour').click();
+    await waitFor('tour', () => $('.tour-tooltip'));
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await waitFor('tour to close', () => !$('.tour-tooltip'));
+  });
+
+  // ── Report ──────────────────────────────────────────────────────────────
+  const failed = results.filter(r => !r.ok).length;
+  const report = { ok: failed === 0, passed: results.length - failed, failed, pageHeight, results, openaiRequests: stub.requests, timing: infos.filter(l => l.startsWith('[timing]')) };
+  const pre = document.createElement('pre');
+  pre.id = 'smoke-result';
+  pre.textContent = `SMOKE_RESULT_BEGIN${JSON.stringify(report)}SMOKE_RESULT_END`;
+  document.body.appendChild(pre);
+  document.title = failed ? 'SMOKE FAIL' : 'SMOKE PASS';
+})().catch(e => {
+  const pre = document.createElement('pre');
+  pre.id = 'smoke-result';
+  pre.textContent = `SMOKE_RESULT_BEGIN${JSON.stringify({ ok: false, fatal: String(e && e.stack || e) })}SMOKE_RESULT_END`;
+  document.body.appendChild(pre);
+  document.title = 'SMOKE FAIL';
+});
+</script>
+</body>
+</html>

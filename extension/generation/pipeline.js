@@ -10,10 +10,12 @@ import { makeLayout } from './layout.js';
 import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, isResearchedBrief, renderBriefForPrompt } from './companyResearch.js';
+import { createTimer } from './timing.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
 export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
 export { previewResumes, changeCounts } from './highlight.js';
 export { isResearchedBrief } from './companyResearch.js';
+export { createTimer, formatTimings } from './timing.js';
 
 const { MAX_COMPLETION_TOKENS } = CONFIG;
 
@@ -57,7 +59,8 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
   requireInputs(profile, jobText);
   if (!baseline?.resume) throw new Error('Missing the uploaded resume to tailor.');
   const openai = createClient(apiKey);
-  if (!match) match = await analyzeJob(apiKey, { profile, jobText });
+  const timer = createTimer();
+  if (!match) match = await timer.step('analyze', () => analyzeJob(apiKey, { profile, jobText }));
 
   const base = baseline.resume;
   const L = makeLayout(layout || {});
@@ -65,7 +68,7 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
   const messages = buildTailorMessages({ doc: base, pool, jobText, matchText: renderMatchForPrompt(match), match, layout: L });
   const request = (msgs) => retryTruncated(() => generateStructured(openai, { messages: msgs, schema: EDITS_SCHEMA, schemaName: 'resume_edits', maxTokens: MAX_COMPLETION_TOKENS.resume }));
 
-  let { data } = await request(messages);
+  let { data } = await timer.step('request', () => request(messages));
   let { valid, errors } = validateEdits(data.edits, base, pool, L);
   let repairs = 0;
   let convo = messages;
@@ -76,7 +79,7 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
       { role: 'assistant', content: JSON.stringify(data) },
       { role: 'user', content: `These edits cannot be applied as they are:\n${errors.map(e => `- ${e}`).join('\n')}\nReturn the complete edit list again with those fixed. Keep the valid edits as they were unless the page limit requires changing them.` }
     ];
-    ({ data } = await request(convo));
+    ({ data } = await timer.step(`repair ${repairs + 1}`, () => request(convo)));
     ({ valid, errors } = validateEdits(data.edits, base, pool, L));
     repairs++;
   }
@@ -104,7 +107,8 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
       coverage,
       page,
       wordsBefore: docWords(base),
-      wordsAfter: docWords(doc)
+      wordsAfter: docWords(doc),
+      timings: timer.steps
     }
   };
 }
@@ -116,8 +120,9 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
   requireInputs(profile, jobText);
   const openai = createClient(apiKey);
   console.log(`[${new Date().toISOString()}] Cover letter generation started`);
+  const timer = createTimer();
 
-  if (!match) match = await analyzeJob(apiKey, { profile, jobText });
+  if (!match) match = await timer.step('analyze', () => analyzeJob(apiKey, { profile, jobText }));
   const matchText = renderMatchForPrompt(match);
 
   // Company brief: cached → researched → posting-only.
@@ -131,7 +136,7 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
     briefSource = 'cache';
   } else if (research && match.company) {
     try {
-      brief = await researchCompany(openai, { company: match.company, role: match.role, aboutCompany: match.about_company, jobText });
+      brief = await timer.step('research', () => researchCompany(openai, { company: match.company, role: match.role, aboutCompany: match.about_company, jobText }));
       briefSource = 'research';
       console.log(`Research: ${match.company} — found=${brief.found}, searches=${brief.searches}`);
     } catch (error) {
@@ -147,7 +152,7 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
   const request = (msgs) => retryTruncated(() => generateStructured(openai, {
     messages: msgs, schema: COVER_LETTER_SCHEMA, schemaName: 'cover_letter', maxTokens: MAX_COMPLETION_TOKENS.coverLetter
   }));
-  let { data } = await request(messages);
+  let { data } = await timer.step('letter', () => request(messages));
 
   // Every claim must trace to the profile, the posting, or the brief. One
   // repair pass; whatever is still unsourced is reported, not hidden. If
@@ -158,11 +163,11 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
   if (bad.length) {
     console.log(`Cover letter: ${bad.length} unsourced claim(s); requesting a repair`);
     try {
-      const repair = await request([
+      const repair = await timer.step('repair', () => request([
         ...messages,
         { role: 'assistant', content: JSON.stringify(data) },
         { role: 'user', content: `These sentences make claims that cannot be traced to the profile, the job posting, or the company brief:\n${bad.map(c => `- "${c.sentence}" (cited: ${c.source || 'nothing'})`).join('\n')}\n\nRewrite the letter so each of them is either removed or replaced with something you can source, keep everything else, and return the full letter and claims again.` }
-      ]);
+      ]));
       data = repair.data;
       bad = unsourcedClaims(data.claims, profile, brief);
       repaired = true;
@@ -186,7 +191,8 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
       briefSource,
       searches: briefSource === 'research' ? brief.searches : 0,
       repaired,
-      repairFailed
+      repairFailed,
+      timings: timer.steps
     }
   };
 }

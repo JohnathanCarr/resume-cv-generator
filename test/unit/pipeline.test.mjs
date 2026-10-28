@@ -58,6 +58,8 @@ test('a failed repair keeps the first draft and reports its unsourced claims', a
   assert.equal(result.unsourcedClaims.length, 1);
   assert.equal(result.metadata.repairFailed, true);
   assert.equal(result.metadata.repaired, false);
+  // Timed steps: the letter and the failed repair (match was passed in, research off).
+  assert.deepEqual(result.metadata.timings.map(t => t.step), ['letter', 'repair']);
 });
 
 test('only researched briefs are reused from the cache', async () => {

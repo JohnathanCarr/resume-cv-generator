@@ -59,6 +59,15 @@ Unit tests cover the code that runs without the API: the baseline snapshot, the 
 node --test 'test/unit/*.test.mjs'
 ```
 
+The smoke test runs the real extension page in headless Chrome with the `chrome` API and OpenAI stubbed (nothing is sent or billed) and clicks through the main flows: a resume and a cover letter end to end, the keyword dialog (continue and cancel), both downloads with the file-name dialog, a failed generation and Retry, Settings, the theme toggle and the tour. It fails on any console error, and it compares the tailored resume's measured page height with `test/smoke/expected.json` so layout drift in the preview is caught. It takes a few seconds and needs Google Chrome.
+
+```bash
+./scripts/smoke.sh            # run it
+./scripts/smoke.sh --update   # record a new page height after an intended layout change
+```
+
+Each generation also logs where its time went, one line in the DevTools console (`[timing] resume done: read posting 3.2s · tailor 14.2s (request 8.1s, repair 1 6.1s) · …`); **Save logs** includes the same breakdown.
+
 The prompt eval set in `test/eval/` runs the real pipeline in Node against 2 synthetic profiles and 5 job postings, then scores each document against a fixed rubric. For resumes the rubric checks, among other things, that jobs and education are untouched, no numbers were invented, unedited lines are identical and the page fits. For cover letters it checks length, grounding in the profile, buzzwords and invented numbers. Summaries are saved under `test/eval/baselines/` so prompt changes can be compared. A full run costs about $1 and needs an OpenAI key in `OPENAI_API_KEY` or `test/eval/.env`.
 
 ```bash
@@ -127,11 +136,12 @@ resume-cv-generator/
 │   └── jspdf.min.js, pdf.min.js, pdf.worker.min.js   # Bundled libraries
 ├── test/
 │   ├── unit/                 # node:test unit tests
+│   ├── smoke/                # Headless smoke test of the real app (stubbed chrome + OpenAI)
 │   ├── eval/                 # Prompt eval set: profiles, postings, rubric, baselines
 │   ├── fixtures/             # Synthetic resume PDFs and their HTML sources
 │   └── parser.html           # Parser test page
 ├── store/                    # Chrome Web Store listing copy, icon source, screenshots
-├── scripts/                  # package.sh (store zip), screenshots.sh
+├── scripts/                  # package.sh (store zip), screenshots.sh, smoke.sh
 ├── LICENSE
 ├── PRIVACY.md
 ├── QUICK_START.md

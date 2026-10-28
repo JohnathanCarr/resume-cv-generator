@@ -8,7 +8,7 @@ import { OnboardingTour } from './onboarding.js';
 import { GenerationProgress } from './progress.js';
 import { escapeHTML, escapeResume, formatResume } from './preview/resumeHtml.js';
 import { formatCoverLetter } from './preview/coverLetterHtml.js';
-import { PAGE_PX, measureResumeHeight, measureLayout } from './preview/measure.js';
+import { runGeneration, COVER_LETTER, RESUME } from './generationFlow.js';
 import { sanitizeFilename, suggestFilename, buildCoverLetterPdf, saveBlob, printableResumePage, openResumePrintView } from './preview/export.js';
 
 class CoverLetterApp {
@@ -341,36 +341,6 @@ class CoverLetterApp {
         }
     }
 
-    // ---- ATS keyword check ----------------------------------------------------
-
-    // Reads the posting, then asks about any ATS terms the profile does not
-    // mention. Returns { match, profile, added } to generate with, or null if
-    // the user cancelled. Accepted terms are saved to the profile's skills.
-    async checkKeywords(jobText) {
-        this.showStatus('Reading the posting…', 'loading');
-        this.progress.mark(0, 0.25, 2500);
-        const { analyzeJob, missingKeywords, applyKeywords } = await this.generation();
-        const match = await this.timed('read posting', () => analyzeJob(this.apiKey.value, { profile: this.profile, jobText }));
-        const missing = missingKeywords(match, this.profile);
-        if (!missing.length) return { match, profile: this.profile, added: [] };
-
-        // The bar freezes, rather than disappearing, while the dialog is open.
-        this.progress.pause();
-        this.setPageInert(false);
-        const choice = await this.timed('keyword check (you)', () => this.promptForKeywords(missing));
-        this.setPageInert(true);
-        this.progress.resume();
-        if (!choice) return null;
-
-        const applied = applyKeywords(match, this.profile, choice.accepted);
-        if (applied.added.length) {
-            this.profile = applied.profile;
-            this.renderSkills();
-            await this.saveData();
-        }
-        return { match: applied.match, profile: this.profile, added: applied.added };
-    }
-
     promptForKeywords(keywords) {
         const list = document.getElementById('keywords-list');
         const modal = document.getElementById('keywords-modal');
@@ -585,28 +555,6 @@ class CoverLetterApp {
 
     hideLoading() {
         this.setPageInert(false);
-    }
-
-    // Step timing for the current generation (generation/timing.js). Each
-    // generator starts a timer; timed() records one step of it.
-    async startTiming() {
-        const { createTimer } = await this.generation();
-        this._timer = createTimer();
-    }
-
-    timed(name, fn) {
-        return this._timer ? this._timer.step(name, fn) : fn();
-    }
-
-    // One console line per run, also kept on lastApiCall for Save logs.
-    async reportTiming(label) {
-        const timer = this._timer;
-        this._timer = null;
-        if (!timer || !timer.steps.length) return;
-        const { formatTimings } = await this.generation();
-        const total = timer.totalMs();
-        console.info(`[timing] ${label}: ${formatTimings(timer.steps, total)}`);
-        if (this.lastApiCall) this.lastApiCall.timings = { steps: timer.steps, totalMs: total };
     }
 
     // Making the focused button inert drops focus to <body>; put it back
@@ -1762,76 +1710,14 @@ class CoverLetterApp {
         return bytes;
     }
 
-    // Cover Letter Generation
-    async generateCoverLetter() {
-        const jobText = document.getElementById('job-text').value.trim();
-        
-        if (!jobText) {
-            this.showError('Please enter a job description.', false);
-            return;
-        }
+    // Both generators run the shared flow in generationFlow.js; COVER_LETTER
+    // and RESUME hold the steps that differ.
+    generateCoverLetter() {
+        return runGeneration(this, COVER_LETTER);
+    }
 
-        if (!this.profile.name) {
-            this.showError('Please complete your profile first.', false);
-            return;
-        }
-        if (!this.requireApiKeyForGeneration()) return;
-
-        this.showLoading();
-        let outcome = 'failed';
-
-        try {
-            await this.startTiming();
-            const checked = await this.checkKeywords(jobText);
-            if (!checked) { outcome = 'cancelled'; this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
-            this.showStatus('Generating cover letter...', 'loading');
-
-            const requestData = {
-                profile: checked.profile,
-                jobText: jobText,
-                research: this.researchEnabled,
-                briefCache: this.companyBriefs,
-                match: checked.match
-            };
-
-            this.lastApiCall = {
-                request: requestData,
-                timestamp: new Date().toISOString()
-            };
-
-            const { generateCoverLetter } = await this.generation();
-            this.progress.mark(0.3, 0.85, this.researchEnabled ? 12000 : 7000);
-            const result = await this.timed('cover letter', () => generateCoverLetter(this.apiKey.value, requestData));
-            this._timer?.detail('cover letter', result.metadata?.timings);
-            this.lastApiCall.response = result;
-            this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
-            // Only fresh web research is cached; a posting-only brief must not
-            // stand in for research on the next letter to this company.
-            if (result.metadata?.briefSource === 'research' && result.companyBrief?.company) await this.cacheBrief(result.companyBrief);
-
-            // Display the cover letter
-            this.displayCoverLetter(result.coverLetter);
-            this.switchToCoverLetterView();
-            
-            // Save data
-            await this.saveData();
-
-            this.showStatus(this.describeCoverLetterResult(result), 'success');
-            this.progress.done();
-            outcome = 'done';
-            this.recordFirstGeneration();
-            const downloadBtn = document.getElementById('download-pdf');
-            if (downloadBtn) downloadBtn.disabled = false;
-
-        } catch (error) {
-            console.error('Generation error:', error);
-            this.progress.fail();
-            this.showError(`Failed to generate cover letter: ${error.message}`, () => this.generateCoverLetter());
-            this.showStatus('Generation failed', 'error');
-        } finally {
-            this.hideLoading();
-            await this.reportTiming(`cover letter ${outcome}`);
-        }
+    generateResume() {
+        return runGeneration(this, RESUME);
     }
 
     displayCoverLetter(coverLetter) {
@@ -1878,89 +1764,6 @@ class CoverLetterApp {
             this.showStatus('PDF generation failed', 'error');
         }
     }
-
-    // Resume Generation Methods
-   async generateResume() {
-  const jobText = document.getElementById('job-text').value.trim();
-  if (!jobText) { this.showError('Please enter a job description.', false); return; }
-  if (!this.profile.name) { this.showError('Please complete your profile first.', false); return; }
-  if (!this.uploadedResume) {
-    this.showError('Upload your current resume in the Profile tab first. The generator tailors that resume to the posting.', false);
-    return;
-  }
-  if (!this.requireApiKeyForGeneration()) return;
-
-  this.showLoading();
-  let outcome = 'failed';
-
-  try {
-    await this.startTiming();
-    if (!(await this.timed('load resume', () => this.ensureBaseline()))) {
-      throw new Error('your uploaded resume could not be read. Try uploading it again in the Profile tab.');
-    }
-    const checked = await this.checkKeywords(jobText);
-    if (!checked) { outcome = 'cancelled'; this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
-    const { match, profile } = checked;
-
-    // Every posting starts from the user's own resume, never from the last
-    // tailored version. The model returns edits; the pipeline applies them.
-    // One page is a hard limit, planned from the start: measure how the
-    // upload lays out at print size and hand that to the pipeline, which gives
-    // the model each line's room and the page's free space.
-    this.showStatus('Tailoring your resume…', 'loading');
-    const { resumeDocToSchema } = await this.generation();
-    const layout = await this.timed('measure layout', () => measureLayout(resumeDocToSchema(this.baselineResume.resume), this.profile));
-    this.progress.mark(0.3, 0.7, 9000);
-    let result = await this.timed('tailor', () => this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout }));
-    this._timer?.detail('tailor', result.metadata?.timings);
-
-    // Confirm on the real layout. The pipeline works from per-line estimates;
-    // if the result still spills over, fold the measured error into the
-    // budget and ask again (twice at most).
-    this.progress.mark(0.75, 0.9, 4000);
-    let height = await this.timed('measure page', () => measureResumeHeight(result.resumeContent, this.profile));
-    let refits = 0;
-    while (height > PAGE_PX && refits < 2) {
-      const predicted = result.metadata?.page?.afterPx || layout.usedPx;
-      layout.usedPx += (height - predicted) * (refits + 1);
-      this.showStatus('Fitting it to one page…', 'loading');
-      this.progress.mark(0.75, 0.9, 4000);
-      const step = `refit ${refits + 1}`;
-      result = await this.timed(step, () => this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout }));
-      this._timer?.detail(step, result.metadata?.timings);
-      height = await this.timed('measure page', () => measureResumeHeight(result.resumeContent, this.profile));
-      refits++;
-    }
-    const overflow = height / PAGE_PX;
-    this.switchTab('generate');
-    this.switchToResumeView();
-    await this.timed('render preview', () => this.renderResumePreview(result));
-
-    this.lastApiCall.response = result;
-    this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
-    this.switchToResumeView();
-
-    await this.saveData();
-    await this.rememberResume(result, jobText);
-
-    this.showStatus(this.describeResumeResult(result, { overflow, added: checked.added }), overflow > 1 ? 'error' : 'success');
-    this.progress.done();
-    outcome = 'done';
-    this.recordFirstGeneration();
-    const downloadBtn = document.getElementById('download-resume-pdf');
-    if (downloadBtn) downloadBtn.disabled = false;
-
-  } catch (error) {
-    console.error('Resume generation error:', error);
-    this.progress.fail();
-    this.showError(`Failed to generate resume: ${error.message}`, () => this.generateResume());
-    this.showStatus('Resume generation failed', 'error');
-  } finally {
-    this.hideLoading();
-    await this.reportTiming(`resume ${outcome}`);
-  }
-}
-
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };

@@ -131,6 +131,7 @@ resume-cv-generator/
 │   ├── resumeParser.js       # PDF → profile, heuristic, no model call
 │   ├── profileMerge.js       # Additive profile merge
 │   ├── print.html, print.js  # Resume print view (Save as PDF)
+│   ├── generationFlow.js     # The generate flow both documents share (keyword check, progress, errors)
 │   ├── preview/              # Resume and cover-letter HTML, page measurement, PDF downloads
 │   ├── generation/           # Pipeline, prompts, validators, layout model, OpenAI client
 │   ├── icons/

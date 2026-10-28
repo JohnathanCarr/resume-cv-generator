@@ -123,16 +123,19 @@ Everything is stored in `chrome.storage.local` on the user's machine: the profil
 resume-cv-generator/
 ├── extension/                # Load this folder in Chrome
 │   ├── manifest.json         # MV3 manifest: storage, unlimitedStorage, downloads, api.openai.com
-│   ├── app.html, app.js      # App UI, storage, page measurement, PDF export
+│   ├── app.html, app.js      # App shell: storage, tabs, upload, preview, wiring the modules below
 │   ├── styles.css
 │   ├── background.js         # Opens or focuses the app tab
-│   ├── onboarding.js         # First-run tour
+│   ├── onboarding.js         # The guided tour and its steps (TOUR_STEPS)
 │   ├── theme.js              # Light/dark theme
 │   ├── resumeParser.js       # PDF → profile, heuristic, no model call
 │   ├── profileMerge.js       # Additive profile merge
 │   ├── print.html, print.js  # Resume print view (Save as PDF)
 │   ├── generationFlow.js     # The generate flow both documents share (keyword check, progress, errors)
 │   ├── dialogs.js            # Dialogs: focus trap, Escape, page lock, error/keyword/file-name prompts
+│   ├── profile/              # Profile tab editors and profile data helpers
+│   ├── settings.js           # The API key dialog
+│   ├── gettingStarted.js     # First-run tour start and the Getting Started checklist
 │   ├── preview/              # Resume and cover-letter HTML, page measurement, PDF downloads
 │   ├── generation/           # Pipeline, prompts, validators, layout model, OpenAI client
 │   ├── icons/

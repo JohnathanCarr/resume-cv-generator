@@ -341,14 +341,14 @@ class CoverLetterApp {
         this.showStatus('Reading the posting…', 'loading');
         this.progress.mark(0, 0.25, 2500);
         const { analyzeJob, missingKeywords, applyKeywords } = await this.generation();
-        const match = await analyzeJob(this.apiKey.value, { profile: this.profile, jobText });
+        const match = await this.timed('read posting', () => analyzeJob(this.apiKey.value, { profile: this.profile, jobText }));
         const missing = missingKeywords(match, this.profile);
         if (!missing.length) return { match, profile: this.profile, added: [] };
 
         // The bar freezes, rather than disappearing, while the dialog is open.
         this.progress.pause();
         this.setPageInert(false);
-        const choice = await this.promptForKeywords(missing);
+        const choice = await this.timed('keyword check (you)', () => this.promptForKeywords(missing));
         this.setPageInert(true);
         this.progress.resume();
         if (!choice) return null;
@@ -585,6 +585,28 @@ class CoverLetterApp {
 
     hideLoading() {
         this.setPageInert(false);
+    }
+
+    // Step timing for the current generation (generation/timing.js). Each
+    // generator starts a timer; timed() records one step of it.
+    async startTiming() {
+        const { createTimer } = await this.generation();
+        this._timer = createTimer();
+    }
+
+    timed(name, fn) {
+        return this._timer ? this._timer.step(name, fn) : fn();
+    }
+
+    // One console line per run, also kept on lastApiCall for Save logs.
+    async reportTiming(label) {
+        const timer = this._timer;
+        this._timer = null;
+        if (!timer || !timer.steps.length) return;
+        const { formatTimings } = await this.generation();
+        const total = timer.totalMs();
+        console.info(`[timing] ${label}: ${formatTimings(timer.steps, total)}`);
+        if (this.lastApiCall) this.lastApiCall.timings = { steps: timer.steps, totalMs: total };
     }
 
     // Making the focused button inert drops focus to <body>; put it back
@@ -1757,10 +1779,12 @@ class CoverLetterApp {
         if (!this.requireApiKeyForGeneration()) return;
 
         this.showLoading();
+        let outcome = 'failed';
 
         try {
+            await this.startTiming();
             const checked = await this.checkKeywords(jobText);
-            if (!checked) { this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
+            if (!checked) { outcome = 'cancelled'; this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
             this.showStatus('Generating cover letter...', 'loading');
 
             const requestData = {
@@ -1778,7 +1802,8 @@ class CoverLetterApp {
 
             const { generateCoverLetter } = await this.generation();
             this.progress.mark(0.3, 0.85, this.researchEnabled ? 12000 : 7000);
-            const result = await generateCoverLetter(this.apiKey.value, requestData);
+            const result = await this.timed('cover letter', () => generateCoverLetter(this.apiKey.value, requestData));
+            this._timer?.detail('cover letter', result.metadata?.timings);
             this.lastApiCall.response = result;
             this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
             // Only fresh web research is cached; a posting-only brief must not
@@ -1794,6 +1819,7 @@ class CoverLetterApp {
 
             this.showStatus(this.describeCoverLetterResult(result), 'success');
             this.progress.done();
+            outcome = 'done';
             this.recordFirstGeneration();
             const downloadBtn = document.getElementById('download-pdf');
             if (downloadBtn) downloadBtn.disabled = false;
@@ -1805,6 +1831,7 @@ class CoverLetterApp {
             this.showStatus('Generation failed', 'error');
         } finally {
             this.hideLoading();
+            await this.reportTiming(`cover letter ${outcome}`);
         }
     }
 
@@ -2063,13 +2090,15 @@ class CoverLetterApp {
   if (!this.requireApiKeyForGeneration()) return;
 
   this.showLoading();
+  let outcome = 'failed';
 
   try {
-    if (!(await this.ensureBaseline())) {
+    await this.startTiming();
+    if (!(await this.timed('load resume', () => this.ensureBaseline()))) {
       throw new Error('your uploaded resume could not be read. Try uploading it again in the Profile tab.');
     }
     const checked = await this.checkKeywords(jobText);
-    if (!checked) { this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
+    if (!checked) { outcome = 'cancelled'; this.progress.hide(); this.showStatus('Cancelled.', 'error'); return; }
     const { match, profile } = checked;
 
     // Every posting starts from the user's own resume, never from the last
@@ -2078,29 +2107,32 @@ class CoverLetterApp {
     // upload lays out at print size and hand that to the pipeline, which gives
     // the model each line's room and the page's free space.
     this.showStatus('Tailoring your resume…', 'loading');
-    const layout = await this.measureLayout(this.baselineResume.resume);
+    const layout = await this.timed('measure layout', () => this.measureLayout(this.baselineResume.resume));
     this.progress.mark(0.3, 0.7, 9000);
-    let result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout });
+    let result = await this.timed('tailor', () => this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout }));
+    this._timer?.detail('tailor', result.metadata?.timings);
 
     // Confirm on the real layout. The pipeline works from per-line estimates;
     // if the result still spills over, fold the measured error into the
     // budget and ask again (twice at most).
     this.progress.mark(0.75, 0.9, 4000);
-    let height = await this.measureResumeHeight(result.resumeContent);
+    let height = await this.timed('measure page', () => this.measureResumeHeight(result.resumeContent));
     let refits = 0;
     while (height > CoverLetterApp.PAGE_PX && refits < 2) {
       const predicted = result.metadata?.page?.afterPx || layout.usedPx;
       layout.usedPx += (height - predicted) * (refits + 1);
       this.showStatus('Fitting it to one page…', 'loading');
       this.progress.mark(0.75, 0.9, 4000);
-      result = await this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout });
-      height = await this.measureResumeHeight(result.resumeContent);
+      const step = `refit ${refits + 1}`;
+      result = await this.timed(step, () => this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout }));
+      this._timer?.detail(step, result.metadata?.timings);
+      height = await this.timed('measure page', () => this.measureResumeHeight(result.resumeContent));
       refits++;
     }
     const overflow = height / CoverLetterApp.PAGE_PX;
     this.switchTab('generate');
     this.switchToResumeView();
-    await this.renderResumePreview(result);
+    await this.timed('render preview', () => this.renderResumePreview(result));
 
     this.lastApiCall.response = result;
     this.lastMatchAnalysis = result.matchAnalysis || null; // kept for the Match panel (not yet shown)
@@ -2111,6 +2143,7 @@ class CoverLetterApp {
 
     this.showStatus(this.describeResumeResult(result, { overflow, added: checked.added }), overflow > 1 ? 'error' : 'success');
     this.progress.done();
+    outcome = 'done';
     this.recordFirstGeneration();
     const downloadBtn = document.getElementById('download-resume-pdf');
     if (downloadBtn) downloadBtn.disabled = false;
@@ -2122,6 +2155,7 @@ class CoverLetterApp {
     this.showStatus('Resume generation failed', 'error');
   } finally {
     this.hideLoading();
+    await this.reportTiming(`resume ${outcome}`);
   }
 }
 
@@ -2583,7 +2617,8 @@ async downloadResumePDF() {
         const logs = {
             timestamp: this.lastApiCall.timestamp,
             request: this.lastApiCall.request,
-            response: this.lastApiCall.response || 'No response received'
+            response: this.lastApiCall.response || 'No response received',
+            timings: this.lastApiCall.timings || null
         };
 
         const dataStr = JSON.stringify(logs, null, 2);

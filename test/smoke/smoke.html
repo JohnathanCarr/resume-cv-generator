@@ -17,10 +17,11 @@
 (async () => {
   // Everything the page needs is fetched before document.write: afterwards
   // the <base> points relative URLs at extension/.
-  const [profile, sample, pdf, html] = await Promise.all([
+  const [profile, sample, pdf, uploadPdf, html] = await Promise.all([
     fetch('../eval/profiles/maria_backend_ms.json').then(r => r.json()),
     fetch('../../store/sample-resume.json').then(r => r.json()),
     fetch('../fixtures/resume_sans_title_first.pdf').then(r => r.arrayBuffer()),
+    fetch('../fixtures/resume_serif_company_first.pdf').then(r => r.arrayBuffer()),
     fetch('../../extension/app.html').then(r => r.text())
   ]);
   const bytes = new Uint8Array(pdf);
@@ -254,6 +255,23 @@
     $('#retry-btn').click();
     await waitFor('retry to finish', () => progressState() === 'done', 30000);
     assert(!visible('error-modal'), 'error dialog still open');
+  });
+
+  // Last, because it replaces the stored resume the measurement above used.
+  await check('uploading a resume parses it into the profile', async () => {
+    $('[data-tab="profile"]').click();
+    const before = document.querySelectorAll('#experiences-container .experience-card').length;
+    const input = document.getElementById('resume-file');
+    const dt = new DataTransfer();
+    dt.items.add(new File([uploadPdf], 'resume_serif_company_first.pdf', { type: 'application/pdf' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor('the parse to finish', () => $('#profile-status')?.classList.contains('status-success'), 30000);
+    assert(!/unavailable/.test($('#profile-status').textContent), 'parser reported unavailable');
+    assert(store.uploadedResume.name === 'resume_serif_company_first.pdf', 'upload not stored');
+    assert(store.baselineResume?.resume, 'no baseline snapshot saved');
+    const after = document.querySelectorAll('#experiences-container .experience-card').length;
+    assert(after > before, `no experience merged in (${before} → ${after})`);
   });
 
   await check('guided tour opens and Escape exits', async () => {

@@ -167,10 +167,28 @@
   });
 
   await check('settings opens and Escape closes it', async () => {
+    $('#open-settings').focus();
     $('#open-settings').click();
     await waitFor('settings', () => visible('settings-modal'));
     document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await waitFor('settings to close', () => !visible('settings-modal'));
+    assert(document.activeElement === $('#open-settings'), 'focus did not return to the Settings button');
+  });
+
+  await check('dialogs: Tab stays inside, a backdrop click closes', async () => {
+    $('#open-settings').click();
+    await waitFor('settings', () => visible('settings-modal'));
+    const modal = document.getElementById('settings-modal');
+    assert(modal.contains(document.activeElement), 'focus not moved into the dialog');
+    const items = [...modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter(n => !n.disabled && n.getClientRects().length);
+    items.at(-1).focus();
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    assert(document.activeElement === items[0], 'Tab from the last control did not wrap to the first');
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    assert(document.activeElement === items.at(-1), 'Shift+Tab from the first control did not wrap to the last');
+    modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitFor('settings to close on backdrop click', () => !visible('settings-modal'));
   });
 
   await check('error without Retry can be closed (empty posting)', async () => {
@@ -211,6 +229,16 @@
     await waitFor('print view to open', () => calls.tabs.length === 1);
     assert(session.printJob?.html?.includes('resume-page'), 'no print job in session storage');
     assert(!session.printJob.html.includes('rs-added'), 'highlights reached the PDF');
+  });
+
+  await check('file name: Enter saves with the typed name', async () => {
+    $('#download-resume-pdf').click();
+    await waitFor('file name dialog', () => visible('filename-modal'));
+    $('#filename-input').value = 'My: Resume?';
+    $('#filename-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await waitFor('print view to open', () => calls.tabs.length === 2);
+    assert(session.printJob.title === 'My Resume', `title was "${session.printJob.title}"`);
+    assert(!visible('filename-modal'), 'file name dialog still open');
   });
 
   await check('cover letter: Cancel in the keyword dialog stops the run', async () => {

@@ -272,6 +272,19 @@
     assert(/\.pdf$/.test(calls.downloads[0]), `download name was ${calls.downloads[0]}`);
   });
 
+  await check('after a failed run, closing the error returns focus to Generate', async () => {
+    expectErrors = true;
+    stub.failNext = true;
+    $('#generate-btn').focus();
+    $('#generate-btn').click();
+    await waitFor('error dialog', () => visible('error-modal') && errorText().includes('Stubbed server error'), 30000);
+    expectErrors = false;
+    $('#error-close').click();
+    await waitFor('error dialog to close', () => !visible('error-modal'));
+    await waitFor('page to unlock', () => !pageInert());
+    assert(document.activeElement === $('#generate-btn'), `focus is on ${document.activeElement?.id || document.activeElement?.tagName}`);
+  });
+
   await check('failure shows the error dialog, Retry succeeds', async () => {
     expectErrors = true;
     stub.failNext = true;

@@ -18,6 +18,12 @@ node --input-type=module -e "import('./extension/generation/pipeline.js').then(m
 # Unit tests for the pure generation helpers (no API calls)
 node --test 'test/unit/*.test.mjs'
 
+# Smoke test: the real app.html in headless Chrome over a stubbed chrome API and
+# stubbed OpenAI; clicks through both generation flows, the keyword dialog,
+# downloads, failure + Retry, Settings, theme and tour, and checks the tailored
+# resume's page height against test/smoke/expected.json. Run before every PR.
+./scripts/smoke.sh            # --update records a new height after an intended layout change
+
 # Prompt evals (in-process, no server; ~$1 for the full set, key from OPENAI_API_KEY or test/eval/.env)
 node test/eval/run.js --profiles david --jobs 02   # one pair
 node test/eval/run.js --label my-change --baseline # full set, summary copied to test/eval/baselines/
@@ -104,6 +110,8 @@ Per document, in `extension/generation/` (orchestrated by `pipeline.js`):
    - **Bullet ids after edits.** Tailored entries carry `bulletIds` (the baseline id of each remaining bullet; swapped-in projects get `proj:N.newK`) so the preview can match lines to `changes` after removals.
    - **Parser skill groups.** `parseSkills()` returns `{ skills, groups }`; groups keep the resume's category labels (`Languages: …`). The snapshot stores them as `skillGroups` (`BASELINE_VERSION` 2; older snapshots are re-parsed on load).
 4. `coverLetter.js` — hard rules (nothing about the candidate outside the profile, nothing about the company outside the brief/posting, partial matches described as such, never refer to the profile as a document), two exemplar paragraphs for voice, ~300 words in 3–4 paragraphs, and a `claims[]` output where every claim names its source; `unsourcedClaims()` validates, `pipeline.js` does one repair pass, and any remaining unsourced claims are returned and shown in the status line.
+
+**Timing.** `generation/timing.js` (`createTimer()`, `formatTimings()`) records each step of a run. The pipeline returns its own steps in `metadata.timings` (`analyze`, `request`, `repair N`; `research`, `letter`, `repair`); `app.js` wraps the outer steps with `timed()` (read posting, keyword check (you), load resume, measure layout, tailor, measure page, refit N, render preview, cover letter), attaches the pipeline's breakdown with `detail()`, and `reportTiming()` prints one `[timing]` console line per run and stores it on `lastApiCall.timings` for Save logs.
 
 Evals: `test/eval/` (see its README). Run before and after any prompt change (current baselines: `2026-10-02-one-page.json` for resumes, `2026-09-20-in-extension.json` for cover letters). `test/unit/pipeline.test.mjs` runs the cover-letter pipeline over a stubbed `fetch`; `--rescore` re-applies a changed rubric to saved outputs without API calls. Baselines in `test/eval/baselines/`. Known rubric limits: it cannot check whether company facts are true, and `pageFill` is relative to the profile's material, so thin profiles score full marks for short resumes.
 

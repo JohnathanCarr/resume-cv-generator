@@ -504,13 +504,11 @@
     </div>
 
     <!-- Scripts -->
+    <!-- Bundled libraries and the theme are plain scripts; app.js is an ES
+         module that imports the rest (parser, merge, tour, progress). -->
     <script src="jspdf.min.js"></script>
     <script src="pdf.min.js"></script>
-    <script src="resumeParser.js"></script>
-    <script src="profileMerge.js"></script>
-    <script src="onboarding.js"></script>
     <script src="theme.js"></script>
-    <script src="progress.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

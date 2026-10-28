@@ -30,8 +30,9 @@
   <pre id="out">Choose a fixture…</pre>
 
   <script src="../extension/pdf.min.js"></script>
-  <script src="../extension/resumeParser.js"></script>
-  <script>
+  <script type="module">
+    import { ResumeParser } from '../extension/resumeParser.js';
+
     pdfjsLib.GlobalWorkerOptions.workerSrc = '../extension/pdf.worker.min.js';
     const out = document.getElementById('out');
 

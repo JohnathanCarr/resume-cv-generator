@@ -15,7 +15,7 @@ import { Settings } from './settings.js';
 import { GettingStarted } from './gettingStarted.js';
 import { sanitizeFilename, suggestFilename, buildCoverLetterPdf, saveBlob, printableResumePage, openResumePrintView } from './preview/export.js';
 
-class CoverLetterApp {
+class ResumeStudioApp {
 
 
     constructor() {
@@ -900,9 +900,9 @@ class CoverLetterApp {
 // Initialize the app when DOM is loaded
 function initApp() {
     try {
-        new CoverLetterApp();
+        new ResumeStudioApp();
     } catch (error) {
-        console.error('Failed to initialize Cover Letter App:', error);
+        console.error('Failed to initialize Resume Studio:', error);
         // Retry after a short delay
         setTimeout(initApp, 1000);
     }
@@ -914,5 +914,3 @@ if (document.readyState === 'loading') {
     // DOM is already loaded
     initApp();
 }
-
-//note for current version

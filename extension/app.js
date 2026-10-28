@@ -6,10 +6,12 @@ import { ResumeParser } from './resumeParser.js';
 import { ProfileMerge } from './profileMerge.js';
 import { OnboardingTour } from './onboarding.js';
 import { GenerationProgress } from './progress.js';
+import { escapeHTML, escapeResume, formatResume } from './preview/resumeHtml.js';
+import { formatCoverLetter } from './preview/coverLetterHtml.js';
+import { PAGE_PX, measureResumeHeight, measureLayout } from './preview/measure.js';
+import { sanitizeFilename, suggestFilename, buildCoverLetterPdf, saveBlob, printableResumePage, openResumePrintView } from './preview/export.js';
 
 class CoverLetterApp {
-    // One US Letter page at CSS 96dpi; the resume's hard limit.
-    static PAGE_PX = 11 * 96;
 
     static EXTRA_TYPES = [
         ['research', 'Research'],
@@ -437,21 +439,12 @@ class CoverLetterApp {
 
     // ---- File name before download -----------------------------------------------
 
-    // Characters no OS accepts in a file name become spaces; length capped.
-    sanitizeFilename(name) {
-        return String(name || '')
-            .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .replace(/^[\s.]+|[\s.]+$/g, '')
-            .slice(0, 120);
-    }
-
     // "Name - Company - Resume", leaving out whatever is unknown.
     defaultFilename(kind) {
         const company = kind === 'resume'
             ? (this.lastResume?.company || this.lastMatchAnalysis?.company)
             : this.lastMatchAnalysis?.company;
-        return this.sanitizeFilename([this.profile.name, company, kind === 'resume' ? 'Resume' : 'Cover Letter'].filter(Boolean).join(' - '));
+        return suggestFilename(this.profile.name, company, kind);
     }
 
     // Asks for the file name (without .pdf). Resolves to the cleaned name, or
@@ -479,7 +472,7 @@ class CoverLetterApp {
         this._filenameResolve = null;
         if (!resolve) return;
         if (!ok) return resolve(null);
-        const name = this.sanitizeFilename(document.getElementById('filename-input')?.value);
+        const name = sanitizeFilename(document.getElementById('filename-input')?.value);
         resolve(name || this.defaultFilename(this._filenameKind) || 'Resume');
     }
 
@@ -493,15 +486,15 @@ class CoverLetterApp {
         const previewEl = document.querySelector('.resume-content');
         if (!previewEl) return;
         // Older entries have no tailored document: render their text escaped.
-        let marked = this.escapeResume(entry.resumeContent);
+        let marked = escapeResume(entry.resumeContent);
         let clean = marked;
         if (entry.tailored) {
             const { previewResumes } = await this.generation();
             ({ marked, clean } = previewResumes(entry.tailored, entry.changes || []));
         }
-        previewEl.innerHTML = this.formatResume(marked);
+        previewEl.innerHTML = formatResume(marked, this.profile);
         this.lastRenderedResumeHTML = previewEl.innerHTML;
-        this.lastCleanResumeHTML = this.formatResume(clean);
+        this.lastCleanResumeHTML = formatResume(clean, this.profile);
         this.renderCompareBar(entry);
         this.showResumeView('tailored');
         document.dispatchEvent(new CustomEvent('resume-rendered'));
@@ -841,7 +834,7 @@ class CoverLetterApp {
     }
 
     createExperienceElement(exp, index) {
-        const esc = (v) => this.escapeHTML(v);
+        const esc = escapeHTML;
         const div = document.createElement('div');
         div.className = 'experience-card';
         div.innerHTML = `
@@ -957,7 +950,7 @@ class CoverLetterApp {
     }
 
     createEducationElement(edu, index) {
-        const esc = (v) => this.escapeHTML(v);
+        const esc = escapeHTML;
         const div = document.createElement('div');
         div.className = 'experience-card';
         div.innerHTML = `
@@ -1078,7 +1071,7 @@ class CoverLetterApp {
     }
 
     createProjectElement(project, index) {
-        const esc = (v) => this.escapeHTML(v);
+        const esc = escapeHTML;
         const div = document.createElement('div');
         div.className = 'project-card';
         div.innerHTML = `
@@ -1200,7 +1193,7 @@ class CoverLetterApp {
     }
 
     createExtraElement(extra, index) {
-        const esc = (v) => this.escapeHTML(v);
+        const esc = escapeHTML;
         const div = document.createElement('div');
         div.className = 'experience-card';
         div.innerHTML = `
@@ -1855,57 +1848,9 @@ class CoverLetterApp {
             }
             
             // Format the cover letter with proper structure
-            const formattedLetter = this.formatCoverLetter(coverLetter);
+            const formattedLetter = formatCoverLetter(coverLetter, this.profile);
             previewEl.innerHTML = formattedLetter;
         }, 100);
-    }
-
-    formatCoverLetter(coverLetter) {
-        // Clean and properly format the cover letter
-        const cleanLetter = coverLetter.trim();
-        
-        // Split into paragraphs using double line breaks
-        const paragraphs = cleanLetter.split(/\n\n+/)
-            .map(p => p.replace(/\n/g, ' ').trim())
-            .filter(p => p.length > 10); // Filter out very short lines
-        
-        let formatted = `
-            <div class="letter-header">
-                <p><strong>${this.escapeHTML(this.profile.name)}</strong></p>
-                <p>${this.escapeHTML(this.profile.contact || '').replace(/\n/g, '<br>')}</p>
-            </div>
-            
-            <div class="letter-date">
-                <p>${new Date().toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                })}</p>
-            </div>
-            
-            <p>Dear Hiring Manager,</p>
-            
-            <div class="letter-body">
-        `;
-
-        // Add each paragraph with proper spacing
-        paragraphs.forEach((paragraph, index) => {
-            if (paragraph.trim()) {
-                formatted += `<p style="margin-bottom: 1.5em; text-align: justify; line-height: 1.6;">${this.escapeHTML(paragraph)}</p>`;
-            }
-        });
-
-        formatted += `
-            </div>
-            
-            <div class="letter-closing" style="margin-top: 2em;">
-                <p>Sincerely,</p>
-                <br>
-                <p>${this.escapeHTML(this.profile.name)}</p>
-            </div>
-        `;
-
-        return formatted;
     }
 
     async downloadPDF() {
@@ -1916,172 +1861,22 @@ class CoverLetterApp {
         const chosenName = await this.promptForFilename('cover');
         if (chosenName === null) return;
         try {
-            // Show loading
             this.showStatus('Generating PDF...', 'loading');
-            
-            // Get the cover letter content
             const letterElement = document.querySelector('.letter-content');
             if (!letterElement) {
                 throw new Error('No cover letter to download');
             }
-
-            // Create PDF using jsPDF
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'in',
-                format: 'letter'
-            });
-
-            // Set font
-            doc.setFont('times', 'normal');
-            doc.setFontSize(11);
-
-            // Margins
-            const leftMargin = 1;
-            const rightMargin = 1;
-            const topMargin = 0.75;
-            const lineHeight = 0.2;
-            const pageWidth = 8.5;
-            const textWidth = pageWidth - leftMargin - rightMargin;
-
-            let currentY = topMargin;
-
-            // Add header (name and contact)
-            doc.setFontSize(12);
-            doc.setFont('times', 'bold');
-            doc.text(this.profile.name, leftMargin, currentY);
-            currentY += lineHeight;
-
-            doc.setFontSize(11);
-            doc.setFont('times', 'normal');
-            
-            // Add contact info
-            const contactLines = this.profile.contact.split('\n');
-            contactLines.forEach(line => {
-                if (line.trim()) {
-                    doc.text(line.trim(), leftMargin, currentY);
-                    currentY += lineHeight;
-                }
-            });
-
-            currentY += lineHeight; // Extra space
-
-            // Add date
-            const today = new Date().toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-            });
-            doc.text(today, leftMargin, currentY);
-            currentY += lineHeight * 2;
-
-            // Add salutation
-            doc.text('Dear Hiring Manager,', leftMargin, currentY);
-            currentY += lineHeight * 2;
-
-            // Get the actual generated cover letter from the formatted content
-            const letterBodyDiv = letterElement.querySelector('.letter-body');
-            let letterContent = '';
-            
-            if (letterBodyDiv) {
-                // Extract just the paragraphs from the letter body
-                const paragraphs = letterBodyDiv.querySelectorAll('p');
-                letterContent = Array.from(paragraphs).map(p => p.textContent.trim()).filter(text => text).join('\n\n');
-            } else {
-                // Fallback: get all text and clean it
-                letterContent = letterElement.textContent || letterElement.innerText;
-                letterContent = letterContent
-                    .replace(/Your generated cover letter will appear here\.\.\./, '')
-                    .replace(/Harish Subburaj[\s\S]*?Dear Hiring Manager,/, '')
-                    .replace(/Sincerely,[\s\S]*$/, '')
-                    .trim();
-            }
-
-            // Split content into clean paragraphs
-            const paragraphs = letterContent.split(/\n\s*\n/).filter(p => p.trim());
-
-            // Add paragraphs with proper wrapping
-            paragraphs.forEach(paragraph => {
-                if (paragraph.trim()) {
-                    const lines = doc.splitTextToSize(paragraph.trim(), textWidth);
-                    lines.forEach(line => {
-                        if (currentY > 10) { // If near bottom of page
-                            doc.addPage();
-                            currentY = topMargin;
-                        }
-                        doc.text(line, leftMargin, currentY);
-                        currentY += lineHeight;
-                    });
-                    currentY += lineHeight; // Extra space between paragraphs
-                }
-            });
-
-            // Add closing
-            currentY += lineHeight;
-            doc.text('Sincerely,', leftMargin, currentY);
-            currentY += lineHeight * 3;
-            doc.text(this.profile.name, leftMargin, currentY);
-
-            const filename = `${chosenName}.pdf`;
-
-            // Convert to blob
-            const pdfBlob = doc.output('blob');
-            
-            // Create download URL
-            const url = URL.createObjectURL(pdfBlob);
-            
-            // Use Chrome downloads API for direct download
-            if (chrome && chrome.downloads) {
-                chrome.downloads.download({
-                    url: url,
-                    filename: filename,
-                    saveAs: false // Download directly to Downloads folder
-                }, (downloadId) => {
-                    if (chrome.runtime.lastError) {
-                        console.error('Download failed:', chrome.runtime.lastError);
-                        // Fallback to regular download
-                        this.fallbackDownload(url, filename);
-                    } else {
-                        this.showStatus('PDF downloaded successfully!', 'success');
-                        setTimeout(() => {
-                            const statusEl = document.getElementById('generation-status');
-                            if (statusEl) statusEl.textContent = '';
-                        }, 3000);
-                    }
-                    
-                    // Clean up
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
-                });
-            } else {
-                // Fallback for non-extension environment
-                this.fallbackDownload(url, filename);
-            }
-
+            await saveBlob(buildCoverLetterPdf(letterElement, this.profile), `${chosenName}.pdf`);
+            this.showStatus('PDF downloaded successfully!', 'success');
+            setTimeout(() => {
+                const statusEl = document.getElementById('generation-status');
+                if (statusEl) statusEl.textContent = '';
+            }, 3000);
         } catch (error) {
             console.error('PDF generation error:', error);
             this.showError('Failed to generate PDF. Please try again.', () => this.downloadPDF());
             this.showStatus('PDF generation failed', 'error');
         }
-    }
-
-    fallbackDownload(url, filename) {
-        // Fallback download method
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        this.showStatus('PDF downloaded successfully!', 'success');
-        setTimeout(() => {
-            const statusEl = document.getElementById('generation-status');
-            if (statusEl) statusEl.textContent = '';
-        }, 3000);
-        
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     // Resume Generation Methods
@@ -2113,7 +1908,8 @@ class CoverLetterApp {
     // upload lays out at print size and hand that to the pipeline, which gives
     // the model each line's room and the page's free space.
     this.showStatus('Tailoring your resume…', 'loading');
-    const layout = await this.timed('measure layout', () => this.measureLayout(this.baselineResume.resume));
+    const { resumeDocToSchema } = await this.generation();
+    const layout = await this.timed('measure layout', () => measureLayout(resumeDocToSchema(this.baselineResume.resume), this.profile));
     this.progress.mark(0.3, 0.7, 9000);
     let result = await this.timed('tailor', () => this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout }));
     this._timer?.detail('tailor', result.metadata?.timings);
@@ -2122,9 +1918,9 @@ class CoverLetterApp {
     // if the result still spills over, fold the measured error into the
     // budget and ask again (twice at most).
     this.progress.mark(0.75, 0.9, 4000);
-    let height = await this.timed('measure page', () => this.measureResumeHeight(result.resumeContent));
+    let height = await this.timed('measure page', () => measureResumeHeight(result.resumeContent, this.profile));
     let refits = 0;
-    while (height > CoverLetterApp.PAGE_PX && refits < 2) {
+    while (height > PAGE_PX && refits < 2) {
       const predicted = result.metadata?.page?.afterPx || layout.usedPx;
       layout.usedPx += (height - predicted) * (refits + 1);
       this.showStatus('Fitting it to one page…', 'loading');
@@ -2132,10 +1928,10 @@ class CoverLetterApp {
       const step = `refit ${refits + 1}`;
       result = await this.timed(step, () => this.requestResume({ profile, jobText, match, baseline: this.baselineResume, layout }));
       this._timer?.detail(step, result.metadata?.timings);
-      height = await this.timed('measure page', () => this.measureResumeHeight(result.resumeContent));
+      height = await this.timed('measure page', () => measureResumeHeight(result.resumeContent, this.profile));
       refits++;
     }
-    const overflow = height / CoverLetterApp.PAGE_PX;
+    const overflow = height / PAGE_PX;
     this.switchTab('generate');
     this.switchToResumeView();
     await this.timed('render preview', () => this.renderResumePreview(result));
@@ -2199,354 +1995,6 @@ class CoverLetterApp {
         return parts.join(' ');
     }
 
-    // ---- Page measurement (one-page limit) --------------------------------------
-
-    // Lays out resume markup off-screen at print width (the page box is
-    // 7.5in wide either way; min-height dropped so the content height shows)
-    // and hands the page element to fn. Fonts must be loaded first or widths
-    // come out in the fallback face.
-    async withOffscreenResume(resumeContent, fn) {
-        if (document.fonts?.ready) await document.fonts.ready;
-        const host = document.createElement('div');
-        host.setAttribute('aria-hidden', 'true');
-        host.style.cssText = 'position:absolute;left:-10000px;top:0;width:8.5in;visibility:hidden;pointer-events:none;';
-        host.innerHTML = this.formatResume(this.escapeResume(resumeContent));
-        document.body.appendChild(host);
-        try {
-            const page = host.querySelector('.resume-page');
-            page.style.minHeight = '0';
-            return fn(page);
-        } finally {
-            host.remove();
-        }
-    }
-
-    async measureResumeHeight(resumeContent) {
-        return this.withOffscreenResume(resumeContent, page => page.getBoundingClientRect().height);
-    }
-
-    // The layout for generation/layout.js: the upload's measured height plus,
-    // per kind of line (data-kind in formatResume), its font, usable width,
-    // line height and gap, and a canvas-backed textWidth. Kinds the upload
-    // does not have fall back to layout.js defaults.
-    async measureLayout(doc) {
-        const { resumeDocToSchema } = await this.generation();
-        const ctx = document.createElement('canvas').getContext('2d');
-        const textWidth = (text, font) => { ctx.font = font; return ctx.measureText(text).width; };
-        return this.withOffscreenResume(resumeDocToSchema(doc), page => {
-            const kinds = {};
-            for (const kind of ['bullet', 'summary', 'skills', 'coursework', 'extra', 'projectHeader']) {
-                const el = page.querySelector(`[data-kind="${kind}"]`);
-                if (!el) continue;
-                const cs = getComputedStyle(el);
-                kinds[kind] = {
-                    font: `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`,
-                    width: el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
-                    lineHeight: parseFloat(cs.lineHeight),
-                    gap: parseFloat(cs.marginBottom) + parseFloat(cs.marginTop)
-                };
-            }
-            const entry = page.querySelector('.project-entry, .experience-entry');
-            return {
-                capacityPx: CoverLetterApp.PAGE_PX,
-                usedPx: page.getBoundingClientRect().height,
-                entryGap: entry ? parseFloat(getComputedStyle(entry).marginBottom) : undefined,
-                kinds,
-                textWidth
-            };
-        });
-    }
-
-    escapeHTML(value) {
-        return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
-    // A copy of resume data (or its JSON text) with every string escaped,
-    // for formatResume(). Profile text and model output can hold markup: a
-    // pasted posting can steer what the model returns.
-    escapeResume(value) {
-        if (typeof value === 'string') {
-            try { value = JSON.parse(value); } catch { return this.escapeHTML(value); }
-        }
-        const walk = (v) => typeof v === 'string' ? this.escapeHTML(v)
-            : Array.isArray(v) ? v.map(walk)
-            : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
-            : v;
-        return walk(value);
-    }
-
-    // Text in resumeContent must already be HTML-escaped (highlight.js output,
-    // or escapeResume() for raw data); profile fields are escaped here.
-    formatResume(resumeContent) {
-        // Parse the JSON resume content
-        let resume;
-        let eduList = [];
-        try {
-            resume = typeof resumeContent === 'string' ? JSON.parse(resumeContent) : resumeContent;
-
-            // Normalize education to a list of entries with consistent keys. The
-            // model may return an array or a single object; fall back to the
-            // profile's own entries when it returns nothing.
-            const fromModel = Array.isArray(resume.education)
-                ? resume.education
-                : (resume.education ? [resume.education] : []);
-            const source = fromModel.length ? fromModel : this.escapeResume(this.profile.education || []);
-            eduList = source.map(e => ({
-                school: e.school || e.university || e.institution || '',
-                location: e.location || '',
-                dates: e.dates || e.graduation || (e.start && e.end ? `${e.start} - ${e.end}` : e.end || ''),
-                degree: e.degree || e.degreeType || '',
-                major: e.major || '',
-                minor: e.minor || '',
-                gpa: e.gpa || '',
-                honors: e.honors || '',
-                coursework: e.coursework || ''
-            })).filter(e => e.school || e.degree);
-        } catch (error) {
-            console.error('Error parsing resume content:', error);
-            return `<p style="color: red;">Error formatting resume content</p>`;
-        }
-
-
-        // Single-source rendering with exact measurements for pixel-perfect preview/PDF match
-        const baseFont = "'Times New Roman', serif";
-        const headerFontSize = "18pt";
-        const contactFontSize = "11pt";
-        const sectionHeaderSize = "11pt";
-        const bodyFontSize = "10pt";
-        const lineHeight = "1.25";
-        const sectionSpacing = "0.8em";
-        const entrySpacing = "0.6em";
-
-        let formatted = `
-            <div class="resume-page" style="
-                font-family: ${baseFont};
-                color: #000;
-                line-height: ${lineHeight};
-                max-width: 7.5in;
-                margin: 0 auto;
-                padding: 0.5in;
-                background: white;
-                min-height: 10in;
-                box-sizing: border-box;
-            ">
-                <!-- Header Section -->
-                <div class="resume-header" style="text-align: center; margin-bottom: ${sectionSpacing};">
-                    <h1 style="
-                        margin: 0 0 0.2em 0;
-                        font-size: ${headerFontSize};
-                        font-weight: bold;
-                        letter-spacing: 0.5pt;
-                    ">${this.escapeHTML(this.profile.name)}</h1>
-                    <div style="
-                        margin: 0;
-                        font-size: ${contactFontSize};
-                        line-height: 1.3;
-                    ">${this.formatContactLine()}</div>
-                    ${resume.summary ? `<div data-kind="summary" style="
-                        margin: 0.3em 0 0 0;
-                        font-size: ${contactFontSize};
-                        font-weight: bold;
-                    ">${resume.summary}</div>` : ''}
-                </div>
-
-                <!-- Skills Section -->
-                ${resume.skills && resume.skills.length > 0 ? `
-                <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                    <h2 style="
-                        margin: 0 0 0.4em 0;
-                        font-size: ${sectionHeaderSize};
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        border-bottom: 1pt solid #000;
-                        padding-bottom: 2pt;
-                    ">SKILLS & INTERESTS</h2>
-                    <div style="font-size: ${bodyFontSize};">
-                        ${this.formatSkillsComprehensive(resume.skills)}
-                    </div>
-                </div>` : ''}
-
-               
-
-                <!-- Education Section -->
-                ${eduList.length > 0 ? `
-                <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                <h2 style="
-                    margin: 0 0 0.4em 0;
-                    font-size: ${sectionHeaderSize};
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;
-                ">EDUCATION & HONORS</h2>
-                ${eduList.map(edu => `
-                <div class="education-entry" style="margin-bottom: ${entrySpacing};">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                        ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
-                        </span>
-                        <span style="font-size: ${contactFontSize};">
-                        ${edu.dates ? `Graduation Date: ${edu.dates}` : ''}
-                        </span>
-                    </div>
-                    ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
-                    ${edu.major ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Major: ${edu.major}</div>` : ''}
-                    ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
-                    ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
-                    ${(edu.honors || edu.coursework) ? `
-                    <div data-kind="coursework" style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
-                        ${edu.honors ? `• ${edu.honors}<br>` : ''}
-                        ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
-                    </div>` : ''}
-                </div>`).join('')}
-                </div>` : ''}
-
-
-
-
-                <!-- Experience Section -->
-                ${resume.experience && resume.experience.length > 0 ? `
-                <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                    <h2 style="
-                        margin: 0 0 0.4em 0;
-                        font-size: ${sectionHeaderSize};
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        border-bottom: 1pt solid #000;
-                        padding-bottom: 2pt;
-                    ">EXPERIENCE</h2>
-                    ${resume.experience.map(exp => `
-                        <div class="experience-entry" style="margin-bottom: ${entrySpacing};">
-                            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                                <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                                    ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
-                                </span>
-                                <span style="font-size: ${contactFontSize};">
-                                    ${exp.dates || ''}
-                                </span>
-                            </div>
-                            <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">
-                                ${exp.title}
-                            </div>
-                            <ul style="
-                                margin: 0;
-                                padding-left: 1.2em;
-                                font-size: ${bodyFontSize};
-                                line-height: ${lineHeight};
-                            ">
-                                ${exp.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
-                            </ul>
-                        </div>
-                    `).join('')}
-                </div>` : ''}
-
-                <!-- Projects Section -->
-                ${resume.projects && resume.projects.length > 0 ? `
-                <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                    <h2 style="
-                        margin: 0 0 0.4em 0;
-                        font-size: ${sectionHeaderSize};
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        border-bottom: 1pt solid #000;
-                        padding-bottom: 2pt;6
-                    ">PROJECTS</h2>
-                    ${resume.projects.map(proj => `
-                        <div class="project-entry" style="margin-bottom: ${entrySpacing};">
-                            <div data-kind="projectHeader" style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
-                                ${proj.name}${proj.link ? ` | ${proj.link}` : ''}
-                            </div>
-                            <ul style="
-                                margin: 0;
-                                padding-left: 1.2em;
-                                font-size: ${bodyFontSize};
-                                line-height: ${lineHeight};
-                            ">
-                                ${proj.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
-                            </ul>
-                        </div>
-                    `).join('')}
-                </div>` : ''}
-
-                                    ${
-                    (
-                        (resume.programs && resume.programs.length > 0) ||
-                        (resume.certifications && resume.certifications.length > 0)
-                    ) ? `
-                        <!-- Programs/Certifications Section -->
-                        <div class="resume-section">
-                        <h2 style="
-                            margin: 0 0 0.4em 0;
-                            font-size: ${sectionHeaderSize};
-                            font-weight: bold;
-                            text-transform: uppercase;
-                            border-bottom: 1pt solid #000;
-                            padding-bottom: 2pt;
-                        ">PROGRAMS / CERTIFICATIONS</h2>
-                        ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
-                        <div data-kind="extra" style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
-                        </div>
-                    ` : ''
-                    }
-                    </div>
-                </div>
-            </div>
-        `;
-
-        return formatted;
-    }
-
-    formatContactLine() {
-        const contactParts = [];
-        
-        // Add location first if available
-        if (this.profile.location && this.profile.location.trim()) {
-            contactParts.push(this.profile.location.trim());
-        }
-        
-        // Parse contact information
-        const lines = this.profile.contact.split('\n');
-        lines.forEach(line => {
-            const trimmed = line.trim();
-            if (trimmed && trimmed !== 'undefined' && trimmed !== 'null') {
-                if (trimmed.includes('@')) {
-                    contactParts.push(trimmed); // Email
-                } else if (trimmed.match(/\d{3}.*\d{3}.*\d{4}/)) {
-                    contactParts.push(trimmed); // Phone
-                } else if (trimmed.includes('linkedin.com')) {
-                    contactParts.push(trimmed.includes('http') ? 'LinkedIn' : trimmed);
-                } else if (trimmed.includes('github.com')) {
-                    contactParts.push(trimmed.includes('http') ? 'GitHub' : trimmed);
-                } else if (trimmed.length > 0) {
-                    contactParts.push(trimmed);
-                }
-            }
-        });
-        
-        // Filter out any empty or invalid parts
-        const validParts = contactParts.filter(part => 
-            part && part.trim() && part !== 'undefined' && part !== 'null'
-        );
-        
-        return validParts.map(part => this.escapeHTML(part)).join(' | ');
-    }
-
-    formatSkillsComprehensive(skills) {
-        // Format skills as comprehensive grouped lines like the sample
-        if (Array.isArray(skills) && skills.length > 0 && typeof skills[0] === 'string' && skills[0].includes(':')) {
-            // Skills already come grouped from API
-            // Split at the first colon only: items may carry markup (preview
-            // highlights with a title) that contains colons of its own.
-            return skills.map(skillLine => {
-                const at = skillLine.indexOf(':');
-                return `<p data-kind="skills" style="margin: 0 0 0.2em 0; line-height: 1.3;"><strong>${skillLine.slice(0, at)}:</strong> ${skillLine.slice(at + 1).trim()}</p>`;
-            }).join('');
-        } else {
-            // Fallback: group skills manually
-            return `<p style="margin: 0; line-height: 1.3;"><strong>Technical Skills:</strong> ${skills.join(', ')}</p>`;
-        }
-    }
-
     switchToResumeView() {
         this.currentView = 'resume';
         
@@ -2587,31 +2035,20 @@ class CoverLetterApp {
         if (previewTitle) previewTitle.textContent = 'Cover letter preview';
     }
 
-// Opens the rendered resume in print.html, where Chrome's print dialog saves
-// it as a text-based PDF. The markup is passed through session storage (an
-// extension page cannot be handed a document directly).
-async downloadResumePDF() {
-  try {
-    // Print the unmarked resume: preview highlights never reach the PDF.
-    const holder = document.createElement('div');
-    holder.innerHTML = this.lastCleanResumeHTML || this.lastRenderedResumeHTML || '';
-    const page = holder.querySelector('.resume-page') || document.querySelector('.resume-content .resume-page');
-    if (!page) throw new Error('No resume preview found.');
-
-    // The print page's title is the name Chrome proposes for "Save as PDF".
-    const title = await this.promptForFilename('resume');
-    if (title === null) return;
-    await chrome.storage.session.set({
-      printJob: { html: page.outerHTML, title }
-    });
-    await chrome.tabs.create({ url: chrome.runtime.getURL('print.html'), active: true });
-
-    this.showStatus('Print view opened — choose "Save as PDF" as the destination.', 'success');
-  } catch (err) {
-    console.error('Resume PDF error:', err);
-    this.showError('Failed to open the resume for printing: ' + err.message, () => this.downloadResumePDF());
-  }
-}
+    // Opens the unmarked resume in print.html (preview/export.js).
+    async downloadResumePDF() {
+        try {
+            const page = printableResumePage(this.lastCleanResumeHTML, this.lastRenderedResumeHTML);
+            if (!page) throw new Error('No resume preview found.');
+            const title = await this.promptForFilename('resume');
+            if (title === null) return;
+            await openResumePrintView(page, title);
+            this.showStatus('Print view opened — choose "Save as PDF" as the destination.', 'success');
+        } catch (err) {
+            console.error('Resume PDF error:', err);
+            this.showError('Failed to open the resume for printing: ' + err.message, () => this.downloadResumePDF());
+        }
+    }
 
     // Debug functionality
     saveLogs() {

@@ -53,7 +53,7 @@ The resume PDF comes from a print view (`print.html`) through Chrome's Save as P
 
 ## Testing
 
-Unit tests cover the code that runs without the API: the baseline snapshot, the keyword check, edit validation and application, page fitting, line wrapping and the preview diff. They make no network calls.
+Unit tests cover the code that runs without the API: the baseline snapshot, the keyword check, edit validation and application, page fitting, line wrapping, the preview diff, and the resume and cover-letter HTML (escaping, and the page geometry the one-page measurement depends on). They make no network calls.
 
 ```bash
 node --test 'test/unit/*.test.mjs'
@@ -131,6 +131,7 @@ resume-cv-generator/
 │   ├── resumeParser.js       # PDF → profile, heuristic, no model call
 │   ├── profileMerge.js       # Additive profile merge
 │   ├── print.html, print.js  # Resume print view (Save as PDF)
+│   ├── preview/              # Resume and cover-letter HTML, page measurement, PDF downloads
 │   ├── generation/           # Pipeline, prompts, validators, layout model, OpenAI client
 │   ├── icons/
 │   └── jspdf.min.js, pdf.min.js, pdf.worker.min.js   # Bundled libraries

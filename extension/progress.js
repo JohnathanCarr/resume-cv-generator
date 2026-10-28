@@ -7,7 +7,7 @@
 //   done()              fill to 100%, green, "Done", hide after 1.2s
 //   fail()              stop where it is, "Generation failed", stays visible
 //   hide()              hide at once (a cancelled run)
-class GenerationProgress {
+export class GenerationProgress {
     constructor(root) {
         this.root = root;
         this.card = root.querySelector('.progress-card');

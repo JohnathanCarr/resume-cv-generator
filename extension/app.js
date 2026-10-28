@@ -1,4 +1,11 @@
-// Cover Letter Generator App Logic
+// Resume Studio app: the page's one ES module. pdf.js and jsPDF are bundled
+// libraries loaded as plain scripts before it (globals pdfjsLib and
+// window.jspdf); theme.js is a plain script too, so the theme is set while
+// the page loads. Generation modules are imported lazily (generation()).
+import { ResumeParser } from './resumeParser.js';
+import { ProfileMerge } from './profileMerge.js';
+import { OnboardingTour } from './onboarding.js';
+import { GenerationProgress } from './progress.js';
 
 class CoverLetterApp {
     // One US Letter page at CSS 96dpi; the resume's hard limit.
@@ -1521,7 +1528,6 @@ class CoverLetterApp {
     }
 
     startTour() {
-        if (typeof OnboardingTour === 'undefined') return;
         this.hideError();
         OnboardingTour.start(this.tourSteps(), {
             switchTab: (tab) => this.switchTab(tab),
@@ -1613,7 +1619,7 @@ class CoverLetterApp {
 
     // Parse the uploaded PDF and fold the result into the profile additively.
     async autofillFromResume(buffer) {
-        if (typeof pdfjsLib === 'undefined' || typeof ResumeParser === 'undefined' || typeof ProfileMerge === 'undefined') {
+        if (typeof pdfjsLib === 'undefined') {
             this.showProfileStatus('Resume uploaded (parser unavailable).', 'success');
             return;
         }
@@ -1661,7 +1667,7 @@ class CoverLetterApp {
         if (!this.uploadedResume?.dataBase64) return false;
         const { isCurrentBaseline } = await this.generation();
         if (isCurrentBaseline(this.baselineResume)) return true;
-        if (typeof pdfjsLib === 'undefined' || typeof ResumeParser === 'undefined') return false;
+        if (typeof pdfjsLib === 'undefined') return false;
         try {
             const { profile: parsed } = await this.parseResumePdf(this.base64ToBytes(this.uploadedResume.dataBase64));
             await this.saveBaseline(parsed);

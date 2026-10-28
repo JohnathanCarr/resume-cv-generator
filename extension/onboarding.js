@@ -26,7 +26,7 @@
     function build() {
         const overlay = el('div', 'tour-overlay');
         const spotlight = el('div', 'tour-spotlight');
-        const tooltip = el('div', 'tour-tooltip glass-floating');
+        const tooltip = el('div', 'tour-tooltip');
         tooltip.setAttribute('role', 'dialog');
         tooltip.setAttribute('aria-modal', 'true');
         tooltip.setAttribute('aria-labelledby', 'tour-title');

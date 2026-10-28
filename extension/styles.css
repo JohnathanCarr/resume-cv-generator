@@ -238,9 +238,6 @@ a { color: var(--primary-text); text-underline-offset: 2px; }
 
 .theme-toggle:hover { background: var(--surface); }
 
-/* theme.js spins the toggle on click; the flat style keeps it still. */
-#theme-toggle { transform: none !important; }
-
 .theme-toggle svg { width: 18px; height: 18px; }
 
 .theme-icon-light,
@@ -488,9 +485,6 @@ input[type="checkbox"]:checked::after { opacity: 1; }
     font-size: 0.8125rem;
     gap: 6px;
 }
-
-/* theme.js adds ripples on click; the flat style has none. */
-.ripple { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SECTION 9: SKILLS TAGS

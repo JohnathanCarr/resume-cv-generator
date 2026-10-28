@@ -814,7 +814,7 @@ class CoverLetterApp {
     createExperienceElement(exp, index) {
         const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
-        div.className = 'experience-card glass-elevated';
+        div.className = 'experience-card';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
@@ -832,11 +832,11 @@ class CoverLetterApp {
                         <input type="checkbox" class="must-include-exp" data-index="${index}" ${exp.mustInclude ? 'checked' : ''}>
                         Must include
                     </label>
-                    <button class="btn btn-secondary btn-sm btn-ripple add-bullet" data-index="${index}">
+                    <button class="btn btn-secondary btn-sm add-bullet" data-index="${index}">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         Add achievement
                     </button>
-                    <button class="btn btn-danger btn-sm btn-ripple remove-experience" data-index="${index}">Remove</button>
+                    <button class="btn btn-danger btn-sm remove-experience" data-index="${index}">Remove</button>
                 </div>
             </div>
             <div class="bullet-list" data-index="${index}">
@@ -930,7 +930,7 @@ class CoverLetterApp {
     createEducationElement(edu, index) {
         const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
-        div.className = 'experience-card glass-elevated';
+        div.className = 'experience-card';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
@@ -954,7 +954,7 @@ class CoverLetterApp {
                     </div>
                 </div>
                 <div class="card-actions">
-                    <button class="btn btn-danger btn-sm btn-ripple remove-education" data-index="${index}">Remove</button>
+                    <button class="btn btn-danger btn-sm remove-education" data-index="${index}">Remove</button>
                 </div>
             </div>
         `;
@@ -1051,7 +1051,7 @@ class CoverLetterApp {
     createProjectElement(project, index) {
         const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
-        div.className = 'project-card glass-elevated';
+        div.className = 'project-card';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
@@ -1063,11 +1063,11 @@ class CoverLetterApp {
                         <input type="checkbox" class="must-include-proj" data-index="${index}" ${project.mustInclude ? 'checked' : ''}>
                         Must include
                     </label>
-                    <button class="btn btn-secondary btn-sm btn-ripple add-bullet" data-index="${index}">
+                    <button class="btn btn-secondary btn-sm add-bullet" data-index="${index}">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         Add detail
                     </button>
-                    <button class="btn btn-danger btn-sm btn-ripple remove-project" data-index="${index}">Remove</button>
+                    <button class="btn btn-danger btn-sm remove-project" data-index="${index}">Remove</button>
                 </div>
             </div>
             <div class="bullet-list" data-index="${index}">
@@ -1173,7 +1173,7 @@ class CoverLetterApp {
     createExtraElement(extra, index) {
         const esc = (v) => this.escapeHTML(v);
         const div = document.createElement('div');
-        div.className = 'experience-card glass-elevated';
+        div.className = 'experience-card';
         div.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
@@ -1191,7 +1191,7 @@ class CoverLetterApp {
                     <textarea placeholder="Description of the experience, achievement, or certification..." style="margin-top: 0.5rem; min-height: 80px;" data-field="description" data-index="${index}">${esc(extra.description)}</textarea>
                 </div>
                 <div class="card-actions">
-                    <button class="btn btn-danger btn-sm btn-ripple remove-extra" data-index="${index}">Remove</button>
+                    <button class="btn btn-danger btn-sm remove-extra" data-index="${index}">Remove</button>
                 </div>
             </div>
         `;
@@ -1479,7 +1479,7 @@ class CoverLetterApp {
                 tab: 'profile',
                 title: 'Add and edit anything',
                 placement: 'bottom',
-                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to guarantee it appears on generated resumes.</p>'
+                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to tell the generator it matters most; it is a strong hint, not a guarantee.</p>'
             },
             {
                 target: '#job-text',
@@ -1836,8 +1836,6 @@ class CoverLetterApp {
             .map(p => p.replace(/\n/g, ' ').trim())
             .filter(p => p.length > 10); // Filter out very short lines
         
-        console.log('Formatting cover letter with', paragraphs.length, 'paragraphs');
-        
         let formatted = `
             <div class="letter-header">
                 <p><strong>${this.escapeHTML(this.profile.name)}</strong></p>
@@ -1860,7 +1858,6 @@ class CoverLetterApp {
         // Add each paragraph with proper spacing
         paragraphs.forEach((paragraph, index) => {
             if (paragraph.trim()) {
-                console.log(`Paragraph ${index + 1}:`, paragraph.substring(0, 100) + '...');
                 formatted += `<p style="margin-bottom: 1.5em; text-align: justify; line-height: 1.6;">${this.escapeHTML(paragraph)}</p>`;
             }
         });
@@ -2246,7 +2243,6 @@ class CoverLetterApp {
         let eduList = [];
         try {
             resume = typeof resumeContent === 'string' ? JSON.parse(resumeContent) : resumeContent;
-            console.log('Parsed resume data:', resume); // Debug log
 
             // Normalize education to a list of entries with consistent keys. The
             // model may return an array or a single object; fall back to the
@@ -2576,165 +2572,6 @@ async downloadResumePDF() {
     this.showError('Failed to open the resume for printing: ' + err.message, () => this.downloadResumePDF());
   }
 }
-
-
-
-    async renderHTMLToPDF(doc, element) {
-        // alias element as node so both names work safely
-        const node = element;
-
-        if (!node) {
-            throw new Error('renderHTMLToPDF: no element/node passed');
-        }
-
-        
-        console.log('[renderHTMLToPDF] got node?', !!node, 'len=', node?.innerHTML?.length);
-        console.log('[renderHTMLToPDF] head=', node?.innerHTML?.slice(0, 180));
-        // ... existing code ...
-
-
-        // Professional resume PDF rendering with exact preview matching
-        const leftMargin = 36; // 0.5 inch in points
-        const rightMargin = 36;
-        const topMargin = 54;
-        const pageWidth = 612; // Letter size width in points
-        const pageHeight = 792; // Letter size height in points
-        const textWidth = pageWidth - leftMargin - rightMargin;
-        
-        let currentY = topMargin;
-        
-        // Extract and render each section
-        const header = element.querySelector('.resume-header');
-        if (header) {
-            currentY = await this.renderSection(doc, header, currentY, leftMargin, textWidth);
-        }
-        
-        const sections = element.querySelectorAll('.resume-section');
-        for (const section of sections) {
-            currentY = await this.renderSection(doc, section, currentY, leftMargin, textWidth);
-        }
-    }
-
-    async renderSection(doc, section, startY, leftMargin, textWidth) {
-        let currentY = startY;
-        
-        // Handle headers
-        const h1 = section.querySelector('h1');
-        const h2 = section.querySelector('h2');
-        const h3Elements = section.querySelectorAll('h3');
-        
-        if (h1) {
-            doc.setFont('times', 'bold');
-            doc.setFontSize(18);
-            const text = h1.textContent.trim();
-            doc.text(text, leftMargin + (textWidth - doc.getTextWidth(text)) / 2, currentY);
-            currentY += 20;
-        }
-        
-        if (h2) {
-            doc.setFont('times', 'bold');
-            doc.setFontSize(11);
-            const text = h2.textContent.trim();
-            doc.text(text, leftMargin, currentY);
-            doc.line(leftMargin, currentY + 3, leftMargin + textWidth, currentY + 3);
-            currentY += 18;
-        }
-        
-        // Handle paragraphs
-        const paragraphs = section.querySelectorAll('p');
-        paragraphs.forEach(p => {
-            if (!p.closest('div[style*="flex"]')) { // Skip paragraphs inside flex containers
-                doc.setFont('times', 'normal');
-                doc.setFontSize(10);
-                const text = p.textContent.trim();
-                if (text) {
-                    const lines = doc.splitTextToSize(text, textWidth);
-                    lines.forEach(line => {
-                        doc.text(line, leftMargin, currentY);
-                        currentY += 12;
-                    });
-                }
-            }
-        });
-        
-        // Handle experience/project entries
-        const entries = section.querySelectorAll('.experience-entry, .project-entry');
-        entries.forEach(entry => {
-            const titleLine = entry.querySelector('div[style*="flex"]');
-            if (titleLine) {
-                const title = titleLine.querySelector('span:first-child');
-                const date = titleLine.querySelector('span:last-child');
-                
-                if (title) {
-                    doc.setFont('times', 'bold');
-                    doc.setFontSize(11);
-                    doc.text(title.textContent.trim(), leftMargin, currentY);
-                }
-                
-                if (date) {
-                    doc.setFont('times', 'normal');
-                    doc.setFontSize(11);
-                    const dateText = date.textContent.trim();
-                    const dateWidth = doc.getTextWidth(dateText);
-                    doc.text(dateText, leftMargin + textWidth - dateWidth, currentY);
-                }
-                
-                currentY += 14;
-            }
-            
-            // Handle role/project title
-            const roleTitle = entry.querySelector('div[style*="italic"]');
-            if (roleTitle) {
-                doc.setFont('times', 'italic');
-                doc.setFontSize(11);
-                doc.text(roleTitle.textContent.trim(), leftMargin, currentY);
-                currentY += 12;
-            }
-            
-            // Handle project name (non-italic)
-            const projectTitle = entry.querySelector('div[style*="font-weight: bold"]:not([style*="italic"])');
-            if (projectTitle && !roleTitle) {
-                doc.setFont('times', 'bold');
-                doc.setFontSize(11);
-                doc.text(projectTitle.textContent.trim(), leftMargin, currentY);
-                currentY += 12;
-            }
-            
-            // Handle bullets
-            const bullets = entry.querySelectorAll('li');
-            bullets.forEach(bullet => {
-                doc.setFont('times', 'normal');
-                doc.setFontSize(10);
-                const bulletText = `• ${bullet.textContent.trim()}`;
-                const lines = doc.splitTextToSize(bulletText, textWidth - 20);
-                lines.forEach((line, lineIndex) => {
-                    doc.text(line, leftMargin + (lineIndex === 0 ? 0 : 20), currentY);
-                    currentY += 12;
-                });
-            });
-            
-            currentY += 8; // Space between entries
-        });
-        
-        currentY += 10; // Space between sections
-        return currentY;
-    }
-
-
-    extractCompanyFromJob() {
-        const jobText = document.getElementById('job-text')?.value || '';
-        const companyMatch = jobText.match(/(?:company|organization|at|join)\s*:?\s*([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.|!)/i) ||
-                            jobText.match(/([A-Z][a-zA-Z\s&.,]{2,30})(?:\s+is\s+(?:seeking|looking|hiring))/i);
-        return companyMatch ? companyMatch[1].trim().replace(/[.,!]$/, '') : '';
-    }
-
-    extractRoleFromJob() {
-        const jobText = document.getElementById('job-text')?.value || '';
-        const roleMatch = jobText.match(/(?:position|role|job title|title|hiring)\s*:?\s*([A-Z][a-zA-Z\s-]+?)(?:\s|$|,|\.|!|at)/i) ||
-                         jobText.match(/(?:seeking|looking for|hiring)\s+(?:a|an)?\s*([A-Z][a-zA-Z\s-]+?)(?:\s+to|\s+who|$)/i);
-        return roleMatch ? roleMatch[1].trim().replace(/[.,!-]$/, '') : '';
-    }
-
 
     // Debug functionality
     saveLogs() {

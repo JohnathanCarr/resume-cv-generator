@@ -4,7 +4,6 @@
 // the page loads. Generation modules are imported lazily (generation()).
 import { ResumeParser } from './resumeParser.js';
 import { ProfileMerge } from './profileMerge.js';
-import { OnboardingTour } from './onboarding.js';
 import { GenerationProgress } from './progress.js';
 import { escapeResume, formatResume } from './preview/resumeHtml.js';
 import { formatCoverLetter } from './preview/coverLetterHtml.js';
@@ -12,6 +11,8 @@ import { runGeneration, COVER_LETTER, RESUME } from './generationFlow.js';
 import { Dialogs } from './dialogs.js';
 import { ProfileEditor } from './profile/profileEditor.js';
 import { migrateEducation } from './profile/profileData.js';
+import { Settings } from './settings.js';
+import { GettingStarted } from './gettingStarted.js';
 import { sanitizeFilename, suggestFilename, buildCoverLetterPdf, saveBlob, printableResumePage, openResumePrintView } from './preview/export.js';
 
 class CoverLetterApp {
@@ -39,10 +40,12 @@ class CoverLetterApp {
         this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
         this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
         this.dialogs = new Dialogs({
-            cancelActions: { 'settings-modal': () => this.closeSettings() },
+            cancelActions: { 'settings-modal': () => this.settings.close() },
             sanitizeFilename
         });
         this.profileEditor = new ProfileEditor(this);
+        this.settings = new Settings(this);
+        this.gettingStarted = new GettingStarted(this);
         
         // Initialize after a brief delay to ensure DOM is ready
         setTimeout(() => this.init(), 100);
@@ -62,7 +65,7 @@ class CoverLetterApp {
         this.renderProfile();
         this.restoreLastResume();
         this.ensureBaseline();
-        this.maybeStartOnboarding();
+        this.gettingStarted.maybeStartTour();
         this.renderChecklist();
         this.connectToBackground();
     }
@@ -173,11 +176,6 @@ class CoverLetterApp {
             });
         });
 
-        // Guided tour replay
-        document.getElementById('help-tour')?.addEventListener('click', () => {
-            this.startTour();
-        });
-
         // Company research toggle
         const researchToggle = document.getElementById('research-company');
         if (researchToggle) {
@@ -187,22 +185,6 @@ class CoverLetterApp {
                 chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
             });
         }
-
-        // Settings / API key
-        document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
-        document.getElementById('settings-close')?.addEventListener('click', () => this.closeSettings());
-        document.getElementById('api-key-save')?.addEventListener('click', () => this.saveApiKey());
-        document.getElementById('api-key-input')?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); this.saveApiKey(); }
-        });
-        document.getElementById('api-key-replace')?.addEventListener('click', () => this.renderSettings({ replacing: true }));
-        document.getElementById('api-key-cancel')?.addEventListener('click', () => this.renderSettings());
-        document.getElementById('api-key-remove')?.addEventListener('click', () => this.removeApiKey());
-
-        document.getElementById('checklist-dismiss')?.addEventListener('click', () => {
-            this.saveOnboarding({ checklistDismissed: true });
-            this.renderChecklist();
-        });
 
         // Resume upload
         document.getElementById('upload-resume')?.addEventListener('click', () => {
@@ -250,6 +232,8 @@ class CoverLetterApp {
 
         this.dialogs.setup();
         this.profileEditor.setup();
+        this.settings.setup();
+        this.gettingStarted.setup();
     }
 
     // UI Management
@@ -486,103 +470,18 @@ class CoverLetterApp {
         this.profileEditor.renderSections();
     }
 
+    // Getting Started checklist and first-run state (gettingStarted.js).
+    renderChecklist() {
+        this.gettingStarted.render();
+    }
+
+    recordFirstGeneration() {
+        this.gettingStarted.recordFirstGeneration();
+    }
+
     // generationFlow.js re-renders the tags after the keyword check adds skills.
     renderSkills() {
         this.profileEditor.renderSkills();
-    }
-
-    // Settings / API key
-    // The key value lives in chrome.storage.local and is only ever read back
-    // to send to OpenAI; the UI shows the last four characters.
-    openSettings() {
-        this.renderSettings();
-        this.dialogs.open('settings-modal');
-        if (!this.apiKey) document.getElementById('api-key-input')?.focus();
-    }
-
-    closeSettings() {
-        this.dialogs.close('settings-modal');
-        const input = document.getElementById('api-key-input');
-        if (input) input.value = '';
-    }
-
-    renderSettings({ replacing = false } = {}) {
-        const saved = document.getElementById('api-key-saved');
-        const entry = document.getElementById('api-key-entry');
-        const cancel = document.getElementById('api-key-cancel');
-        const input = document.getElementById('api-key-input');
-        if (!saved || !entry) return;
-
-        const hasKey = !!(this.apiKey && this.apiKey.value);
-        saved.classList.toggle('hidden', !hasKey || replacing);
-        entry.classList.toggle('hidden', hasKey && !replacing);
-        cancel?.classList.toggle('hidden', !(hasKey && replacing));
-        if (input) input.value = '';
-        if (replacing) input?.focus();
-
-        if (hasKey) {
-            const masked = document.getElementById('api-key-masked');
-            if (masked) masked.textContent = `sk-••••••••••••${this.apiKey.last4}`;
-            this.renderApiKeyStatus();
-        }
-    }
-
-    renderApiKeyStatus(override) {
-        const el = document.getElementById('api-key-status');
-        if (!el) return;
-        const status = override || this.describeApiKeyStatus();
-        el.textContent = status.text;
-        el.className = `api-key-status${status.kind ? ` ${status.kind}` : ''}`;
-    }
-
-    describeApiKeyStatus() {
-        if (!this.apiKey) return { text: '', kind: '' };
-        if (this.apiKey.verifiedAt) {
-            return { text: `Verified ${new Date(this.apiKey.verifiedAt).toLocaleDateString()}`, kind: 'ok' };
-        }
-        if (this.apiKey.verifyError) return { text: this.apiKey.verifyError, kind: 'error' };
-        if (this.apiKey.verifyNote) return { text: this.apiKey.verifyNote, kind: '' };
-        return { text: `Saved ${new Date(this.apiKey.savedAt).toLocaleDateString()} · not verified yet`, kind: '' };
-    }
-
-    async saveApiKey() {
-        const input = document.getElementById('api-key-input');
-        const value = (input?.value || '').trim();
-        if (!value) { this.showError('Paste your API key first.', false); return; }
-        if (!/^sk-[A-Za-z0-9_-]{10,}$/.test(value)) {
-            this.showError('That does not look like an OpenAI API key (they start with "sk-").', false);
-            return;
-        }
-
-        this.apiKey = { value, last4: value.slice(-4), savedAt: new Date().toISOString() };
-        await this.persistApiKey();
-        if (input) input.value = '';
-        this.renderSettings();
-        this.renderChecklist();
-
-        this.renderApiKeyStatus({ text: 'Verifying…', kind: '' });
-        await this.verifyApiKey();
-        this.renderApiKeyStatus();
-        this.renderChecklist();
-    }
-
-    async removeApiKey() {
-        this.apiKey = null;
-        try {
-            await chrome.storage.local.remove('apiKey');
-        } catch (error) {
-            console.error('Error removing API key:', error);
-        }
-        this.renderSettings();
-        this.renderChecklist();
-    }
-
-    async persistApiKey() {
-        try {
-            await chrome.storage.local.set({ apiKey: this.apiKey });
-        } catch (error) {
-            console.error('Error saving API key:', error);
-        }
     }
 
     // The generation pipeline (extension/generation/) is an ES module; app.js is
@@ -592,160 +491,10 @@ class CoverLetterApp {
         return this._generation;
     }
 
-    // Makes one tiny OpenAI request with the key. A network failure is
-    // reported as such, not treated as an invalid key.
-    async verifyApiKey() {
-        if (!this.apiKey) return;
-        try {
-            const { verifyKey } = await this.generation();
-            const data = await verifyKey(this.apiKey.value);
-            this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
-        } catch (error) {
-            if (error.status === 401) {
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: error.message };
-            } else {
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: `Saved, not verified: ${error.message}` };
-            }
-        }
-        await this.persistApiKey();
-    }
-
     requireApiKeyForGeneration() {
         if (this.apiKey?.value) return true;
         this.showError('Add your OpenAI API key in Settings (gear icon) before generating.', false);
         return false;
-    }
-
-    // Onboarding
-    // First run = no onboarding record yet (installed before this feature) or
-    // the background script seeded { seen: false } on install.
-    maybeStartOnboarding() {
-        const seen = this.onboarding && this.onboarding.seen;
-        if (!seen) this.startTour();
-    }
-
-    async saveOnboarding(patch) {
-        this.onboarding = { ...(this.onboarding || {}), ...patch };
-        try {
-            await chrome.storage.local.set({ onboarding: this.onboarding });
-        } catch (error) {
-            console.error('Error saving onboarding state:', error);
-        }
-    }
-
-    markOnboardingSeen(skipped) {
-        return this.saveOnboarding({ seen: true, completedAt: new Date().toISOString(), skipped: !!skipped });
-    }
-
-    // Getting Started checklist: ticks itself from live state and hides once
-    // everything is done or the user dismisses it.
-    checklistState() {
-        return {
-            resume: !!this.uploadedResume,
-            name: !!(this.profile.name && this.profile.name.trim()),
-            key: !!(this.apiKey && this.apiKey.value),
-            generated: !!(this.onboarding && this.onboarding.firstGeneratedAt)
-        };
-    }
-
-    renderChecklist() {
-        const card = document.getElementById('getting-started');
-        if (!card) return;
-        const state = this.checklistState();
-        const allDone = Object.values(state).every(Boolean);
-        const dismissed = !!(this.onboarding && this.onboarding.checklistDismissed);
-
-        if (allDone || dismissed) {
-            card.classList.add('hidden');
-            return;
-        }
-
-        card.querySelectorAll('li[data-item]').forEach(li => {
-            li.classList.toggle('done', !!state[li.dataset.item]);
-        });
-
-        const hint = document.getElementById('checklist-key-hint');
-        if (hint) {
-            if (this.apiKey && this.apiKey.verifyError) hint.textContent = `— ${this.apiKey.verifyError}`;
-            else if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
-            else hint.textContent = '';
-        }
-        card.classList.remove('hidden');
-    }
-
-    recordFirstGeneration() {
-        if (this.onboarding && this.onboarding.firstGeneratedAt) return;
-        this.saveOnboarding({ firstGeneratedAt: new Date().toISOString() });
-        this.renderChecklist();
-    }
-
-    tourSteps() {
-        return [
-            {
-                target: null,
-                title: 'Welcome to Resume Studio',
-                body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
-                       <ol>
-                         <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
-                         <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
-                         <li><strong>Paste a job description</strong> and generate.</li>
-                       </ol>
-                       <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
-            },
-            {
-                target: '#open-settings',
-                title: 'Add your OpenAI API key',
-                placement: 'bottom',
-                body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p><p>You pay OpenAI directly for what you generate, under OpenAI\'s usage policies; Resume Studio charges nothing.</p>'
-            },
-            {
-                target: '#upload-resume',
-                tab: 'profile',
-                title: 'Start with your resume',
-                placement: 'bottom',
-                body: '<p>Upload a PDF and your name, contact details, education, skills, experience and projects are filled in for you. Nothing is sent to the AI — parsing happens right here in the browser.</p><p>Upload a different resume later and only new items are added; nothing you entered is removed.</p>'
-            },
-            {
-                target: '#skills-input',
-                tab: 'profile',
-                title: 'List every skill you have',
-                placement: 'bottom',
-                body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
-            },
-            {
-                target: '#add-experience',
-                tab: 'profile',
-                title: 'Add and edit anything',
-                placement: 'bottom',
-                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to tell the generator it matters most; it is a strong hint, not a guarantee.</p>'
-            },
-            {
-                target: '#job-text',
-                tab: 'generate',
-                title: 'Paste the job description',
-                placement: 'right',
-                body: '<p>Include the title, company and requirements. The more of the posting you paste, the more precisely the documents are tailored.</p>'
-            },
-            {
-                target: '.generation-buttons',
-                tab: 'generate',
-                title: 'Generate and download',
-                placement: 'top',
-                body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>Read every document before you send it: AI can get things wrong.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
-            }
-        ];
-    }
-
-    startTour() {
-        this.hideError();
-        OnboardingTour.start(this.tourSteps(), {
-            switchTab: (tab) => this.switchTab(tab),
-            onFinish: ({ skipped }) => {
-                this.markOnboardingSeen(skipped);
-                this.switchTab('profile');
-                window.scrollTo({ top: 0 });
-            }
-        });
     }
 
     // Company research cache

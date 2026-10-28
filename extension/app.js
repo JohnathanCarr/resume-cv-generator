@@ -9,6 +9,7 @@ import { GenerationProgress } from './progress.js';
 import { escapeHTML, escapeResume, formatResume } from './preview/resumeHtml.js';
 import { formatCoverLetter } from './preview/coverLetterHtml.js';
 import { runGeneration, COVER_LETTER, RESUME } from './generationFlow.js';
+import { Dialogs } from './dialogs.js';
 import { sanitizeFilename, suggestFilename, buildCoverLetterPdf, saveBlob, printableResumePage, openResumePrintView } from './preview/export.js';
 
 class CoverLetterApp {
@@ -45,6 +46,10 @@ class CoverLetterApp {
         this.lastApiCall = null;
         this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
         this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
+        this.dialogs = new Dialogs({
+            cancelActions: { 'settings-modal': () => this.closeSettings() },
+            sanitizeFilename
+        });
         
         // Initialize after a brief delay to ensure DOM is ready
         setTimeout(() => this.init(), 100);
@@ -195,11 +200,6 @@ class CoverLetterApp {
             });
         }
 
-        // Keyword check modal: resolved by promptForKeywords()
-        document.getElementById('keywords-close')?.addEventListener('click', () => this.resolveKeywords(null));
-        document.getElementById('keywords-cancel')?.addEventListener('click', () => this.resolveKeywords(null));
-        document.getElementById('keywords-continue')?.addEventListener('click', () => this.resolveKeywords(this.readKeywordChoices()));
-
         // Settings / API key
         document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
         document.getElementById('settings-close')?.addEventListener('click', () => this.closeSettings());
@@ -264,14 +264,6 @@ class CoverLetterApp {
             this.downloadPDF();
         });
 
-        // File name prompt before either download: resolved by promptForFilename()
-        document.getElementById('filename-save')?.addEventListener('click', () => this.resolveFilename(true));
-        document.getElementById('filename-cancel')?.addEventListener('click', () => this.resolveFilename(false));
-        document.getElementById('filename-close')?.addEventListener('click', () => this.resolveFilename(false));
-        document.getElementById('filename-input')?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); this.resolveFilename(true); }
-        });
-
         // Tailored / Original toggle above the resume preview
         document.getElementById('view-tailored')?.addEventListener('click', () => this.showResumeView('tailored'));
         document.getElementById('view-original')?.addEventListener('click', () => this.showResumeView('original'));
@@ -288,15 +280,12 @@ class CoverLetterApp {
             return false; // extra belt & suspenders
         });
 
-        // Error handling
-        document.getElementById('retry-btn')?.addEventListener('click', () => this.retryLastAction());
-
+        // Error dialog (its own buttons are wired by dialogs.js)
         document.getElementById('save-logs-btn')?.addEventListener('click', () => {
             this.saveLogs();
         });
 
-        document.getElementById('error-close')?.addEventListener('click', () => this.hideError());
-        this.setupModals();
+        this.dialogs.setup();
 
         // Profile field updates
         document.getElementById('profile-name')?.addEventListener('input', (e) => {
@@ -341,40 +330,6 @@ class CoverLetterApp {
         }
     }
 
-    promptForKeywords(keywords) {
-        const list = document.getElementById('keywords-list');
-        const modal = document.getElementById('keywords-modal');
-        if (!list || !modal) return Promise.resolve({ accepted: [] });
-        list.innerHTML = '';
-        keywords.forEach((kw, i) => {
-            const label = document.createElement('label');
-            label.className = 'keyword-chip';
-            const input = document.createElement('input');
-            input.type = 'checkbox';
-            input.dataset.index = String(i);
-            label.appendChild(input);
-            label.appendChild(document.createTextNode(kw));
-            list.appendChild(label);
-        });
-        this._keywordOptions = keywords;
-        this.openModal('keywords-modal');
-        list.querySelector('input')?.focus();
-        return new Promise((resolve) => { this._keywordResolve = resolve; });
-    }
-
-    readKeywordChoices() {
-        const accepted = [...document.querySelectorAll('#keywords-list input:checked')]
-            .map(el => this._keywordOptions[Number(el.dataset.index)]).filter(Boolean);
-        return { accepted };
-    }
-
-    resolveKeywords(choice) {
-        this.closeModal('keywords-modal');
-        const resolve = this._keywordResolve;
-        this._keywordResolve = null;
-        if (resolve) resolve(choice);
-    }
-
     // ---- Last resume (restored into the preview on load) -----------------------
 
     async rememberResume(result, jobText) {
@@ -415,35 +370,6 @@ class CoverLetterApp {
             ? (this.lastResume?.company || this.lastMatchAnalysis?.company)
             : this.lastMatchAnalysis?.company;
         return suggestFilename(this.profile.name, company, kind);
-    }
-
-    // Asks for the file name (without .pdf). Resolves to the cleaned name, or
-    // null if the user cancelled.
-    promptForFilename(kind) {
-        const modal = document.getElementById('filename-modal');
-        const input = document.getElementById('filename-input');
-        if (!modal || !input) return Promise.resolve(this.defaultFilename(kind));
-        input.value = this.defaultFilename(kind);
-        const help = document.getElementById('filename-help');
-        if (help) {
-            help.textContent = kind === 'resume'
-                ? 'Chrome\'s print window opens next with this name. Choose "Save as PDF" as the destination.'
-                : 'Saved to your Downloads folder.';
-        }
-        this.openModal('filename-modal');
-        input.focus();
-        input.select();
-        return new Promise((resolve) => { this._filenameResolve = resolve; this._filenameKind = kind; });
-    }
-
-    resolveFilename(ok) {
-        this.closeModal('filename-modal');
-        const resolve = this._filenameResolve;
-        this._filenameResolve = null;
-        if (!resolve) return;
-        if (!ok) return resolve(null);
-        const name = sanitizeFilename(document.getElementById('filename-input')?.value);
-        resolve(name || this.defaultFilename(this._filenameKind) || 'Resume');
     }
 
     // ---- Tailored preview: highlights, Original/Tailored, coverage --------------
@@ -557,17 +483,14 @@ class CoverLetterApp {
         this.setPageInert(false);
     }
 
-    // Making the focused button inert drops focus to <body>; put it back
-    // afterwards unless something else (a dialog) has taken it meanwhile.
-    setPageInert(on) {
-        if (on && !this._inertFocus) this._inertFocus = document.activeElement;
-        document.querySelectorAll('.app-header, #profile-tab, .generate-layout > :not(.gen-progress)').forEach(el => { el.inert = on; });
-        if (!on) {
-            const back = this._inertFocus;
-            this._inertFocus = null;
-            if (back?.isConnected && (document.activeElement === document.body || !document.activeElement)) back.focus();
-        }
-    }
+    // ---- Dialogs (dialogs.js) ------------------------------------------------------
+
+    // Pass-throughs for the rest of the app and generationFlow.js.
+    showError(message, retry = false) { this.dialogs.showError(message, retry); }
+    hideError() { this.dialogs.hideError(); }
+    setPageInert(on) { this.dialogs.lockPage(on); }
+    promptForKeywords(keywords) { return this.dialogs.promptForKeywords(keywords); }
+    promptForFilename(kind) { return this.dialogs.promptForFilename(kind, this.defaultFilename(kind)); }
 
     // Repeats a status message in the screen-reader live region.
     announce(message) {
@@ -578,69 +501,6 @@ class CoverLetterApp {
         setTimeout(() => { live.textContent = message; }, 50);
     }
 
-    // retry: the action the Retry button repeats, or false to hide it.
-    showError(message, retry = false) {
-        const errorMessage = document.getElementById('error-message');
-        const retryBtn = document.getElementById('retry-btn');
-
-        if (errorMessage) errorMessage.textContent = message;
-        this._retryAction = typeof retry === 'function' ? retry : null;
-        if (retryBtn) retryBtn.style.display = this._retryAction ? 'inline-flex' : 'none';
-        this.openModal('error-modal');
-    }
-
-    hideError() {
-        this.closeModal('error-modal');
-    }
-
-    retryLastAction() {
-        const retry = this._retryAction;
-        this.hideError();
-        if (retry) retry();
-    }
-
-    // ---- Dialogs ----------------------------------------------------------------
-
-    // Every .modal is a dialog: Escape and a click on the backdrop cancel the
-    // top one, Tab stays inside it, and focus goes back to what opened it.
-    // Each dialog's cancel action resolves whatever is waiting on it.
-    modalCancel(id) {
-        return {
-            'keywords-modal': () => this.resolveKeywords(null),
-            'settings-modal': () => this.closeSettings(),
-            'filename-modal': () => this.resolveFilename(false),
-            'error-modal': () => this.hideError()
-        }[id];
-    }
-
-    openModal(id) {
-        const modal = document.getElementById(id);
-        if (!modal) return;
-        this._modalStack = (this._modalStack || []).filter(m => m.id !== id);
-        // During generation focus sits on <body> (the page is inert); return
-        // to the control that started it instead.
-        const opener = document.activeElement === document.body && this._inertFocus ? this._inertFocus : document.activeElement;
-        this._modalStack.push({ id, returnFocus: opener });
-        modal.classList.remove('hidden');
-        const first = this.focusableIn(modal)[0];
-        if (first && !modal.contains(document.activeElement)) first.focus();
-    }
-
-    closeModal(id) {
-        const modal = document.getElementById(id);
-        if (!modal || modal.classList.contains('hidden')) return;
-        modal.classList.add('hidden');
-        const stack = this._modalStack || [];
-        const entry = stack.find(m => m.id === id);
-        this._modalStack = stack.filter(m => m.id !== id);
-        if (entry?.returnFocus?.isConnected) entry.returnFocus.focus();
-    }
-
-    focusableIn(el) {
-        return [...el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-            .filter(n => !n.disabled && n.getClientRects().length);
-    }
-
     // Card fields have placeholders, not <label>s: give each an accessible
     // name from its placeholder ("Start Date", "Job Title"), minus examples.
     labelFields(root) {
@@ -648,31 +508,6 @@ class CoverLetterApp {
             if (el.labels?.length || el.hasAttribute('aria-label')) return;
             const name = el.placeholder.replace(/\s*\(e\.g\..*$/i, '').replace(/\.{3}$|…$/, '').trim();
             if (name) el.setAttribute('aria-label', name);
-        });
-    }
-
-    setupModals() {
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) this.modalCancel(modal.id)?.();
-            });
-        });
-        document.addEventListener('keydown', (e) => {
-            const top = (this._modalStack || []).at(-1);
-            const modal = top && document.getElementById(top.id);
-            if (!modal || modal.classList.contains('hidden')) return;
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                this.modalCancel(top.id)?.();
-            } else if (e.key === 'Tab') {
-                const items = this.focusableIn(modal);
-                if (!items.length) return;
-                const first = items[0];
-                const last = items[items.length - 1];
-                if (!modal.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
-                else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-            }
         });
     }
 
@@ -1228,12 +1063,12 @@ class CoverLetterApp {
     // to send to OpenAI; the UI shows the last four characters.
     openSettings() {
         this.renderSettings();
-        this.openModal('settings-modal');
+        this.dialogs.open('settings-modal');
         if (!this.apiKey) document.getElementById('api-key-input')?.focus();
     }
 
     closeSettings() {
-        this.closeModal('settings-modal');
+        this.dialogs.close('settings-modal');
         const input = document.getElementById('api-key-input');
         if (input) input.value = '';
     }

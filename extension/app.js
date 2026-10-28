@@ -4,26 +4,19 @@
 // the page loads. Generation modules are imported lazily (generation()).
 import { ResumeParser } from './resumeParser.js';
 import { ProfileMerge } from './profileMerge.js';
-import { OnboardingTour } from './onboarding.js';
 import { GenerationProgress } from './progress.js';
-import { escapeHTML, escapeResume, formatResume } from './preview/resumeHtml.js';
+import { escapeResume, formatResume } from './preview/resumeHtml.js';
 import { formatCoverLetter } from './preview/coverLetterHtml.js';
 import { runGeneration, COVER_LETTER, RESUME } from './generationFlow.js';
 import { Dialogs } from './dialogs.js';
+import { ProfileEditor } from './profile/profileEditor.js';
+import { migrateEducation } from './profile/profileData.js';
+import { Settings } from './settings.js';
+import { GettingStarted } from './gettingStarted.js';
 import { sanitizeFilename, suggestFilename, buildCoverLetterPdf, saveBlob, printableResumePage, openResumePrintView } from './preview/export.js';
 
-class CoverLetterApp {
+class ResumeStudioApp {
 
-    static EXTRA_TYPES = [
-        ['research', 'Research'],
-        ['program', 'Program'],
-        ['certification', 'Certification'],
-        ['award', 'Award'],
-        ['publication', 'Publication'],
-        ['leadership', 'Leadership'],
-        ['volunteer', 'Volunteer'],
-        ['other', 'Other']
-    ];
 
     constructor() {
         this.profile = {
@@ -47,9 +40,12 @@ class CoverLetterApp {
         this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
         this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
         this.dialogs = new Dialogs({
-            cancelActions: { 'settings-modal': () => this.closeSettings() },
+            cancelActions: { 'settings-modal': () => this.settings.close() },
             sanitizeFilename
         });
+        this.profileEditor = new ProfileEditor(this);
+        this.settings = new Settings(this);
+        this.gettingStarted = new GettingStarted(this);
         
         // Initialize after a brief delay to ensure DOM is ready
         setTimeout(() => this.init(), 100);
@@ -69,7 +65,7 @@ class CoverLetterApp {
         this.renderProfile();
         this.restoreLastResume();
         this.ensureBaseline();
-        this.maybeStartOnboarding();
+        this.gettingStarted.maybeStartTour();
         this.renderChecklist();
         this.connectToBackground();
     }
@@ -115,7 +111,7 @@ class CoverLetterApp {
                 ...this.profile,
                 ...result.profile
             };
-            this.profile.education = this.migrateEducation(result.profile.education);
+            this.profile.education = migrateEducation(result.profile.education);
             }
         }  catch (e) { console.error('Error loading data:', e); }
     }
@@ -180,16 +176,6 @@ class CoverLetterApp {
             });
         });
 
-        // Profile management
-        document.getElementById('save-profile')?.addEventListener('click', () => {
-            this.saveProfile();
-        });
-
-        // Guided tour replay
-        document.getElementById('help-tour')?.addEventListener('click', () => {
-            this.startTour();
-        });
-
         // Company research toggle
         const researchToggle = document.getElementById('research-company');
         if (researchToggle) {
@@ -199,22 +185,6 @@ class CoverLetterApp {
                 chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
             });
         }
-
-        // Settings / API key
-        document.getElementById('open-settings')?.addEventListener('click', () => this.openSettings());
-        document.getElementById('settings-close')?.addEventListener('click', () => this.closeSettings());
-        document.getElementById('api-key-save')?.addEventListener('click', () => this.saveApiKey());
-        document.getElementById('api-key-input')?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); this.saveApiKey(); }
-        });
-        document.getElementById('api-key-replace')?.addEventListener('click', () => this.renderSettings({ replacing: true }));
-        document.getElementById('api-key-cancel')?.addEventListener('click', () => this.renderSettings());
-        document.getElementById('api-key-remove')?.addEventListener('click', () => this.removeApiKey());
-
-        document.getElementById('checklist-dismiss')?.addEventListener('click', () => {
-            this.saveOnboarding({ checklistDismissed: true });
-            this.renderChecklist();
-        });
 
         // Resume upload
         document.getElementById('upload-resume')?.addEventListener('click', () => {
@@ -228,31 +198,6 @@ class CoverLetterApp {
 
         document.getElementById('view-resume')?.addEventListener('click', () => {
             this.viewUploadedResume();
-        });
-
-        // Skills management
-        document.getElementById('skills-input')?.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.addSkill(e.target.value.trim());
-                e.target.value = '';
-            }
-        });
-
-        // Education, experience and project management
-        document.getElementById('add-education')?.addEventListener('click', () => {
-            this.addEducation();
-        });
-
-        document.getElementById('add-experience')?.addEventListener('click', () => {
-            this.addExperience();
-        });
-
-        document.getElementById('add-project')?.addEventListener('click', () => {
-            this.addProject();
-        });
-
-        document.getElementById('add-extra')?.addEventListener('click', () => {
-            this.addExtra();
         });
 
         // Cover letter generation
@@ -286,24 +231,9 @@ class CoverLetterApp {
         });
 
         this.dialogs.setup();
-
-        // Profile field updates
-        document.getElementById('profile-name')?.addEventListener('input', (e) => {
-            this.profile.name = e.target.value;
-            this.renderChecklist();
-        });
-
-        document.getElementById('profile-contact')?.addEventListener('input', (e) => {
-            this.profile.contact = e.target.value;
-        });
-
-        document.getElementById('profile-location')?.addEventListener('input', (e) => {
-            this.profile.location = e.target.value;
-        });
-
-        document.getElementById('profile-summary')?.addEventListener('input', (e) => {
-            this.profile.summary = e.target.value;
-        });
+        this.profileEditor.setup();
+        this.settings.setup();
+        this.gettingStarted.setup();
     }
 
     // UI Management
@@ -501,16 +431,6 @@ class CoverLetterApp {
         setTimeout(() => { live.textContent = message; }, 50);
     }
 
-    // Card fields have placeholders, not <label>s: give each an accessible
-    // name from its placeholder ("Start Date", "Job Title"), minus examples.
-    labelFields(root) {
-        root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el => {
-            if (el.labels?.length || el.hasAttribute('aria-label')) return;
-            const name = el.placeholder.replace(/\s*\(e\.g\..*$/i, '').replace(/\.{3}$|…$/, '').trim();
-            if (name) el.setAttribute('aria-label', name);
-        });
-    }
-
     // Status shown inside the Profile tab (the generation status lives in the Generate tab).
     showProfileStatus(message, type = 'loading') {
         const statusEl = document.getElementById('profile-status');
@@ -542,614 +462,26 @@ class CoverLetterApp {
         }
     }
 
-    // Profile Management
+    // The Profile tab (profile/profileEditor.js) plus the upload chip and checklist.
     renderProfile() {
-        // Safely set profile field values
-        const setFieldValue = (id, value) => {
-            const element = document.getElementById(id);
-            if (element) element.value = value || '';
-        };
-        
-        setFieldValue('profile-name', this.profile.name);
-        setFieldValue('profile-contact', this.profile.contact);
-        setFieldValue('profile-location', this.profile.location);
-        setFieldValue('profile-summary', this.profile.summary);
-        
+        this.profileEditor.renderFields();
         this.renderUploadedResume();
         this.renderChecklist();
-        this.renderEducation();
-        this.renderSkills();
-        this.renderExperiences();
-        this.renderProjects();
-        this.renderExtras();
+        this.profileEditor.renderSections();
     }
 
+    // Getting Started checklist and first-run state (gettingStarted.js).
+    renderChecklist() {
+        this.gettingStarted.render();
+    }
+
+    recordFirstGeneration() {
+        this.gettingStarted.recordFirstGeneration();
+    }
+
+    // generationFlow.js re-renders the tags after the keyword check adds skills.
     renderSkills() {
-        const container = document.getElementById('skills-list');
-        if (!container) return;
-        
-        container.innerHTML = '';
-        
-        this.profile.skills.forEach((skill, index) => {
-            const skillEl = document.createElement('div');
-            skillEl.className = 'skill-tag';
-            const remove = document.createElement('button');
-            remove.className = 'skill-remove';
-            remove.dataset.index = String(index);
-            remove.setAttribute('aria-label', `Remove ${skill}`);
-            remove.textContent = '×';
-            skillEl.append(skill, remove);
-            container.appendChild(skillEl);
-        });
-
-        // Add event listeners for remove buttons
-        container.querySelectorAll('.skill-remove').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.removeSkill(parseInt(e.target.dataset.index));
-            });
-        });
-    }
-
-    addSkill(skill) {
-        if (skill && !this.profile.skills.includes(skill)) {
-            this.profile.skills.push(skill);
-            this.renderSkills();
-            this.saveData();
-        }
-    }
-
-    removeSkill(index) {
-        this.profile.skills.splice(index, 1);
-        this.renderSkills();
-        this.saveData();
-    }
-
-    renderExperiences() {
-        const container = document.getElementById('experiences-container');
-        if (!container) return;
-        
-        container.innerHTML = '';
-
-        this.profile.experiences.forEach((exp, index) => {
-            const expEl = this.createExperienceElement(exp, index);
-            container.appendChild(expEl);
-        });
-    }
-
-    createExperienceElement(exp, index) {
-        const esc = escapeHTML;
-        const div = document.createElement('div');
-        div.className = 'experience-card';
-        div.innerHTML = `
-            <div class="card-header">
-                <div class="card-title">
-                    <input type="text" placeholder="Job Title" value="${esc(exp.title)}" data-field="title" data-index="${index}">
-                    <input type="text" placeholder="Company" value="${esc(exp.company)}" data-field="company" data-index="${index}">
-                    <div class="input-row input-row-3">
-                        <input type="text" placeholder="Start Date" value="${esc(exp.start)}" data-field="start" data-index="${index}">
-                        <input type="text" placeholder="End Date" value="${esc(exp.end)}" data-field="end" data-index="${index}">
-                        <input type="text" placeholder="Location" value="${esc(exp.location)}" data-field="location" data-index="${index}">
-                    </div>
-                    <textarea placeholder="Role description (what you did in this role)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${esc(exp.description)}</textarea>
-                </div>
-                <div class="card-actions">
-                    <label class="must-include-label">
-                        <input type="checkbox" class="must-include-exp" data-index="${index}" ${exp.mustInclude ? 'checked' : ''}>
-                        Must include
-                    </label>
-                    <button class="btn btn-secondary btn-sm add-bullet" data-index="${index}">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add achievement
-                    </button>
-                    <button class="btn btn-danger btn-sm remove-experience" data-index="${index}">Remove</button>
-                </div>
-            </div>
-            <div class="bullet-list" data-index="${index}">
-                <label>Key achievements</label>
-                ${(exp.bullets || []).map((bullet, bulletIndex) => `
-                    <div class="bullet-item">
-                        <input type="text" placeholder="Specific achievement with metrics if possible..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
-                        <button class="bullet-remove" data-exp-index="${index}" data-bullet-index="${bulletIndex}" aria-label="Remove achievement ${bulletIndex + 1}">&times;</button>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-
-        // Add event listeners
-        div.querySelectorAll('input[data-field], textarea[data-field]').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const field = e.target.dataset.field;
-                const expIndex = parseInt(e.target.dataset.index);
-                this.profile.experiences[expIndex][field] = e.target.value;
-                this.saveData();
-            });
-        });
-
-        div.querySelectorAll('input[data-bullet-index]').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const expIndex = index;
-                const bulletIndex = parseInt(e.target.dataset.bulletIndex);
-                this.profile.experiences[expIndex].bullets[bulletIndex] = e.target.value;
-                this.saveData();
-            });
-        });
-
-        div.querySelector('.add-bullet').addEventListener('click', () => {
-            this.addExperienceBullet(index);
-        });
-
-        div.querySelector('.remove-experience').addEventListener('click', () => {
-            this.removeExperience(index);
-        });
-
-        div.querySelector('.must-include-exp').addEventListener('change', (e) => {
-            this.profile.experiences[index].mustInclude = e.target.checked;
-            this.saveData();
-        });
-
-        div.querySelectorAll('.bullet-remove').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const expIndex = parseInt(e.target.dataset.expIndex);
-                const bulletIndex = parseInt(e.target.dataset.bulletIndex);
-                this.removeExperienceBullet(expIndex, bulletIndex);
-            });
-        });
-
-        this.labelFields(div);
-        return div;
-    }
-
-    // Education was a single object before multi-entry support; convert
-    // legacy saves to a one-element array so nothing is lost.
-    migrateEducation(education) {
-        if (Array.isArray(education)) return education;
-        if (!education || typeof education !== 'object') return [];
-        const hasContent = Object.values(education).some(v => v && String(v).trim());
-        if (!hasContent) return [];
-        return [{
-            id: Date.now().toString(),
-            institution: education.university || '',
-            degreeType: education.degreeType || '',
-            major: education.major || '',
-            minor: education.minor || '',
-            location: education.location || '',
-            start: education.start || '',
-            end: education.end || '',
-            gpa: education.gpa || '',
-            honors: education.honors || '',
-            coursework: education.coursework || ''
-        }];
-    }
-
-    renderEducation() {
-        const container = document.getElementById('education-container');
-        if (!container) return;
-
-        container.innerHTML = '';
-
-        this.profile.education.forEach((edu, index) => {
-            container.appendChild(this.createEducationElement(edu, index));
-        });
-    }
-
-    createEducationElement(edu, index) {
-        const esc = escapeHTML;
-        const div = document.createElement('div');
-        div.className = 'experience-card';
-        div.innerHTML = `
-            <div class="card-header">
-                <div class="card-title">
-                    <input type="text" placeholder="Institution (e.g., Stanford University)" value="${esc(edu.institution)}" data-field="institution" data-index="${index}">
-                    <div class="input-row input-row-2">
-                        <input type="text" placeholder="Degree Type (e.g., Bachelor of Science)" value="${esc(edu.degreeType)}" data-field="degreeType" data-index="${index}">
-                        <input type="text" placeholder="Major (e.g., Computer Science)" value="${esc(edu.major)}" data-field="major" data-index="${index}">
-                    </div>
-                    <div class="input-row input-row-2">
-                        <input type="text" placeholder="Minor (optional)" value="${esc(edu.minor)}" data-field="minor" data-index="${index}">
-                        <input type="text" placeholder="Location (e.g., Stanford, CA)" value="${esc(edu.location)}" data-field="location" data-index="${index}">
-                    </div>
-                    <div class="input-row input-row-3">
-                        <input type="text" placeholder="Start Year" value="${esc(edu.start)}" data-field="start" data-index="${index}">
-                        <input type="text" placeholder="End Year" value="${esc(edu.end)}" data-field="end" data-index="${index}">
-                        <input type="text" placeholder="GPA (e.g., 3.8/4.0)" value="${esc(edu.gpa)}" data-field="gpa" data-index="${index}">
-                    </div>
-                    <div class="input-row input-row-2">
-                        <input type="text" placeholder="Honors (e.g., Dean's List, Magna Cum Laude)" value="${esc(edu.honors)}" data-field="honors" data-index="${index}">
-                        <input type="text" placeholder="Relevant Coursework" value="${esc(edu.coursework)}" data-field="coursework" data-index="${index}">
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <button class="btn btn-danger btn-sm remove-education" data-index="${index}">Remove</button>
-                </div>
-            </div>
-        `;
-
-        div.querySelectorAll('input[data-field]').forEach(input => {
-            input.addEventListener('input', (e) => {
-                this.profile.education[index][e.target.dataset.field] = e.target.value;
-                this.saveData();
-            });
-        });
-
-        div.querySelector('.remove-education').addEventListener('click', () => {
-            this.removeEducation(index);
-        });
-
-        this.labelFields(div);
-        return div;
-    }
-
-    addEducation() {
-        this.profile.education.push({
-            id: Date.now().toString(),
-            institution: '',
-            degreeType: '',
-            major: '',
-            minor: '',
-            location: '',
-            start: '',
-            end: '',
-            gpa: '',
-            honors: '',
-            coursework: ''
-        });
-        this.renderEducation();
-        this.saveData();
-    }
-
-    removeEducation(index) {
-        this.profile.education.splice(index, 1);
-        this.renderEducation();
-        this.saveData();
-    }
-
-    addExperience() {
-        const newExp = {
-            id: Date.now().toString(),
-            title: '',
-            company: '',
-            start: '',
-            end: '',
-            location: '',
-            description: '',
-            bullets: [],
-            mustInclude: false
-        };
-        this.profile.experiences.push(newExp);
-        this.renderExperiences();
-        this.saveData();
-    }
-
-    removeExperience(index) {
-        this.profile.experiences.splice(index, 1);
-        this.renderExperiences();
-        this.saveData();
-    }
-
-    addExperienceBullet(expIndex) {
-        if (!this.profile.experiences[expIndex].bullets) {
-            this.profile.experiences[expIndex].bullets = [];
-        }
-        this.profile.experiences[expIndex].bullets.push('');
-        this.renderExperiences();
-        this.saveData();
-    }
-
-    removeExperienceBullet(expIndex, bulletIndex) {
-        this.profile.experiences[expIndex].bullets.splice(bulletIndex, 1);
-        this.renderExperiences();
-        this.saveData();
-    }
-
-    renderProjects() {
-        const container = document.getElementById('projects-container');
-        if (!container) return;
-        
-        container.innerHTML = '';
-
-        this.profile.projects.forEach((project, index) => {
-            const projectEl = this.createProjectElement(project, index);
-            container.appendChild(projectEl);
-        });
-    }
-
-    createProjectElement(project, index) {
-        const esc = escapeHTML;
-        const div = document.createElement('div');
-        div.className = 'project-card';
-        div.innerHTML = `
-            <div class="card-header">
-                <div class="card-title">
-                    <input type="text" placeholder="Project Name" value="${esc(project.name)}" data-field="name" data-index="${index}">
-                    <textarea placeholder="Project description (what it does, technologies used)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${esc(project.description)}</textarea>
-                </div>
-                <div class="card-actions">
-                    <label class="must-include-label">
-                        <input type="checkbox" class="must-include-proj" data-index="${index}" ${project.mustInclude ? 'checked' : ''}>
-                        Must include
-                    </label>
-                    <button class="btn btn-secondary btn-sm add-bullet" data-index="${index}">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        Add detail
-                    </button>
-                    <button class="btn btn-danger btn-sm remove-project" data-index="${index}">Remove</button>
-                </div>
-            </div>
-            <div class="bullet-list" data-index="${index}">
-                <label>Key details / achievements</label>
-                ${(project.bullets || []).map((bullet, bulletIndex) => `
-                    <div class="bullet-item">
-                        <input type="text" placeholder="Technical detail, impact, or achievement..." value="${esc(bullet)}" data-bullet-index="${bulletIndex}">
-                        <button class="bullet-remove" data-proj-index="${index}" data-bullet-index="${bulletIndex}" aria-label="Remove detail ${bulletIndex + 1}">&times;</button>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-
-        // Add event listeners
-        div.querySelectorAll('input[data-field], textarea[data-field]').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const field = e.target.dataset.field;
-                this.profile.projects[index][field] = e.target.value;
-                this.saveData();
-            });
-        });
-
-        div.querySelectorAll('input[data-bullet-index]').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const bulletIndex = parseInt(e.target.dataset.bulletIndex);
-                this.profile.projects[index].bullets[bulletIndex] = e.target.value;
-                this.saveData();
-            });
-        });
-
-        div.querySelector('.add-bullet').addEventListener('click', () => {
-            this.addProjectBullet(index);
-        });
-
-        div.querySelector('.remove-project').addEventListener('click', () => {
-            this.removeProject(index);
-        });
-
-        div.querySelector('.must-include-proj').addEventListener('change', (e) => {
-            this.profile.projects[index].mustInclude = e.target.checked;
-            this.saveData();
-        });
-
-        div.querySelectorAll('.bullet-remove').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const projIndex = parseInt(e.target.dataset.projIndex);
-                const bulletIndex = parseInt(e.target.dataset.bulletIndex);
-                this.removeProjectBullet(projIndex, bulletIndex);
-            });
-        });
-
-        this.labelFields(div);
-        return div;
-    }
-
-    addProject() {
-        const newProject = {
-            id: Date.now().toString(),
-            name: '',
-            description: '',
-            bullets: [],
-            mustInclude: false
-        };
-        this.profile.projects.push(newProject);
-        this.renderProjects();
-        this.saveData();
-    }
-
-    removeProject(index) {
-        this.profile.projects.splice(index, 1);
-        this.renderProjects();
-        this.saveData();
-    }
-
-    addProjectBullet(projIndex) {
-        if (!this.profile.projects[projIndex].bullets) {
-            this.profile.projects[projIndex].bullets = [];
-        }
-        this.profile.projects[projIndex].bullets.push('');
-        this.renderProjects();
-        this.saveData();
-    }
-
-    removeProjectBullet(projIndex, bulletIndex) {
-        this.profile.projects[projIndex].bullets.splice(bulletIndex, 1);
-        this.renderProjects();
-        this.saveData();
-    }
-
-    // Extras Management
-    renderExtras() {
-        const container = document.getElementById('extras-container');
-        if (!container) return;
-        
-        container.innerHTML = '';
-
-        this.profile.extras.forEach((extra, index) => {
-            const extraEl = this.createExtraElement(extra, index);
-            container.appendChild(extraEl);
-        });
-    }
-
-    createExtraElement(extra, index) {
-        const esc = escapeHTML;
-        const div = document.createElement('div');
-        div.className = 'experience-card';
-        div.innerHTML = `
-            <div class="card-header">
-                <div class="card-title">
-                    <input type="text" placeholder="Title/Type (e.g., Research Assistant, Certification)" value="${esc(extra.title)}" data-field="title" data-index="${index}">
-                    <input type="text" placeholder="Organization/Institution" value="${esc(extra.organization)}" data-field="organization" data-index="${index}">
-                    <div class="input-row input-row-3">
-                        <select data-field="type" data-index="${index}" aria-label="Type">
-                            ${CoverLetterApp.EXTRA_TYPES.map(([value, label]) =>
-                                `<option value="${value}" ${extra.type === value ? 'selected' : ''}>${label}</option>`
-                            ).join('')}
-                        </select>
-                        <input type="text" placeholder="Start Date" value="${esc(extra.start)}" data-field="start" data-index="${index}">
-                        <input type="text" placeholder="End Date (or 'Present')" value="${esc(extra.end)}" data-field="end" data-index="${index}">
-                    </div>
-                    <textarea placeholder="Description of the experience, achievement, or certification..." style="margin-top: 0.5rem; min-height: 80px;" data-field="description" data-index="${index}">${esc(extra.description)}</textarea>
-                </div>
-                <div class="card-actions">
-                    <button class="btn btn-danger btn-sm remove-extra" data-index="${index}">Remove</button>
-                </div>
-            </div>
-        `;
-
-        // Add event listeners
-        div.querySelectorAll('input[data-field], textarea[data-field], select[data-field]').forEach(input => {
-            input.addEventListener('input', (e) => {
-                const field = e.target.dataset.field;
-                const extraIndex = parseInt(e.target.dataset.index);
-                this.profile.extras[extraIndex][field] = e.target.value;
-                this.saveData();
-            });
-            
-            input.addEventListener('change', (e) => {
-                const field = e.target.dataset.field;
-                const extraIndex = parseInt(e.target.dataset.index);
-                this.profile.extras[extraIndex][field] = e.target.value;
-                this.saveData();
-            });
-        });
-
-        div.querySelector('.remove-extra').addEventListener('click', () => {
-            this.removeExtra(index);
-        });
-
-        this.labelFields(div);
-        return div;
-    }
-
-    addExtra() {
-        const newExtra = {
-            id: Date.now().toString(),
-            title: '',
-            organization: '',
-            type: 'program',
-            start: '',
-            end: '',
-            description: ''
-        };
-        this.profile.extras.push(newExtra);
-        this.renderExtras();
-        this.saveData();
-    }
-
-    removeExtra(index) {
-        this.profile.extras.splice(index, 1);
-        this.renderExtras();
-        this.saveData();
-    }
-
-    saveProfile() {
-        this.saveData();
-                this.showStatus('Profile saved successfully!', 'success');
-                setTimeout(() => {
-                    const statusEl = document.getElementById('generation-status');
-                    if (statusEl) {
-                        statusEl.textContent = '';
-                    }
-                }, 3000);
-    }
-
-    // Settings / API key
-    // The key value lives in chrome.storage.local and is only ever read back
-    // to send to OpenAI; the UI shows the last four characters.
-    openSettings() {
-        this.renderSettings();
-        this.dialogs.open('settings-modal');
-        if (!this.apiKey) document.getElementById('api-key-input')?.focus();
-    }
-
-    closeSettings() {
-        this.dialogs.close('settings-modal');
-        const input = document.getElementById('api-key-input');
-        if (input) input.value = '';
-    }
-
-    renderSettings({ replacing = false } = {}) {
-        const saved = document.getElementById('api-key-saved');
-        const entry = document.getElementById('api-key-entry');
-        const cancel = document.getElementById('api-key-cancel');
-        const input = document.getElementById('api-key-input');
-        if (!saved || !entry) return;
-
-        const hasKey = !!(this.apiKey && this.apiKey.value);
-        saved.classList.toggle('hidden', !hasKey || replacing);
-        entry.classList.toggle('hidden', hasKey && !replacing);
-        cancel?.classList.toggle('hidden', !(hasKey && replacing));
-        if (input) input.value = '';
-        if (replacing) input?.focus();
-
-        if (hasKey) {
-            const masked = document.getElementById('api-key-masked');
-            if (masked) masked.textContent = `sk-••••••••••••${this.apiKey.last4}`;
-            this.renderApiKeyStatus();
-        }
-    }
-
-    renderApiKeyStatus(override) {
-        const el = document.getElementById('api-key-status');
-        if (!el) return;
-        const status = override || this.describeApiKeyStatus();
-        el.textContent = status.text;
-        el.className = `api-key-status${status.kind ? ` ${status.kind}` : ''}`;
-    }
-
-    describeApiKeyStatus() {
-        if (!this.apiKey) return { text: '', kind: '' };
-        if (this.apiKey.verifiedAt) {
-            return { text: `Verified ${new Date(this.apiKey.verifiedAt).toLocaleDateString()}`, kind: 'ok' };
-        }
-        if (this.apiKey.verifyError) return { text: this.apiKey.verifyError, kind: 'error' };
-        if (this.apiKey.verifyNote) return { text: this.apiKey.verifyNote, kind: '' };
-        return { text: `Saved ${new Date(this.apiKey.savedAt).toLocaleDateString()} · not verified yet`, kind: '' };
-    }
-
-    async saveApiKey() {
-        const input = document.getElementById('api-key-input');
-        const value = (input?.value || '').trim();
-        if (!value) { this.showError('Paste your API key first.', false); return; }
-        if (!/^sk-[A-Za-z0-9_-]{10,}$/.test(value)) {
-            this.showError('That does not look like an OpenAI API key (they start with "sk-").', false);
-            return;
-        }
-
-        this.apiKey = { value, last4: value.slice(-4), savedAt: new Date().toISOString() };
-        await this.persistApiKey();
-        if (input) input.value = '';
-        this.renderSettings();
-        this.renderChecklist();
-
-        this.renderApiKeyStatus({ text: 'Verifying…', kind: '' });
-        await this.verifyApiKey();
-        this.renderApiKeyStatus();
-        this.renderChecklist();
-    }
-
-    async removeApiKey() {
-        this.apiKey = null;
-        try {
-            await chrome.storage.local.remove('apiKey');
-        } catch (error) {
-            console.error('Error removing API key:', error);
-        }
-        this.renderSettings();
-        this.renderChecklist();
-    }
-
-    async persistApiKey() {
-        try {
-            await chrome.storage.local.set({ apiKey: this.apiKey });
-        } catch (error) {
-            console.error('Error saving API key:', error);
-        }
+        this.profileEditor.renderSkills();
     }
 
     // The generation pipeline (extension/generation/) is an ES module; app.js is
@@ -1159,160 +491,10 @@ class CoverLetterApp {
         return this._generation;
     }
 
-    // Makes one tiny OpenAI request with the key. A network failure is
-    // reported as such, not treated as an invalid key.
-    async verifyApiKey() {
-        if (!this.apiKey) return;
-        try {
-            const { verifyKey } = await this.generation();
-            const data = await verifyKey(this.apiKey.value);
-            this.apiKey = { ...this.apiKey, verifiedAt: new Date().toISOString(), verifyError: null, verifyNote: null, model: data.model || null };
-        } catch (error) {
-            if (error.status === 401) {
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyNote: null, verifyError: error.message };
-            } else {
-                this.apiKey = { ...this.apiKey, verifiedAt: null, verifyError: null, verifyNote: `Saved, not verified: ${error.message}` };
-            }
-        }
-        await this.persistApiKey();
-    }
-
     requireApiKeyForGeneration() {
         if (this.apiKey?.value) return true;
         this.showError('Add your OpenAI API key in Settings (gear icon) before generating.', false);
         return false;
-    }
-
-    // Onboarding
-    // First run = no onboarding record yet (installed before this feature) or
-    // the background script seeded { seen: false } on install.
-    maybeStartOnboarding() {
-        const seen = this.onboarding && this.onboarding.seen;
-        if (!seen) this.startTour();
-    }
-
-    async saveOnboarding(patch) {
-        this.onboarding = { ...(this.onboarding || {}), ...patch };
-        try {
-            await chrome.storage.local.set({ onboarding: this.onboarding });
-        } catch (error) {
-            console.error('Error saving onboarding state:', error);
-        }
-    }
-
-    markOnboardingSeen(skipped) {
-        return this.saveOnboarding({ seen: true, completedAt: new Date().toISOString(), skipped: !!skipped });
-    }
-
-    // Getting Started checklist: ticks itself from live state and hides once
-    // everything is done or the user dismisses it.
-    checklistState() {
-        return {
-            resume: !!this.uploadedResume,
-            name: !!(this.profile.name && this.profile.name.trim()),
-            key: !!(this.apiKey && this.apiKey.value),
-            generated: !!(this.onboarding && this.onboarding.firstGeneratedAt)
-        };
-    }
-
-    renderChecklist() {
-        const card = document.getElementById('getting-started');
-        if (!card) return;
-        const state = this.checklistState();
-        const allDone = Object.values(state).every(Boolean);
-        const dismissed = !!(this.onboarding && this.onboarding.checklistDismissed);
-
-        if (allDone || dismissed) {
-            card.classList.add('hidden');
-            return;
-        }
-
-        card.querySelectorAll('li[data-item]').forEach(li => {
-            li.classList.toggle('done', !!state[li.dataset.item]);
-        });
-
-        const hint = document.getElementById('checklist-key-hint');
-        if (hint) {
-            if (this.apiKey && this.apiKey.verifyError) hint.textContent = `— ${this.apiKey.verifyError}`;
-            else if (this.apiKey && !this.apiKey.verifiedAt) hint.textContent = '— saved, not verified yet';
-            else hint.textContent = '';
-        }
-        card.classList.remove('hidden');
-    }
-
-    recordFirstGeneration() {
-        if (this.onboarding && this.onboarding.firstGeneratedAt) return;
-        this.saveOnboarding({ firstGeneratedAt: new Date().toISOString() });
-        this.renderChecklist();
-    }
-
-    tourSteps() {
-        return [
-            {
-                target: null,
-                title: 'Welcome to Resume Studio',
-                body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
-                       <ol>
-                         <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
-                         <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
-                         <li><strong>Paste a job description</strong> and generate.</li>
-                       </ol>
-                       <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
-            },
-            {
-                target: '#open-settings',
-                title: 'Add your OpenAI API key',
-                placement: 'bottom',
-                body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p><p>You pay OpenAI directly for what you generate, under OpenAI\'s usage policies; Resume Studio charges nothing.</p>'
-            },
-            {
-                target: '#upload-resume',
-                tab: 'profile',
-                title: 'Start with your resume',
-                placement: 'bottom',
-                body: '<p>Upload a PDF and your name, contact details, education, skills, experience and projects are filled in for you. Nothing is sent to the AI — parsing happens right here in the browser.</p><p>Upload a different resume later and only new items are added; nothing you entered is removed.</p>'
-            },
-            {
-                target: '#skills-input',
-                tab: 'profile',
-                title: 'List every skill you have',
-                placement: 'bottom',
-                body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
-            },
-            {
-                target: '#add-experience',
-                tab: 'profile',
-                title: 'Add and edit anything',
-                placement: 'bottom',
-                body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to tell the generator it matters most; it is a strong hint, not a guarantee.</p>'
-            },
-            {
-                target: '#job-text',
-                tab: 'generate',
-                title: 'Paste the job description',
-                placement: 'right',
-                body: '<p>Include the title, company and requirements. The more of the posting you paste, the more precisely the documents are tailored.</p>'
-            },
-            {
-                target: '.generation-buttons',
-                tab: 'generate',
-                title: 'Generate and download',
-                placement: 'top',
-                body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>Read every document before you send it: AI can get things wrong.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
-            }
-        ];
-    }
-
-    startTour() {
-        this.hideError();
-        OnboardingTour.start(this.tourSteps(), {
-            switchTab: (tab) => this.switchTab(tab),
-            onFinish: ({ skipped }) => {
-                this.markOnboardingSeen(skipped);
-                this.switchTab('profile');
-                window.scrollTo({ top: 0 });
-            }
-        });
     }
 
     // Company research cache
@@ -1718,9 +900,9 @@ class CoverLetterApp {
 // Initialize the app when DOM is loaded
 function initApp() {
     try {
-        new CoverLetterApp();
+        new ResumeStudioApp();
     } catch (error) {
-        console.error('Failed to initialize Cover Letter App:', error);
+        console.error('Failed to initialize Resume Studio:', error);
         // Retry after a short delay
         setTimeout(initApp, 1000);
     }
@@ -1732,5 +914,3 @@ if (document.readyState === 'loading') {
     // DOM is already loaded
     initApp();
 }
-
-//note for current version

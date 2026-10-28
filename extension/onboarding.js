@@ -174,3 +174,59 @@ function start(steps, opts = {}) {
 }
 
 export const OnboardingTour = { start, stop: () => finish(true), isActive: () => !!state };
+
+// The tour Resume Studio shows on first run and from the ? button.
+export const TOUR_STEPS = [
+    {
+        target: null,
+        title: 'Welcome to Resume Studio',
+        body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
+               <ol>
+                 <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
+                 <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
+                 <li><strong>Paste a job description</strong> and generate.</li>
+               </ol>
+               <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
+    },
+    {
+        target: '#open-settings',
+        title: 'Add your OpenAI API key',
+        placement: 'bottom',
+        body: '<p>Generating documents uses your own OpenAI account. Open Settings, paste a key from <code>platform.openai.com/api-keys</code>, and it is stored only in this browser. You can replace it later but never view it.</p><p>You pay OpenAI directly for what you generate, under OpenAI\'s usage policies; Resume Studio charges nothing.</p>'
+    },
+    {
+        target: '#upload-resume',
+        tab: 'profile',
+        title: 'Start with your resume',
+        placement: 'bottom',
+        body: '<p>Upload a PDF and your name, contact details, education, skills, experience and projects are filled in for you. Nothing is sent to the AI — parsing happens right here in the browser.</p><p>Upload a different resume later and only new items are added; nothing you entered is removed.</p>'
+    },
+    {
+        target: '#skills-input',
+        tab: 'profile',
+        title: 'List every skill you have',
+        placement: 'bottom',
+        body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
+    },
+    {
+        target: '#add-experience',
+        tab: 'profile',
+        title: 'Add and edit anything',
+        placement: 'bottom',
+        body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to tell the generator it matters most; it is a strong hint, not a guarantee.</p>'
+    },
+    {
+        target: '#job-text',
+        tab: 'generate',
+        title: 'Paste the job description',
+        placement: 'right',
+        body: '<p>Include the title, company and requirements. The more of the posting you paste, the more precisely the documents are tailored.</p>'
+    },
+    {
+        target: '.generation-buttons',
+        tab: 'generate',
+        title: 'Generate and download',
+        placement: 'top',
+        body: '<p>Cover letters are strategic pitches; resumes are one page and ATS-friendly. Both preview here and download as PDF.</p><p>Read every document before you send it: AI can get things wrong.</p><p>You can replay this tour any time with the <strong>?</strong> button in the header.</p>'
+    }
+];

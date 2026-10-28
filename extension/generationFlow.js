@@ -5,7 +5,7 @@
 // differs: an extra input check, a step before the keyword check, the
 // generation itself, and its labels.
 //
-// The flow talks to the app (CoverLetterApp) for UI and state: status
+// The flow talks to the app (ResumeStudioApp) for UI and state: status
 // messages, the error dialog, the progress strip, the keyword dialog,
 // storage and the generation modules.
 import { PAGE_PX, measureResumeHeight, measureLayout } from './preview/measure.js';

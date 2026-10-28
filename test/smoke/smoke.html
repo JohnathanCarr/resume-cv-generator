@@ -32,7 +32,7 @@
   const store = {
     profile,
     uploadedResume: { name: 'resume_sans_title_first.pdf', size: bytes.length, uploadedAt: '2026-09-01T00:00:00.000Z', dataBase64: btoa(binary) },
-    onboarding: { seen: true, installedAt: '2026-09-01T00:00:00.000Z', completedAt: '2026-09-01T00:00:00.000Z', checklistDismissed: true, firstGeneratedAt: '2026-09-01T00:00:00.000Z' },
+    onboarding: { seen: true, installedAt: '2026-09-01T00:00:00.000Z', completedAt: '2026-09-01T00:00:00.000Z' },
     apiKey: { value: 'sk-smoke-test', last4: 'test', savedAt: '2026-09-01T00:00:00.000Z', verifiedAt: '2026-09-01T00:00:00.000Z' },
     researchEnabled: false
   };
@@ -74,6 +74,9 @@
     stub.requests.push(name || String(url));
     await new Promise(r => setTimeout(r, 300));   // a model call takes time
     if (stub.failNext) { stub.failNext = false; return new Response(JSON.stringify({ error: { message: 'Stubbed server error' } }), { status: 500 }); }
+    if (!name && body.messages?.[0]?.content === 'Reply with the single word OK.') {
+      return new Response(JSON.stringify({ model: body.model, choices: [{ finish_reason: 'stop', message: { content: 'OK' } }], usage: {} }), { status: 200 });
+    }
     const answer = answers[name];
     if (!answer) return new Response(JSON.stringify({ error: { message: `No stub for ${name || url}` } }), { status: 400 });
     return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(answer()) } }], usage: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -157,6 +160,13 @@
     assert(progressHidden(), 'progress strip visible before any generation');
   });
 
+  await check('checklist shows what is left (first document not generated yet)', async () => {
+    assert(visible('getting-started'), 'checklist hidden');
+    const done = (item) => $(`#getting-started li[data-item="${item}"]`).classList.contains('done');
+    assert(done('resume') && done('name') && done('key'), 'resume, name or key not ticked');
+    assert(!done('generated'), 'generated ticked before any generation');
+  });
+
   await check('theme toggles and comes back', async () => {
     const before = document.documentElement.dataset.theme;
     $('#theme-toggle').click();
@@ -219,6 +229,8 @@
     const line = infos.find(l => l.startsWith('[timing] resume done'));
     assert(line && /tailor \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
     pageHeight = measurePage();
+    assert(!visible('getting-started'), 'checklist still shown after the first document');
+    assert(store.onboarding.firstGeneratedAt, 'first generation not recorded');
   });
 
   await check('resume PDF: file name dialog, then print view', async () => {
@@ -313,6 +325,145 @@
     assert(store.baselineResume?.resume, 'no baseline snapshot saved');
     const after = document.querySelectorAll('#experiences-container .experience-card').length;
     assert(after > before, `no experience merged in (${before} → ${after})`);
+  });
+
+  const fire = (el, type, init = {}) => el.dispatchEvent(type === 'keypress' || type === 'keydown'
+    ? new KeyboardEvent(type, { bubbles: true, cancelable: true, ...init })
+    : new Event(type, { bubbles: true }));
+  const type = (el, value) => { el.value = value; fire(el, 'input'); };
+  const cards = (id) => [...document.querySelectorAll(`#${id} > div`)];
+
+  await check('profile: add, edit and remove each kind of entry', async () => {
+    $('[data-tab="profile"]').click();
+
+    const exps = cards('experiences-container').length;
+    $('#add-experience').click();
+    let card = cards('experiences-container').at(-1);
+    assert(cards('experiences-container').length === exps + 1, 'no experience card added');
+    type(card.querySelector('[data-field="title"]'), 'Staff Engineer');
+    type(card.querySelector('[data-field="company"]'), 'Acme');
+    assert(store.profile.experiences.at(-1).title === 'Staff Engineer', 'experience title not saved');
+    card.querySelector('.add-bullet').click();
+    card = cards('experiences-container').at(-1);
+    type(card.querySelector('input[data-bullet-index="0"]'), 'Led the platform team');
+    assert(store.profile.experiences.at(-1).bullets[0] === 'Led the platform team', 'bullet not saved');
+    const must = card.querySelector('.must-include-exp');
+    must.checked = true; fire(must, 'change');
+    assert(store.profile.experiences.at(-1).mustInclude === true, 'Must include not saved');
+    card.querySelector('.bullet-remove').click();
+    assert(store.profile.experiences.at(-1).bullets.length === 0, 'bullet not removed');
+    cards('experiences-container').at(-1).querySelector('.remove-experience').click();
+    assert(cards('experiences-container').length === exps && store.profile.experiences.length === exps, 'experience not removed');
+
+    const edus = cards('education-container').length;
+    $('#add-education').click();
+    type(cards('education-container').at(-1).querySelector('[data-field="institution"]'), 'Night School');
+    assert(store.profile.education.at(-1).institution === 'Night School', 'education not saved');
+    cards('education-container').at(-1).querySelector('.remove-education').click();
+    assert(store.profile.education.length === edus, 'education not removed');
+
+    const projs = cards('projects-container').length;
+    $('#add-project').click();
+    card = cards('projects-container').at(-1);
+    type(card.querySelector('[data-field="name"]'), 'tidepool');
+    card.querySelector('.add-bullet').click();
+    type(cards('projects-container').at(-1).querySelector('input[data-bullet-index="0"]'), 'A job queue');
+    assert(store.profile.projects.at(-1).name === 'tidepool' && store.profile.projects.at(-1).bullets[0] === 'A job queue', 'project not saved');
+    cards('projects-container').at(-1).querySelector('.remove-project').click();
+    assert(store.profile.projects.length === projs, 'project not removed');
+
+    const extras = cards('extras-container').length;
+    $('#add-extra').click();
+    card = cards('extras-container').at(-1);
+    assert(store.profile.extras.at(-1).type === 'program', 'new extra not a program');
+    const select = card.querySelector('select[data-field="type"]');
+    assert(select.options.length === 8, `${select.options.length} extra types`);
+    select.value = 'award'; fire(select, 'change');
+    assert(store.profile.extras.at(-1).type === 'award', 'extra type not saved');
+    card.querySelector('.remove-extra').click();
+    assert(store.profile.extras.length === extras, 'extra not removed');
+  });
+
+  await check('profile: skills, name autosave and Save profile', async () => {
+    const input = $('#skills-input');
+    input.value = 'Erlang';
+    fire(input, 'keypress', { key: 'Enter' });
+    assert(store.profile.skills.includes('Erlang'), 'skill not saved');
+    const tag = [...document.querySelectorAll('#skills-list .skill-tag')].find(t => t.firstChild.textContent === 'Erlang');
+    assert(tag, 'skill tag missing');
+    tag.querySelector('.skill-remove').click();
+    assert(!store.profile.skills.includes('Erlang'), 'skill not removed');
+
+    const original = store.profile.name;
+    type($('#profile-name'), 'Maria L. Garcia');
+    await waitFor('name autosave', () => store.profile.name === 'Maria L. Garcia', 3000);
+    type($('#profile-name'), original);
+    $('#save-profile').click();
+    assert(status() === 'Profile saved successfully!', `status was "${status()}"`);
+    await waitFor('name saved back', () => store.profile.name === original, 3000);
+  });
+
+  await check('settings: replace, cancel, remove, invalid and valid key', async () => {
+    $('#open-settings').click();
+    await waitFor('settings', () => visible('settings-modal'));
+    assert(visible('api-key-saved') && !visible('api-key-entry'), 'saved key not shown');
+    assert($('#api-key-masked').textContent === 'sk-••••••••••••test', `masked as ${$('#api-key-masked').textContent}`);
+    assert(/^Verified /.test($('#api-key-status').textContent), `status ${$('#api-key-status').textContent}`);
+    $('#api-key-replace').click();
+    assert(visible('api-key-entry') && !visible('api-key-saved') && visible('api-key-cancel'), 'replace view wrong');
+    $('#api-key-cancel').click();
+    assert(visible('api-key-saved'), 'cancel did not go back');
+
+    $('#api-key-remove').click();
+    await waitFor('key removed', () => !('apiKey' in store) && visible('api-key-entry'));
+    assert(!visible('api-key-cancel'), 'cancel shown with no key');
+    $('#settings-close').click();
+    await waitFor('settings closed', () => !visible('settings-modal'));
+    assert(visible('getting-started') && !$('#getting-started li[data-item="key"]').classList.contains('done'), 'checklist did not come back without a key');
+    $('[data-tab="generate"]').click();
+    $('#generate-btn').click();
+    await waitFor('missing key error', () => visible('error-modal') && /Add your OpenAI API key/.test(errorText()));
+    $('#error-close').click();
+
+    $('#open-settings').click();
+    await waitFor('settings', () => visible('settings-modal'));
+    $('#api-key-input').value = 'not-a-key';
+    $('#api-key-save').click();
+    await waitFor('invalid key error', () => visible('error-modal') && /does not look like an OpenAI API key/.test(errorText()));
+    $('#error-close').click();
+    await waitFor('error closed', () => !visible('error-modal'));
+    $('#api-key-input').value = 'sk-smoke-replacement-key';
+    fire($('#api-key-input'), 'keydown', { key: 'Enter' });
+    await waitFor('key verified', () => store.apiKey?.last4 === '-key' && store.apiKey.verifiedAt, 5000);
+    await waitFor('status shows it', () => visible('api-key-saved') && /^Verified /.test($('#api-key-status').textContent));
+    $('#settings-close').click();
+    await waitFor('settings closed', () => !visible('settings-modal'));
+    assert(!visible('getting-started'), 'checklist still shown with everything done');
+  });
+
+  await check('checklist can be dismissed', async () => {
+    store.onboarding.firstGeneratedAt = null;   // bring it back
+    $('[data-tab="generate"]').click();
+    $('[data-tab="profile"]').click();
+    assert(visible('getting-started'), 'checklist not shown');
+    $('#checklist-dismiss').click();
+    assert(!visible('getting-started') && store.onboarding.checklistDismissed === true, 'checklist not dismissed');
+  });
+
+  await check('guided tour: Next through every step, then Finish', async () => {
+    $('#help-tour').click();
+    await waitFor('tour', () => $('.tour-tooltip'));
+    const titles = [];
+    for (let i = 0; i < 10 && $('.tour-tooltip'); i++) {
+      titles.push($('.tour-title').textContent);
+      assert($('.tour-progress').textContent === `${i + 1} / 7`, `progress ${$('.tour-progress').textContent}`);
+      $('.tour-next').click();
+      await sleep(100);
+    }
+    assert(titles.length === 7, `${titles.length} steps`);
+    assert(titles[0] === 'Welcome to Resume Studio' && titles[6] === 'Generate and download', `titles ${titles.join(' | ')}`);
+    assert($('#tab-profile').getAttribute('aria-selected') === 'true', 'did not return to the Profile tab');
+    assert(store.onboarding.seen === true && store.onboarding.skipped === false, 'tour completion not saved');
   });
 
   await check('guided tour opens and Escape exits', async () => {

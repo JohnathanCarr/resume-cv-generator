@@ -94,7 +94,9 @@ function resumeDocToSchema(doc) {
     projects: (r.projects || []).map(p => ({ name: [str(p.name), str(p.description)].filter(Boolean).join(' | '), link: str(p.link) || null, bullets: p.bullets || [] })),
     programs: (r.extras || []).map(extraLine).filter(Boolean),
     // Each programs line's extra type, so the section can take a standard heading.
-    extraTypes: (r.extras || []).filter(x => extraLine(x)).map(x => str(x.type) || 'other')
+    extraTypes: (r.extras || []).filter(x => extraLine(x)).map(x => str(x.type) || 'other'),
+    // Composed resumes (compose.js) choose their section order; null keeps the template's.
+    sectionOrder: Array.isArray(r.sectionOrder) ? r.sectionOrder : null
   };
 }
 

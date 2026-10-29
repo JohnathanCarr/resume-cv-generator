@@ -114,4 +114,4 @@ function applyKeywords(match, profile, accepted) {
   return { profile: nextProfile, match: nextMatch, added };
 }
 
-export { missingKeywords, applyKeywords, keywordTerms, normalizeTerm, corpusHas, MAX_ASKED };
+export { missingKeywords, applyKeywords, keywordTerms, normalizeTerm, corpusHas, profileCorpus, MAX_ASKED };

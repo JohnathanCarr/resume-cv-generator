@@ -1,9 +1,9 @@
 // node --test 'test/unit/*.test.mjs'
+// Preview highlights (extension/generation/highlight.js): the new words of
+// each composed line, with its profile source on hover; a clean copy for the PDF.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBaseline } from '../../extension/generation/baseline.js';
-import { buildPool, validateEdits, applyEdits } from '../../extension/generation/tailor.js';
-import { diffWords, escapeHtml, previewResumes, changeCounts } from '../../extension/generation/highlight.js';
+import { diffWords, escapeHtml, previewResumes } from '../../extension/generation/highlight.js';
 
 test('diffWords marks only the inserted words, in one span per run', () => {
   assert.equal(
@@ -18,63 +18,35 @@ test('everything is escaped, marked or not', () => {
   assert.equal(diffWords('a', 'a <img>'), 'a <span class="rs-added">&lt;img&gt;</span>');
 });
 
-const parsed = {
-  name: 'Dana', summary: 'Backend engineer in Go',
-  skillGroups: [{ label: 'Tools', items: ['Postgres', 'Docker'] }],
-  skills: ['Postgres', 'Docker'],
-  education: [{ institution: 'UT', degreeType: 'B.S.' }],
-  experiences: [{ title: 'Engineer', company: 'Acme', bullets: ['Built billing API in Go', 'Ran demos', 'Wrote <script> docs'] }],
-  projects: [{ name: 'Pantry', bullets: ['Parsed units'] }],
-  extras: [{ title: 'Hackathon winner' }]
+const doc = {
+  name: 'Dana', summary: 'Backend engineer building Go services',
+  skillGroups: [{ id: 'skills:1', label: 'Tools', items: ['Postgres', '<Docker>'] }],
+  education: [{ id: 'edu:1', institution: 'UT', degreeType: 'B.S.' }],
+  experiences: [{ id: 'exp:1', title: 'Engineer', company: 'Acme', bullets: ['Built billing API in Go on Kubernetes', 'Wrote <script> docs'], bulletIds: ['exp:1.c1', 'exp:1.c2'] }],
+  projects: [{ id: 'proj:1', name: 'Pantry', bullets: ['Parsed units'], bulletIds: ['proj:1.c1'] }],
+  extras: [{ id: 'extra:1', title: 'Hackathon winner' }]
 };
-const profile = {
-  ...parsed,
-  skills: ['Postgres', 'Docker', 'Kubernetes'],
-  experiences: [{ title: 'Engineer', company: 'Acme', bullets: [...parsed.experiences[0].bullets, 'Deployed to Kubernetes'] }],
-  projects: [...parsed.projects, { name: 'Tracer', bullets: ['Traced spans'] }],
-  extras: [...parsed.extras, { title: 'CKA', organization: 'CNCF' }]
-};
-const doc = createBaseline(parsed).resume;
-const pool = buildPool(doc, profile);
-const edits = [
-  { op: 'rewrite', target: 'exp:1.b1', text: 'Built billing API in Go (Golang)', reason: 'Golang' },
-  { op: 'remove', target: 'exp:1.b2', reason: 'fit' },
-  { op: 'swap', target: 'proj:1', with: 'pool:proj:1', reason: 'tracing' },
-  { op: 'swap', target: 'extra:1', with: 'pool:extra:1', reason: 'Kubernetes' },
-  { op: 'skills', target: 'skills:1', items: ['Kubernetes', 'PostgreSQL (Postgres)', 'Docker'], reason: 'core tools' }
+const changes = [
+  { id: 'summary', op: 'rewrite', before: 'Backend engineer.', after: doc.summary, from: true },
+  { id: 'exp:1.c1', op: 'rewrite', before: 'Built billing API in Go', after: doc.experiences[0].bullets[0], from: true }
 ];
-const { valid, errors } = validateEdits(edits, doc, pool);
-const { doc: tailored, changes } = applyEdits(doc, pool, valid);
 
-test('marked preview highlights each kind of change; clean has no marks', () => {
-  assert.deepEqual(errors, []);
-  const { marked, clean } = previewResumes(tailored, changes);
-  const exp = marked.experience[0].bullets;
-  assert.equal(exp.length, 2);                                   // removed bullet is gone
-  assert.equal(exp[0], 'Built billing API in Go <span class="rs-added" title="Was: Built billing API in Go\nWhy: Golang">(Golang)</span>');
-  assert.equal(exp[1], 'Wrote &lt;script&gt; docs');           // untouched, escaped
-  assert.match(marked.projects[0].name, /^<span class="rs-added rs-line"[^>]*>Tracer<\/span>$/);
-  assert.match(marked.projects[0].bullets[0], /rs-line[^>]*>Traced spans</);
-  assert.match(marked.programs[0], /^<span class="rs-added rs-line"[^>]*>CKA – CNCF<\/span>$/);
-  assert.equal(marked.skills[0], 'Tools: <span class="rs-added" title="Added: core tools">Kubernetes</span>, <span class="rs-added" title="Was: Postgres">PostgreSQL</span> (Postgres), Docker');
-  assert.equal(marked.summary, 'Backend engineer in Go');
-
-  const all = JSON.stringify(clean);
-  assert.ok(!all.includes('rs-added'));
-  assert.deepEqual(clean.experience[0].bullets, ['Built billing API in Go (Golang)', 'Wrote &lt;script&gt; docs']);
-  assert.equal(clean.projects[0].name, 'Tracer');
-  assert.equal(clean.skills[0], 'Tools: Kubernetes, PostgreSQL (Postgres), Docker');
+test('marked shows the new words with their source; clean has no marks', () => {
+  const { marked, clean } = previewResumes(doc, changes);
+  assert.equal(marked.experience[0].bullets[0], 'Built billing API in Go <span class="rs-added" title="From your profile: Built billing API in Go">on Kubernetes</span>');
+  assert.match(marked.summary, /Backend engineer <span class="rs-added" title="From your profile: Backend engineer.">building Go services<\/span>/);
+  assert.equal(marked.experience[0].bullets[1], 'Wrote &lt;script&gt; docs', 'unchanged lines are escaped, not marked');
+  assert.ok(!JSON.stringify(clean).includes('rs-added'));
+  assert.equal(clean.experience[0].bullets[0], 'Built billing API in Go on Kubernetes');
+  assert.ok(JSON.stringify(marked).includes('&lt;Docker&gt;'), 'skills are escaped');
 });
 
-test('an added skill containing an existing one is new, not a respelling', () => {
-  const d = createBaseline({ ...parsed, skillGroups: [{ label: 'Tools', items: ['gRPC'] }], skills: ['gRPC'] }).resume;
-  const p = buildPool(d, { ...profile, skills: ['gRPC', 'gRPC streaming'] });
-  const { valid } = validateEdits([{ op: 'skills', target: 'skills:1', items: ['gRPC', 'gRPC streaming'], reason: 'streaming' }], d, p);
-  const r = applyEdits(d, p, valid);
-  assert.deepEqual(r.changes[0].added, ['gRPC streaming']);
-  assert.equal(previewResumes(r.doc, r.changes).marked.skills[0], 'Tools: gRPC, <span class="rs-added" title="Added: streaming">gRPC streaming</span>');
-});
-
-test('changeCounts summarises the edits', () => {
-  assert.deepEqual(changeCounts(changes), { reworded: 1, swapped: 2, skills: 1, removed: 1 });
+test('resumes saved by the old edit-list engine still render', () => {
+  const old = [
+    { id: 'exp:1.c1', op: 'rewrite', before: 'Built billing API in Go', reason: 'Kubernetes' },
+    { id: 'proj:1', op: 'swap', before: null }, { id: 'skills:1', op: 'skills', before: ['Postgres'] }, { id: 'exp:1.b2', op: 'remove' }
+  ];
+  const { marked } = previewResumes(doc, old);
+  assert.match(marked.experience[0].bullets[0], /title="Was: Built billing API in Go">on Kubernetes/);
+  assert.equal(marked.projects[0].bullets[0], 'Parsed units', 'other kinds of old change are shown unmarked');
 });

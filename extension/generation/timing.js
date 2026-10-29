@@ -30,7 +30,7 @@ export function createTimer(now = () => performance.now()) {
 
 const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 
-// "read posting 3.2s · tailor 14.2s (request 8.1s, repair 1 6.1s) · total 18.4s"
+// "read posting 3.2s · compose 14.2s (compose 8.1s, repair 1 6.1s) · total 18.4s"
 export function formatTimings(steps, totalMs) {
   const parts = steps.map(s => {
     const inner = s.parts?.length ? ` (${s.parts.map(p => `${p.step} ${secs(p.ms)}`).join(', ')})` : '';

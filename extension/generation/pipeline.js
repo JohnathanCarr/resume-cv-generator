@@ -1,23 +1,21 @@
 // Document generation pipelines: match analysis → (research) → generate →
-// one repair pass. Resumes are tailored as an edit list (tailor.js). The
+// repair. Resumes are composed from the whole profile (compose.js). The
 // return values are the shapes app.js consumes.
 
 import { CONFIG } from './config.js';
 import { createClient, generateStructured, safeErrorMessage } from './openai.js';
 import { analyzeMatch, renderMatchForPrompt } from './matchAnalysis.js';
-import { EDITS_SCHEMA, buildPool, buildTailorMessages, validateEdits, applyEdits, fitToPage, keywordCoverage, docWords } from './tailor.js';
-import { makeLayout } from './layout.js';
+import { keywordCoverage, docWords, extraText } from './resumeDoc.js';
+import { makeLayout, estimateDocHeight } from './layout.js';
 import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, isResearchedBrief, renderBriefForPrompt } from './companyResearch.js';
 import { COMPOSE_SCHEMA, validateComposition, sanitizeComposition, fitComposition, toResumeDoc, composeChanges } from './compose.js';
 import { buildComposeMessages, repairMessage } from './composePrompt.js';
-import { estimateDocHeight } from './layout.js';
-import { extraText } from './tailor.js';
 import { createTimer } from './timing.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
 export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
-export { previewResumes, changeCounts } from './highlight.js';
+export { previewResumes } from './highlight.js';
 export { isResearchedBrief } from './companyResearch.js';
 export { createTimer, formatTimings } from './timing.js';
 
@@ -50,73 +48,6 @@ export async function analyzeJob(apiKey, { profile, jobText }) {
   return match;
 }
 
-// Tailors the user's own resume (a baseline from baseline.js) to a posting:
-// the model returns an edit list (tailor.js), which is validated and applied.
-// One page is a hard limit planned from the start: `layout` (layout.js; the
-// extension passes a measured render of the upload, evals get estimates)
-// gives the model each line's size and the page's free space, the validator
-// totals the edits' height, up to two repair passes fix invalid or
-// over-the-page edits, and fitToPage() is the last resort. Invalid edits are
-// dropped, never applied. `match` from analyzeJob() skips the analysis.
-export async function tailorResume(apiKey, { profile, jobText, baseline, match = null, layout = null }) {
-  const startTime = Date.now();
-  requireInputs(profile, jobText);
-  if (!baseline?.resume) throw new Error('Missing the uploaded resume to tailor.');
-  const openai = createClient(apiKey);
-  const timer = createTimer();
-  if (!match) match = await timer.step('analyze', () => analyzeJob(apiKey, { profile, jobText }));
-
-  const base = baseline.resume;
-  const L = makeLayout(layout || {});
-  const pool = buildPool(base, profile);
-  const messages = buildTailorMessages({ doc: base, pool, jobText, matchText: renderMatchForPrompt(match), match, layout: L });
-  const request = (msgs) => retryTruncated(() => generateStructured(openai, { messages: msgs, schema: EDITS_SCHEMA, schemaName: 'resume_edits', maxTokens: MAX_COMPLETION_TOKENS.resume }));
-
-  let { data } = await timer.step('request', () => request(messages));
-  let { valid, errors } = validateEdits(data.edits, base, pool, L);
-  let repairs = 0;
-  let convo = messages;
-  while (errors.length && repairs < 2) {
-    console.log(`Tailoring: ${errors.length} problem(s), requesting a repair`, errors);
-    convo = [
-      ...convo,
-      { role: 'assistant', content: JSON.stringify(data) },
-      { role: 'user', content: `These edits cannot be applied as they are:\n${errors.map(e => `- ${e}`).join('\n')}\nReturn the complete edit list again with those fixed. Keep the valid edits as they were unless the page limit requires changing them.` }
-    ];
-    ({ data } = await timer.step(`repair ${repairs + 1}`, () => request(convo)));
-    ({ valid, errors } = validateEdits(data.edits, base, pool, L));
-    repairs++;
-  }
-
-  // Never over the page: undo growth, then drop whole items, if the model
-  // could not get there itself.
-  const fit = fitToPage(valid, base, pool, L);
-  const rejected = errors.filter(e => !e.startsWith('PAGE:'));
-  const { doc, changes } = applyEdits(base, pool, fit.edits);
-  const coverage = { before: keywordCoverage(base, match), after: keywordCoverage(doc, match) };
-  const endTime = Date.now();
-  const page = { estimated: !L.measured, usedPx: Math.round(fit.page.usedPx), afterPx: Math.round(fit.page.afterPx), limitPx: Math.round(fit.page.limitPx), fits: fit.page.overPx === 0, trimmed: fit.trimmed, undone: fit.undone.map(e => e.target) };
-  console.log(`[${new Date().toISOString()}] Resume tailored in ${endTime - startTime}ms: ${changes.length} edits, core keywords ${coverage.before.found}/${coverage.before.total} → ${coverage.after.found}/${coverage.after.total}, page ${page.usedPx} → ${page.afterPx}/${page.limitPx}px${fit.trimmed.length ? `, trimmed ${fit.trimmed.join(', ')}` : ''}${rejected.length ? `, ${rejected.length} rejected` : ''}`);
-  return {
-    resumeContent: resumeDocToSchema(doc),
-    tailored: doc,
-    changes,
-    matchAnalysis: match,
-    metadata: {
-      generatedAt: new Date().toISOString(),
-      processingTime: endTime - startTime,
-      edits: changes.length,
-      rejected,
-      repairs,
-      coverage,
-      page,
-      wordsBefore: docWords(base),
-      wordsAfter: docWords(doc),
-      timings: timer.steps
-    }
-  };
-}
-
 // Tailoring v2 (design/tailoring-v2.md): composes a one-page resume for the
 // posting from the whole profile. The model writes; compose.js holds it to
 // the truth. Steps: analysis (unless `match` is passed), a company brief
@@ -124,8 +55,9 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
 // posting says), the composition, up to two repair passes on the validator's
 // errors, then whatever is still invalid is dropped and the result is fitted
 // to one page by the layout. `baseline` (the uploaded resume) only provides
-// the "before" keyword coverage. Returns the shape tailorResume() returns,
-// plus `composition` (for the extension's local refit) and `companyBrief`.
+// the "before" keyword coverage. Returns { resumeContent, tailored,
+// composition (for the extension's local refit), changes, matchAnalysis,
+// metadata, companyBrief }.
 export async function composeResume(apiKey, { profile, jobText, match = null, layout = null, baseline = null, research = false, briefCache = {} }) {
   const startTime = Date.now();
   requireInputs(profile, jobText);
@@ -301,4 +233,3 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
 }
 
 export { verifyKey, safeErrorMessage } from './openai.js';
-export { CONFIG } from './config.js';

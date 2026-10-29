@@ -20,7 +20,7 @@
 
 import { normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
 import { estimateDocHeight } from './layout.js';
-import { extraText } from './tailor.js';
+import { extraText } from './resumeDoc.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const words = (s) => str(s).split(/\s+/).filter(Boolean);

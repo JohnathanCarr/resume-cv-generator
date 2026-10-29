@@ -52,7 +52,8 @@ function diffWords(before, after, title = '') {
   return out.join(' ');
 }
 
-const why = (c) => [c.before && typeof c.before === 'string' ? `Was: ${c.before}` : '', c.reason ? `Why: ${c.reason}` : ''].filter(Boolean).join('\n');
+// Composed lines (compose.js composeChanges) show their profile source.
+const why = (c) => c.from ? `From your profile: ${c.before}` : [c.before && typeof c.before === 'string' ? `Was: ${c.before}` : '', c.reason ? `Why: ${c.reason}` : ''].filter(Boolean).join('\n');
 const isNew = (c) => c && (c.op === 'swap');
 
 // A copy of the document whose text fields hold escaped HTML, with marks

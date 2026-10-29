@@ -15,7 +15,8 @@
 //
 // Source ids: exp:<id> (the job's header), exp:<id>.d (its description),
 // exp:<id>.b<n> (its n-th bullet, from 1), the same for proj:, edu:<id>,
-// extra:<id>, skill:<name>, profile:summary and profile:location.
+// extra:<id>, skill:<name>, profile:summary, profile:location,
+// profile:workAuthorization and profile:clearance.
 
 import { normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
 import { estimateDocHeight } from './layout.js';
@@ -34,6 +35,8 @@ export function sourceIndex(profile) {
   const add = (id, text, entry = null) => { if (str(text)) index.set(id, { text: str(text), entry }); };
   add('profile:summary', p.summary);
   add('profile:location', p.location);
+  add('profile:workAuthorization', p.workAuthorization);
+  add('profile:clearance', p.clearance);
   for (const s of p.skills || []) add(`skill:${str(s)}`, s);
   for (const x of p.experiences || []) {
     const id = `exp:${x.id}`;
@@ -62,6 +65,8 @@ export function renderProfileForCompose(profile) {
   const lines = [];
   if (str(p.summary)) lines.push('SUMMARY', `[profile:summary] ${str(p.summary)}`, '');
   if (str(p.location)) lines.push(`[profile:location] Location: ${str(p.location)}`, '');
+  if (str(p.workAuthorization)) lines.push(`[profile:workAuthorization] Work authorization: ${str(p.workAuthorization)}`, '');
+  if (str(p.clearance)) lines.push(`[profile:clearance] Security clearance: ${str(p.clearance)}`, '');
   if ((p.skills || []).length) lines.push('SKILLS', (p.skills || []).map(s => `[skill:${str(s)}]`).join(' '), '');
   const dates = (x) => [str(x.start), str(x.end)].filter(Boolean).join(' – ');
   if ((p.experiences || []).length) {
@@ -362,6 +367,7 @@ export function toResumeDoc(comp, profile) {
   const withBullets = ({ x, e }, prefix) => ({
     id: `${prefix}:${x.id}`,
     bullets: (e.bullets || []).map(b => str(b.text)).filter(Boolean),
+    bulletIds: (e.bullets || []).filter(b => str(b.text)).map((b, i) => `${prefix}:${x.id}.c${i + 1}`),
     bulletSources: (e.bullets || []).filter(b => str(b.text)).map(b => b.sources || [])
   });
   return {
@@ -384,6 +390,25 @@ export function toResumeDoc(comp, profile) {
     extras: pick(c.extras, 'extras', 'extra').map(({ x }) => ({ ...x, id: `extra:${x.id}` })),
     sectionOrder: normalizeSectionOrder(c.section_order)
   };
+}
+
+// Change records for the preview (highlight.js previewResumes): each summary
+// or bullet line that differs from its sources, with the sources' text as
+// `before`, so the new words are marked and hovering shows where the line
+// came from. Lines copied as written get none. Pure.
+export function composeChanges(doc, profile) {
+  const index = sourceIndex(profile);
+  const from = (ids) => (ids || []).filter(id => !id.startsWith('skill:')).map(id => index.get(id)?.text).filter(Boolean).join(' / ');
+  const changes = [];
+  const add = (id, text, sources) => {
+    const before = from(sources);
+    if (text && before && text !== before) changes.push({ id, op: 'rewrite', before, after: text, from: true });
+  };
+  add('summary', doc.summary, doc.summarySources);
+  for (const e of [...(doc.experiences || []), ...(doc.projects || [])]) {
+    (e.bullets || []).forEach((b, i) => add((e.bulletIds || [])[i], b, (e.bulletSources || [])[i]));
+  }
+  return changes;
 }
 
 // ── After the repair passes ───────────────────────────────────────────────────

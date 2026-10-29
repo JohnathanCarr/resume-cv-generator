@@ -2,7 +2,9 @@
 // The resume and cover-letter HTML (extension/preview/), pure, no DOM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHTML, escapeResume, formatResume, formatContactLine, formatSkills } from '../../extension/preview/resumeHtml.js';
+import { escapeHTML, escapeResume, formatResume, formatContactLine, formatSkills, formatDates, extrasHeading } from '../../extension/preview/resumeHtml.js';
+import { textProblems, STANDARD_HEADINGS } from '../../extension/preview/parseSafety.js';
+import { resumeDocToSchema } from '../../extension/generation/baseline.js';
 import { formatCoverLetter } from '../../extension/preview/coverLetterHtml.js';
 import { sanitizeFilename, suggestFilename } from '../../extension/preview/export.js';
 
@@ -61,11 +63,11 @@ test('formatResume keeps the page geometry the one-page measurement relies on', 
 
 test('formatResume leaves out empty sections and falls back to the profile education', () => {
   const html = formatResume(escapeResume({ experience: resume.experience }), profile);
-  assert.ok(!html.includes('SKILLS & INTERESTS'));
-  assert.ok(!html.includes('PROJECTS'));
+  assert.ok(!html.includes('>Skills</h2>'));
+  assert.ok(!html.includes('>Projects</h2>'));
   assert.ok(!html.includes('data-kind="summary"'));
-  assert.ok(html.includes('EDUCATION & HONORS') && html.includes('State University'), 'profile education not used');
-  assert.ok(html.includes('Graduation Date: 2016 - 2020'));
+  assert.ok(html.includes('>Education</h2>') && html.includes('State University'), 'profile education not used');
+  assert.ok(html.includes('2016 – 2020') && !html.includes('Graduation Date'), 'education dates not in the shared style');
 });
 
 test('formatResume reports unreadable content instead of throwing', () => {
@@ -78,8 +80,8 @@ test('formatResume reports unreadable content instead of throwing', () => {
   }
 });
 
-test('formatContactLine puts the location first and tidies links', () => {
-  assert.equal(formatContactLine(profile), 'Austin, TX | dana@example.com | (555) 010-0199 | LinkedIn | github.com/dana');
+test('formatContactLine puts the location first and keeps links visible', () => {
+  assert.equal(formatContactLine(profile), 'Austin, TX | dana@example.com | (555) 010-0199 | linkedin.com/in/dana | github.com/dana');
 });
 
 test('formatSkills splits each group at its first colon only', () => {
@@ -106,4 +108,49 @@ test('file names: unsafe characters removed, unknown parts left out', () => {
   assert.equal(sanitizeFilename('a'.repeat(200)).length, 120);
   assert.equal(suggestFilename('Dana Diaz', 'Northwind Labs', 'resume'), 'Dana Diaz - Northwind Labs - Resume');
   assert.equal(suggestFilename('Dana Diaz', undefined, 'cover'), 'Dana Diaz - Cover Letter');
+});
+
+test('every heading formatResume writes is a standard one', () => {
+  const html = formatResume(escapeResume({ ...resume, summary: '', programs: ['Hackathon winner'], extraTypes: ['award'] }), profile);
+  const headings = [...html.matchAll(/>([^<>]+)<\/h2>/g)].map(m => m[1]);
+  assert.deepEqual(headings, ['Skills', 'Education', 'Experience', 'Projects', 'Awards']);
+  assert.ok(headings.every(h => STANDARD_HEADINGS.includes(h)));
+  assert.ok(html.includes('font-variant-ligatures: none'), 'ligatures not turned off');
+});
+
+test('the extras heading follows the types it holds', () => {
+  assert.equal(extrasHeading({ extraTypes: ['certification', 'certification'] }), 'Certifications');
+  assert.equal(extrasHeading({ extraTypes: ['volunteer'] }), 'Volunteer Experience');
+  assert.equal(extrasHeading({ extraTypes: ['award', 'leadership'] }), 'Additional Information');
+  assert.equal(extrasHeading({ certifications: ['AWS'] }), 'Certifications');
+  assert.equal(extrasHeading({ programs: ['Bootcamp'] }), 'Additional Information');
+  const schema = resumeDocToSchema({ extras: [{ title: 'AWS Developer', type: 'certification' }, { title: '', type: 'award' }] });
+  assert.deepEqual(schema.extraTypes, ['certification'], 'types must line up with the programs lines');
+});
+
+test('dates share one style and are never invented', () => {
+  const cases = {
+    'May 2022 - Present': 'May 2022 – Present',
+    'Jan. 2020 – Dec 2021': 'Jan 2020 – Dec 2021',
+    'September 2019 to June 2021': 'Sep 2019 – Jun 2021',
+    'Sept 2021 - current': 'Sep 2021 – Present',
+    '05/2022 - 08/2023': 'May 2022 – Aug 2023',
+    '2018-2022': '2018 – 2022',
+    'Jun 2023-Aug 2023': 'Jun 2023 – Aug 2023',
+    '2016': '2016',
+    // Unreadable text stays as written.
+    'Summer 2023': 'Summer 2023',
+    'Expected May 2026': 'Expected May 2026',
+    '03-2022': '03-2022',
+    'Jan 2020 - Mar 2021 - May 2022': 'Jan 2020 - Mar 2021 - May 2022',
+    '': ''
+  };
+  for (const [input, want] of Object.entries(cases)) assert.equal(formatDates(input), want, input);
+  assert.ok(formatResume(escapeResume(resume), profile).includes('2022 – Present'));
+});
+
+test('textProblems flags ligatures and private-use glyphs', () => {
+  assert.deepEqual(textProblems('Plain text, no tricks.'), []);
+  assert.match(textProblems('Pro\uFB01cient')[0], /ligature/);
+  assert.match(textProblems('icon \uE001 here')[0], /private-use/);
 });

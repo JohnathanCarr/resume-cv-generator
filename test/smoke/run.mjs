@@ -52,8 +52,8 @@ async function cleanup() {
 }
 
 let report;
-try {
-  const port = new URL(wsUrl).port;
+// Opens a tab at url and returns { send, evaluate, close } over its DevTools socket.
+async function openTab(port, url) {
   const target = await (await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' })).json();
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('DevTools connection failed')); });
@@ -64,6 +64,61 @@ try {
     if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
   };
   const send = (method, params = {}) => new Promise(r => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
+  const evaluate = async (expression) => {
+    const res = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    if (res.result?.exceptionDetails) throw new Error(res.result.exceptionDetails.exception?.description || 'evaluation failed');
+    return res.result?.result?.value;
+  };
+  return { send, evaluate, close: () => ws.close() };
+}
+
+const waitUntil = async (what, check, ms = 15000) => {
+  const start = Date.now();
+  while (!(await check())) {
+    if (Date.now() - start > ms) throw new Error(`timed out waiting for ${what}`);
+    await new Promise(r => setTimeout(r, 200));
+  }
+};
+
+// Prints the resume the way the user does (print.html, Chrome's PDF engine)
+// and reads the PDF's text back with pdf.js, as a parser would.
+async function checkPrintedPdf(port, base, printCheck) {
+  const results = [];
+  const tab = await openTab(port, 'about:blank');
+  await tab.send('Page.enable');
+  const job = JSON.stringify({ html: printCheck.html, title: 'Resume' });
+  await tab.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `window.chrome = { storage: { session: { get: async () => ({ printJob: ${job} }), remove: async () => {} } } }; window.print = () => {};`
+  });
+  await tab.send('Page.navigate', { url: `${base}/extension/print.html` });
+  await waitUntil('the print view', () => tab.evaluate("!!document.querySelector('#page .resume-page') && document.fonts.status === 'loaded'"));
+  const pdf = await tab.send('Page.printToPDF', { preferCSSPageSize: true, printBackground: true });
+  if (!pdf.result?.data) throw new Error('Chrome did not print a PDF');
+  await tab.send('Page.navigate', { url: `${base}/test/smoke/pdftext.html` });
+  await waitUntil('pdf.js', () => tab.evaluate('typeof window.extractPdfText === "function"'));
+  const { pages, bytes, text } = await tab.evaluate(`extractPdfText(${JSON.stringify(pdf.result.data)})`);
+  tab.close();
+
+  const { textProblems } = await import('../../extension/preview/parseSafety.js');
+  const flat = text.replace(/\s+/g, ' ');
+  const lower = flat.toLowerCase();
+  const check = (name, problem) => results.push({ name, ok: !problem, error: problem || undefined });
+  check(`PDF: one page, ${Math.round(bytes / 1024)} KB`, pages !== 1 ? `${pages} pages` : bytes > 2.5 * 1024 * 1024 ? 'over 2.5 MB' : null);
+  const missing = printCheck.mustContain.filter(t => !flat.includes(t.replace(/\s+/g, ' ')));
+  check('PDF text: name and every contact detail intact', missing.length ? `missing: ${missing.join(' | ')}` : null);
+  let at = -1;
+  const outOfOrder = printCheck.headings.find(h => { const i = lower.indexOf(h.toLowerCase(), at + 1); if (i < 0) return true; at = i; return false; });
+  check(`PDF text: headings in order (${printCheck.headings.join(', ')})`, outOfOrder ? `"${outOfOrder}" missing or out of order` : null);
+  const problems = textProblems(text);
+  check('PDF text: no ligature or private-use characters', problems.length ? problems.join('; ') : null);
+  return results;
+}
+
+let pdfResults = [];
+try {
+  const port = new URL(wsUrl).port;
+  const tab = await openTab(port, url);
+  const send = tab.send;
 
   const start = Date.now();
   while (!report) {
@@ -74,7 +129,8 @@ try {
     const m = text.match(/SMOKE_RESULT_BEGIN([\s\S]*)SMOKE_RESULT_END/);
     if (m) report = JSON.parse(m[1]);
   }
-  ws.close();
+  tab.close();
+  if (report.printCheck) pdfResults = await checkPrintedPdf(port, `http://127.0.0.1:${server.address().port}`, report.printCheck);
 } catch (e) {
   console.error(`smoke: ${e.message}`);
   await cleanup();
@@ -90,9 +146,13 @@ if (report.fatal) {
 for (const c of report.results) {
   console.log(`${c.ok ? '  ok    ' : '  FAIL  '}${c.name}${c.ok ? '' : `\n        ${c.error}`}`);
 }
+for (const c of pdfResults) {
+  console.log(`${c.ok ? '  ok    ' : '  FAIL  '}${c.name}${c.ok ? '' : `\n        ${c.error}`}`);
+}
 for (const line of report.timing || []) console.log(`  ${line}`);
 
-let ok = report.ok;
+let ok = report.ok && pdfResults.every(c => c.ok);
+if (report.printCheck && !pdfResults.length) { console.log('  FAIL  the printed PDF was not checked'); ok = false; }
 const height = report.pageHeight;
 if (UPDATE) {
   await writeFile(EXPECTED, `${JSON.stringify({ resumePageHeight: height }, null, 2)}\n`);
@@ -109,5 +169,7 @@ if (UPDATE) {
     console.log(`  ok    resume page height ${height}px`);
   }
 }
-console.log(`smoke: ${report.passed} passed, ${report.failed} failed${ok ? '' : ' — FAILED'}`);
+const passed = report.passed + pdfResults.filter(c => c.ok).length;
+const failedCount = report.failed + pdfResults.filter(c => !c.ok).length;
+console.log(`smoke: ${passed} passed, ${failedCount} failed${ok ? '' : ' — FAILED'}`);
 process.exit(ok ? 0 : 1);

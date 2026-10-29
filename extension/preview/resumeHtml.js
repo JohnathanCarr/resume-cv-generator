@@ -314,6 +314,7 @@ export function formatSkills(skills) {
 // without types fall back on which list they carry.
 const EXTRA_HEADINGS = {
     certification: 'Certifications',
+    license: 'Licenses',
     award: 'Awards',
     publication: 'Publications',
     research: 'Research',
@@ -325,6 +326,7 @@ const EXTRA_HEADINGS = {
 export function extrasHeading(resume) {
     const types = [...new Set(resume.extraTypes || [])];
     if (types.length === 1 && EXTRA_HEADINGS[types[0]]) return EXTRA_HEADINGS[types[0]];
+    if (types.length === 2 && types.includes('license') && types.includes('certification')) return 'Licenses & Certifications';
     if (!types.length && resume.certifications?.length && !resume.programs?.length) return 'Certifications';
     return 'Additional Information';
 }

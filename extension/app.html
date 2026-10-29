@@ -139,6 +139,16 @@
                         <label for="profile-location">Location</label>
                         <input type="text" id="profile-location" placeholder="City, State (e.g., San Francisco, CA)">
                     </div>
+
+                    <div class="form-group">
+                        <label for="profile-work-authorization">Work authorization (optional)</label>
+                        <input type="text" id="profile-work-authorization" placeholder="e.g., US citizen; authorized to work in the US without sponsorship">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="profile-clearance">Security clearance (optional)</label>
+                        <input type="text" id="profile-clearance" placeholder="e.g., Active Secret clearance">
+                    </div>
                     
                     <div class="form-group">
                         <label for="profile-summary">Professional summary</label>
@@ -280,7 +290,7 @@
                             
                             <label class="research-toggle" for="research-company">
                                 <input type="checkbox" id="research-company" checked>
-                                <span>Research the company for the cover letter <span class="research-hint">(a few web searches, roughly $0.05–0.10)</span></span>
+                                <span>Research the company <span class="research-hint">(cover letter: a few web searches, roughly $0.05–0.10; resume: one search, cached for 30 days)</span></span>
                             </label>
 
 
@@ -342,8 +352,9 @@
                                     <button id="view-original" class="segmented-btn" aria-pressed="false">Original</button>
                                 </div>
                                 <span id="resume-coverage" class="coverage-chip hidden"></span>
-                                <span id="resume-legend" class="resume-legend"><span class="rs-added">Underlined green</span> marks what changed for this posting. Hover a change to see the original. The PDF has no highlights.</span>
+                                <span id="resume-legend" class="resume-legend"><span class="rs-added">Underlined green</span> marks what changed for this posting. Hover a change to see your original wording. The PDF has no highlights.</span>
                             </div>
+                            <div id="resume-match" class="hidden"></div>
                             <div id="resume-original" class="resume-original hidden"></div>
                             <div class="resume-content">
                                 <p class="placeholder-text">

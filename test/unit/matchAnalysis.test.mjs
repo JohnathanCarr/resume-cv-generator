@@ -90,3 +90,11 @@ test('the keyword check counts a skill as present in either form', () => {
   // Older matches without aliases still work.
   assert.deepEqual(missingKeywords({ keywords: ['SEO', 'Go'] }, profile), ['SEO']);
 });
+
+test('work authorization and clearance can be cited for hard requirements', () => {
+  const ids = profileIds({ workAuthorization: 'US citizen', clearance: 'Active Secret' });
+  assert.ok(ids.has('profile:workauthorization') && ids.has('profile:clearance'));
+  assert.ok(!profileIds({}).has('profile:clearance'), 'only when the profile has one');
+  // The keyword gate sees them too: a clearance in the profile is not missing.
+  assert.deepEqual(missingKeywords({ skills: [], clearance: 'Active Secret clearance' }, { keywords: [{ term: 'Secret clearance', importance: 'core' }] }), []);
+});

@@ -10,7 +10,7 @@ import { makeLayout } from './layout.js';
 import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, isResearchedBrief, renderBriefForPrompt } from './companyResearch.js';
-import { COMPOSE_SCHEMA, validateComposition, sanitizeComposition, fitComposition, toResumeDoc } from './compose.js';
+import { COMPOSE_SCHEMA, validateComposition, sanitizeComposition, fitComposition, toResumeDoc, composeChanges } from './compose.js';
 import { buildComposeMessages, repairMessage } from './composePrompt.js';
 import { estimateDocHeight } from './layout.js';
 import { extraText } from './tailor.js';
@@ -191,7 +191,7 @@ function composedResult({ comp, profile, match, layout, baseline, offsetPx = 0 }
     resumeContent: resumeDocToSchema(doc),
     tailored: doc,
     composition: fit.comp,
-    changes: [],
+    changes: composeChanges(doc, profile),
     matchAnalysis: match,
     metadata: {
       engine: 'compose',

@@ -3,8 +3,9 @@
 // schema, the validator's rules, and the conversion to a resume document.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER } from '../../extension/generation/compose.js';
+import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges } from '../../extension/generation/compose.js';
 import { makeLayout } from '../../extension/generation/layout.js';
+import { previewResumes } from '../../extension/generation/highlight.js';
 import { resumeDocToSchema } from '../../extension/generation/baseline.js';
 import { scoreResumeV2 } from '../eval/scoreV2.mjs';
 
@@ -197,4 +198,29 @@ test('fit: trims extras, projects, then old jobs\' bullets, keeping proof of req
   assert.deepEqual(ok.trimmed, []);
   // The extension's measured offset makes it trim more.
   assert.ok(fitComposition(good(), profile, match, layout, { offsetPx: 10000 }).trimmed.length > 0);
+});
+
+test('work authorization and clearance are citable profile lines', () => {
+  const p = { ...profile, workAuthorization: 'US citizen', clearance: 'Active TS/SCI clearance' };
+  const index = sourceIndex(p);
+  assert.equal(index.get('profile:clearance').text, 'Active TS/SCI clearance');
+  assert.ok(renderProfileForCompose(p).includes('[profile:workAuthorization] Work authorization: US citizen'));
+  const c = good();
+  c.summary = { text: 'Backend Engineer building Go and PostgreSQL services, with Search Engine Optimization (SEO) work. Holds an active TS/SCI clearance.', sources: ['profile:summary', 'exp:3.b1', 'exp:4.b1', 'exp:3.b2', 'profile:clearance'] };
+  assert.deepEqual(validateComposition(c, p, match).errors, []);
+  c.summary.sources = c.summary.sources.slice(0, 4);
+  assert.ok(codes(validateComposition(c, p, match)).includes('term'), 'TS/SCI needs its source');
+});
+
+test('preview: rewritten lines mark their new words and hover shows the source', () => {
+  const doc = toResumeDoc(good(), profile);
+  const changes = composeChanges(doc, profile);
+  const ids = changes.map(c => c.id);
+  assert.ok(ids.includes('summary'));
+  assert.ok(ids.includes('exp:3.c1'), 'the reworded Go bullet');
+  assert.ok(!ids.includes('exp:4.c1'), 'a line copied as written is not a change');
+  const { marked, clean } = previewResumes(doc, changes);
+  const harbor = marked.experience.find(e => e.company === 'Harbor').bullets[0];
+  assert.match(harbor, /<span class="rs-added" title="From your profile: Built Go services handling 2M requests a day">on Docker<\/span>/);
+  assert.ok(!JSON.stringify(clean).includes('rs-added'));
 });

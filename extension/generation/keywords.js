@@ -22,7 +22,7 @@ function normalizeTerm(s) {
 
 // Everything in the profile a keyword could legitimately be found in.
 function profileCorpus(profile) {
-  const parts = [profile.summary, ...(profile.skills || [])];
+  const parts = [profile.summary, profile.workAuthorization, profile.clearance, ...(profile.skills || [])];
   for (const e of profile.education || []) parts.push(e.degreeType, e.major, e.minor, e.honors, e.coursework);
   for (const x of [...(profile.experiences || []), ...(profile.projects || [])]) {
     parts.push(x.title, x.name, x.description, ...(x.bullets || []));

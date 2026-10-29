@@ -6,6 +6,7 @@ export const EXTRA_TYPES = [
     ['research', 'Research'],
     ['program', 'Program'],
     ['certification', 'Certification'],
+    ['license', 'License'],
     ['award', 'Award'],
     ['publication', 'Publication'],
     ['leadership', 'Leadership'],

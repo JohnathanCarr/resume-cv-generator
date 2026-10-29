@@ -245,6 +245,9 @@
     const line = infos.find(l => l.startsWith('[timing] resume done'));
     assert(line && /tailor \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
     assert(stub.requests.includes('resume_composition'), `the composer was not called: ${stub.requests.join(', ')}`);
+    const report = $('#resume-match .match-report');
+    assert(report && !$('#resume-match').classList.contains('hidden'), 'no match report');
+    assert(report.textContent.includes('Backend services in Go') && report.textContent.includes('Quokka DB'), `match report incomplete: ${report.textContent.slice(0, 200)}`);
     pageHeight = measurePage();
     assert(!visible('getting-started'), 'checklist still shown after the first document');
     assert(store.onboarding.firstGeneratedAt, 'first generation not recorded');
@@ -412,7 +415,7 @@
     card = cards('extras-container').at(-1);
     assert(store.profile.extras.at(-1).type === 'program', 'new extra not a program');
     const select = card.querySelector('select[data-field="type"]');
-    assert(select.options.length === 8, `${select.options.length} extra types`);
+    assert(select.options.length === 9, `${select.options.length} extra types`);
     select.value = 'award'; fire(select, 'change');
     assert(store.profile.extras.at(-1).type === 'award', 'extra type not saved');
     card.querySelector('.remove-extra').click();

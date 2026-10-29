@@ -7,7 +7,7 @@
 // Headings parsers recognise. formatResume() only ever writes these.
 export const STANDARD_HEADINGS = [
     'Summary', 'Skills', 'Experience', 'Work Experience', 'Projects', 'Education',
-    'Certifications', 'Awards', 'Publications', 'Research', 'Leadership',
+    'Certifications', 'Licenses', 'Licenses & Certifications', 'Awards', 'Publications', 'Research', 'Leadership',
     'Volunteer Experience', 'Programs', 'Additional Information'
 ];
 

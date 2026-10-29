@@ -46,7 +46,7 @@ export function formatResume(resumeContent, profile) {
         eduList = source.map(e => ({
             school: e.school || e.university || e.institution || '',
             location: e.location || '',
-            dates: e.dates || e.graduation || (e.start && e.end ? `${e.start} - ${e.end}` : e.end || ''),
+            dates: formatDates(e.dates || e.graduation || (e.start && e.end ? `${e.start} - ${e.end}` : e.end || '')),
             degree: e.degree || e.degreeType || '',
             major: e.major || '',
             minor: e.minor || '',
@@ -75,6 +75,7 @@ export function formatResume(resumeContent, profile) {
             font-family: ${baseFont};
             color: #000;
             line-height: ${lineHeight};
+            font-variant-ligatures: none;
             max-width: 7.5in;
             margin: 0 auto;
             padding: 0.5in;
@@ -112,7 +113,7 @@ export function formatResume(resumeContent, profile) {
                     text-transform: uppercase;
                     border-bottom: 1pt solid #000;
                     padding-bottom: 2pt;
-                ">SKILLS & INTERESTS</h2>
+                ">Skills</h2>
                 <div style="font-size: ${bodyFontSize};">
                     ${formatSkills(resume.skills)}
                 </div>
@@ -130,7 +131,7 @@ export function formatResume(resumeContent, profile) {
                 text-transform: uppercase;
                 border-bottom: 1pt solid #000;
                 padding-bottom: 2pt;
-            ">EDUCATION & HONORS</h2>
+            ">Education</h2>
             ${eduList.map(edu => `
             <div class="education-entry" style="margin-bottom: ${entrySpacing};">
                 <div style="display: flex; justify-content: space-between; align-items: baseline;">
@@ -138,7 +139,7 @@ export function formatResume(resumeContent, profile) {
                     ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
                     </span>
                     <span style="font-size: ${contactFontSize};">
-                    ${edu.dates ? `Graduation Date: ${edu.dates}` : ''}
+                    ${edu.dates}
                     </span>
                 </div>
                 ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
@@ -166,7 +167,7 @@ export function formatResume(resumeContent, profile) {
                     text-transform: uppercase;
                     border-bottom: 1pt solid #000;
                     padding-bottom: 2pt;
-                ">EXPERIENCE</h2>
+                ">Experience</h2>
                 ${resume.experience.map(exp => `
                     <div class="experience-entry" style="margin-bottom: ${entrySpacing};">
                         <div style="display: flex; justify-content: space-between; align-items: baseline;">
@@ -174,7 +175,7 @@ export function formatResume(resumeContent, profile) {
                                 ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
                             </span>
                             <span style="font-size: ${contactFontSize};">
-                                ${exp.dates || ''}
+                                ${formatDates(exp.dates)}
                             </span>
                         </div>
                         <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">
@@ -201,8 +202,8 @@ export function formatResume(resumeContent, profile) {
                     font-weight: bold;
                     text-transform: uppercase;
                     border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;6
-                ">PROJECTS</h2>
+                    padding-bottom: 2pt;
+                ">Projects</h2>
                 ${resume.projects.map(proj => `
                     <div class="project-entry" style="margin-bottom: ${entrySpacing};">
                         <div data-kind="projectHeader" style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
@@ -234,21 +235,21 @@ export function formatResume(resumeContent, profile) {
                         text-transform: uppercase;
                         border-bottom: 1pt solid #000;
                         padding-bottom: 2pt;
-                    ">PROGRAMS / CERTIFICATIONS</h2>
+                    ">${extrasHeading(resume)}</h2>
                     ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
                     <div data-kind="extra" style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
                     </div>
                 ` : ''
                 }
-                </div>
-            </div>
         </div>
     `;
 
     return formatted;
 }
 
-// "Location | email | phone | LinkedIn | …", escaped.
+// "Location | email | phone | linkedin.com/in/… | …", escaped. Links stay
+// visible text (parsers read the text, not link targets); only the scheme and
+// "www." are dropped.
 export function formatContactLine(profile) {
     const contactParts = [];
     
@@ -266,10 +267,8 @@ export function formatContactLine(profile) {
                 contactParts.push(trimmed); // Email
             } else if (trimmed.match(/\d{3}.*\d{3}.*\d{4}/)) {
                 contactParts.push(trimmed); // Phone
-            } else if (trimmed.includes('linkedin.com')) {
-                contactParts.push(trimmed.includes('http') ? 'LinkedIn' : trimmed);
-            } else if (trimmed.includes('github.com')) {
-                contactParts.push(trimmed.includes('http') ? 'GitHub' : trimmed);
+            } else if (/^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed)) {
+                contactParts.push(trimmed.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, ''));
             } else if (trimmed.length > 0) {
                 contactParts.push(trimmed);
             }
@@ -300,4 +299,63 @@ export function formatSkills(skills) {
         // Fallback: group skills manually
         return `<p style="margin: 0; line-height: 1.3;"><strong>Technical Skills:</strong> ${skills.join(', ')}</p>`;
     }
+}
+
+// The extras section's heading, from a vocabulary ATS parsers recognise: one
+// type's standard name, or "Additional Information" for a mix. Older entries
+// without types fall back on which list they carry.
+const EXTRA_HEADINGS = {
+    certification: 'Certifications',
+    award: 'Awards',
+    publication: 'Publications',
+    research: 'Research',
+    leadership: 'Leadership',
+    volunteer: 'Volunteer Experience',
+    program: 'Programs'
+};
+
+export function extrasHeading(resume) {
+    const types = [...new Set(resume.extraTypes || [])];
+    if (types.length === 1 && EXTRA_HEADINGS[types[0]]) return EXTRA_HEADINGS[types[0]];
+    if (!types.length && resume.certifications?.length && !resume.programs?.length) return 'Certifications';
+    return 'Additional Information';
+}
+
+const DATE_LIKE = /^(\d{4}|present|current|now|ongoing|[A-Za-z]{3,9}\.?,?\s+\d{4}|\d{1,2}\/\d{4})$/i;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// One date: "May 2022" / "May. 2022" / "September 2022" / "05/2022" → "May 2022";
+// "2022" stays a year; "Present", "Current" and "Now" → "Present". Anything
+// else comes back as written, so a month is never invented or lost.
+function formatDate(text) {
+    const t = String(text || '').trim();
+    if (/^(present|current|now|ongoing)$/i.test(t)) return 'Present';
+    if (/^\d{4}$/.test(t)) return t;
+    let m = t.match(/^([A-Za-z]{3,9})\.?,?\s+(\d{4})$/);
+    if (m) {
+        const i = MONTHS.findIndex(mon => m[1].toLowerCase().startsWith(mon.toLowerCase()));
+        const full = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+        const word = m[1].toLowerCase();
+        if (i >= 0 && (word.length === 3 || word === 'sept' || full[i] === word)) return `${MONTHS[i]} ${m[2]}`;
+        return t;
+    }
+    m = t.match(/^(\d{1,2})\/(\d{4})$/);
+    if (m && +m[1] >= 1 && +m[1] <= 12) return `${MONTHS[+m[1] - 1]} ${m[2]}`;
+    return t;
+}
+
+// A date or range in one style: "Mar 2022 – Present", "2018 – 2022". The
+// range separator becomes a spaced en dash; unreadable text is kept as is.
+export function formatDates(text) {
+    const t = String(text || '').trim();
+    if (!t) return '';
+    let parts = t.split(/\s+(?:-|–|—|to)\s+|\s*[–—]\s*/i);
+    if (parts.length === 1) {
+        // An unspaced hyphen is a range only between two dates ("2022-Present",
+        // "Jun 2023-Aug 2023"), never inside one ("03-2022").
+        const halves = t.split(/(?<=\d)-(?=[A-Za-z0-9])/);
+        if (halves.length === 2 && halves.every(h => DATE_LIKE.test(h.trim()))) parts = halves;
+    }
+    if (parts.length > 2) return t;
+    return parts.map(formatDate).join(' – ');
 }

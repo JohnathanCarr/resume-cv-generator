@@ -243,6 +243,24 @@
     assert(!session.printJob.html.includes('rs-added'), 'highlights reached the PDF');
   });
 
+  let printCheck = null;
+  await check('resume page is parse-safe (order, headings, no tables, images or ligatures)', async () => {
+    const { pageProblems, textProblems } = await import('/extension/preview/parseSafety.js');
+    const page = $('.resume-content .resume-page');
+    // What the runner checks in the PDF Chrome prints from the same markup
+    // (set first, so the PDF is checked even when the page check fails).
+    const holder = document.createElement('div');
+    holder.innerHTML = session.printJob.html;
+    const header = page.querySelector('.resume-header');
+    printCheck = {
+      html: session.printJob.html,
+      headings: [...holder.querySelectorAll('h2')].map(h => h.textContent.trim()),
+      mustContain: [header.querySelector('h1').textContent.trim(), ...header.querySelector('div').textContent.split('|').map(t => t.trim()).filter(Boolean)]
+    };
+    const problems = [...pageProblems(page), ...textProblems(page.innerText)];
+    assert(!problems.length, problems.join('; '));
+  });
+
   await check('file name: Enter saves with the typed name', async () => {
     $('#download-resume-pdf').click();
     await waitFor('file name dialog', () => visible('filename-modal'));
@@ -475,7 +493,7 @@
 
   // ── Report ──────────────────────────────────────────────────────────────
   const failed = results.filter(r => !r.ok).length;
-  const report = { ok: failed === 0, passed: results.length - failed, failed, pageHeight, results, openaiRequests: stub.requests, timing: infos.filter(l => l.startsWith('[timing]')) };
+  const report = { ok: failed === 0, passed: results.length - failed, failed, pageHeight, printCheck, results, openaiRequests: stub.requests, timing: infos.filter(l => l.startsWith('[timing]')) };
   const pre = document.createElement('pre');
   pre.id = 'smoke-result';
   pre.textContent = `SMOKE_RESULT_BEGIN${JSON.stringify(report)}SMOKE_RESULT_END`;

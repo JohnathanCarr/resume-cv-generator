@@ -92,7 +92,9 @@ function resumeDocToSchema(doc) {
     // The parser keeps a project's header text after the name (tagline, stack,
     // year) as its description; show it where the resume had it.
     projects: (r.projects || []).map(p => ({ name: [str(p.name), str(p.description)].filter(Boolean).join(' | '), link: str(p.link) || null, bullets: p.bullets || [] })),
-    programs: (r.extras || []).map(extraLine).filter(Boolean)
+    programs: (r.extras || []).map(extraLine).filter(Boolean),
+    // Each programs line's extra type, so the section can take a standard heading.
+    extraTypes: (r.extras || []).filter(x => extraLine(x)).map(x => str(x.type) || 'other')
   };
 }
 

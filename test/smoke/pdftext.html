@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PDF text</title>
+<!-- Used by test/smoke/run.mjs: extracts the text of a PDF (base64) with the
+     bundled pdf.js, the way a parser reads it: page by page, in content order. -->
+<script src="../../extension/pdf.min.js"></script>
+</head>
+<body>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = '../../extension/pdf.worker.min.js';
+window.extractPdfText = async (b64) => {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const size = bytes.length;   // pdf.js hands the buffer to its worker, emptying it
+  const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const content = await (await pdf.getPage(i)).getTextContent();
+    pages.push(content.items.map(it => it.str + (it.hasEOL ? '\n' : '')).join(''));
+  }
+  return { pages: pdf.numPages, bytes: size, text: pages.join('\n') };
+};
+</script>
+</body>
+</html>

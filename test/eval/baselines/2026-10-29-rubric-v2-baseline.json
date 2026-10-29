@@ -1,0 +1,44 @@
+{
+  "label": "rubric-v2-baseline",
+  "kinds": {
+    "resume": {
+      "n": 15,
+      "meanScore": 0.86,
+      "meanMs": 28751,
+      "failures": 2,
+      "checks": {
+        "noFabricatedNumbers": 1,
+        "noUnsupportedTools": 0.97,
+        "historyTruthful": 1,
+        "skillsFromProfile": 1,
+        "coreCoverage": 0.99,
+        "requirementEvidence": 1,
+        "acronymPairs": 0.4,
+        "skillsInContext": 0.49,
+        "hardRequirementsStated": 1,
+        "summaryPresent": 0.67,
+        "fitsOnePage": 1,
+        "pageFill": 0.67,
+        "noStuffing": 1,
+        "noFiller": 1,
+        "parseSafe": 1,
+        "recruiterJudge": 0.57
+      }
+    }
+  },
+  "stamp": "2026-10-29T18-08-22",
+  "rubric": "v2",
+  "judge": true,
+  "profiles": [
+    "david_analyst_undergrad",
+    "maria_backend_ms",
+    "johnathan"
+  ],
+  "jobs": [
+    "01_senior_backend_vercel",
+    "02_data_analyst_intern_shopify",
+    "03_ml_engineer_lumen_health",
+    "04_mobile_fullstack_northwind",
+    "05_product_analyst_notion"
+  ]
+}

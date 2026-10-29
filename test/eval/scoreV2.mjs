@@ -125,11 +125,20 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
     .filter(k => k.alias && (has(corpus, k.term) || has(corpus, k.alias)))
     .flatMap(k => [normalizeTerm(k.term), normalizeTerm(k.alias)]));
   const supportedTool = (t) => has(corpus, t) || supportedViaAlias.has(normalizeTerm(t));
+  // Skill group labels ("Cloud & DevOps:") are headings, not claims.
+  // The posting's job title may describe the candidate in the summary, as the
+  // composer's validator allows; supported aliases ("Continuous Integration/
+  // Continuous Delivery") are matched whole, not as slash-split tokens.
+  const roleTokens = new Set(toolTokens((match && match.role) || ''));
+  const supportedPhrases = keywordList.filter(k => k.alias && (has(corpus, k.term) || has(corpus, k.alias))).flatMap(k => [k.term, k.alias]);
+  const strip = (t) => supportedPhrases.reduce((acc, ph) => acc.split(ph).join(' '), t);
+  const claimText = [parts.summary, skillItems(r).join(', '), ...parts.headers, ...parts.bullets, ...parts.education, ...parts.extras].join('\n');
   const unsupported = [...new Set([
-    ...toolTokens(text),
-    // Tool-like names only (one word, or a capital, digit or symbol in it):
-    // descriptive phrases such as "data analysis" are not tool claims.
-    ...keywordList.filter(k => has(textN, k.term) && (/^\S+$/.test(k.term.trim()) || /[A-Z0-9+#./]/.test(k.term))).map(k => k.term)
+    ...toolTokens(strip(parts.summary)).filter(t => !roleTokens.has(t)),
+    ...toolTokens(strip([skillItems(r).join(', '), ...parts.headers, ...parts.bullets, ...parts.education, ...parts.extras].join('\n'))),
+    // Tool-like names only (a capital, digit or symbol in it): plain words
+    // and phrases such as "text" or "data analysis" are not tool claims.
+    ...keywordList.filter(k => has(norm(claimText), k.term) && /[A-Z0-9+#./]/.test(k.term)).map(k => k.term)
   ])].filter(t => !supportedTool(t));
   info.unsupportedTools = unsupported;
   checks.noUnsupportedTools = unsupported.length === 0 ? 1 : unsupported.length === 1 ? 0.5 : 0;

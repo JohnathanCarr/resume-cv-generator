@@ -25,9 +25,11 @@ The pipeline is in `extension/generation/`, orchestrated by `pipeline.js`. Every
 
    ![The keyword check dialog listing posting keywords missing from the profile](store/screenshot-keywords.jpg)
 
-3. **Company research** (`companyResearch.js`, cover letters only, optional). This uses the Responses API with OpenAI's hosted web search, capped at 3 searches. It produces a short brief where every fact carries its source URL, or `found: false` when nothing credible turns up. Briefs are cached per company for 30 days.
+3. **Company research** (`companyResearch.js`, optional; capped at one search for resumes). This uses the Responses API with OpenAI's hosted web search, capped at 3 searches. It produces a short brief where every fact carries its source URL, or `found: false` when nothing credible turns up. Briefs are cached per company for 30 days.
 
-4. **Resume: a validated edit list** (`tailor.js`, `layout.js`). The model never writes a resume from scratch. It sees the baseline with an id on every line, plus a "pool" of profile material that isn't on the resume, and returns a list of edits:
+4. **Resume: composed from the whole profile** (`compose.js`, `composePrompt.js`; the default since tailoring v2). The model writes a one-page resume for the posting from the entire profile: a summary aimed at the role, skills grouped and ordered for the posting, the most relevant jobs, projects and extras, bullets rewritten in the posting's terms, and the section order. Every summary and bullet line cites the profile lines it comes from, and `validateComposition()` checks in code that it adds no number, tool, company or credential those lines don't have. Titles, employers, dates and education always come from the profile. Lines that still fail after two repair passes are removed, and `fitComposition()` trims to one page without dropping a job or the evidence for a required qualification. A company brief (cached, or one web search when research is on) only decides which experience to lead with. The older edit-list engine below is still in the code behind `CONFIG.RESUME_ENGINE` and will be removed.
+
+   **Edit-list engine** (`tailor.js`, `layout.js`). The model never writes a resume from scratch. It sees the baseline with an id on every line, plus a "pool" of profile material that isn't on the resume, and returns a list of edits:
    - `rewrite`: reword a summary, bullet or coursework line, for example to use the posting's terms
    - `swap`: replace a bullet with an unused bullet from the same job or project, or a project or extra with an unused one
    - `skills`: reorder a skill line or add profile skills to it

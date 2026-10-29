@@ -61,6 +61,20 @@
       keywords: [{ term: 'Go', importance: 'core' }, ...MISSING.map(term => ({ term, importance: 'core' }))]
     }),
     resume_edits: () => ({ edits: [] }),
+    // Tailoring v2: the profile's own lines, each citing itself.
+    resume_composition: () => {
+      const p = store.profile;
+      const entry = (kind) => (x) => ({ id: `${kind}:${x.id}`, bullets: (x.bullets || []).map((text, i) => ({ text, sources: [`${kind}:${x.id}.b${i + 1}`] })) });
+      return {
+        summary: { text: p.summary || '', sources: ['profile:summary'] },
+        skill_groups: [{ label: 'Skills', items: (p.skills || []).slice(0, 8) }],
+        experience: (p.experiences || []).map(entry('exp')),
+        projects: (p.projects || []).filter(x => (x.bullets || []).length).map(entry('proj')),
+        education: (p.education || []).map(e => ({ id: `edu:${e.id}` })),
+        extras: (p.extras || []).map(e => ({ id: `extra:${e.id}` })),
+        section_order: ['experience', 'projects', 'education', 'extras']
+      };
+    },
     cover_letter: () => ({
       coverLetter: 'I am applying for the Backend Engineer role at Northwind Labs.\n\nThe posting asks for backend services in Go, which is the work I do every day.',
       claims: [{ sentence: 'I am applying for the Backend Engineer role at Northwind Labs.', source: 'job posting' }]
@@ -230,6 +244,7 @@
     await waitFor('strip to hide after Done', () => progressHidden(), 3000);
     const line = infos.find(l => l.startsWith('[timing] resume done'));
     assert(line && /tailor \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
+    assert(stub.requests.includes('resume_composition'), `the composer was not called: ${stub.requests.join(', ')}`);
     pageHeight = measurePage();
     assert(!visible('getting-started'), 'checklist still shown after the first document');
     assert(store.onboarding.firstGeneratedAt, 'first generation not recorded');

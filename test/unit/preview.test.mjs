@@ -154,3 +154,9 @@ test('textProblems flags ligatures and private-use glyphs', () => {
   assert.match(textProblems('Pro\uFB01cient')[0], /ligature/);
   assert.match(textProblems('icon \uE001 here')[0], /private-use/);
 });
+
+test('sections follow the resume\'s order; unknown names are ignored', () => {
+  const heads = (r) => [...formatResume(escapeResume(r), profile).matchAll(/>([^<>]+)<\/h2>/g)].map(m => m[1]);
+  assert.deepEqual(heads({ ...resume, summary: '' }), ['Skills', 'Education', 'Experience', 'Projects', 'Certifications']);
+  assert.deepEqual(heads({ ...resume, summary: '', sectionOrder: ['experience', 'projects', 'nope', 'education', 'extras'] }), ['Skills', 'Experience', 'Projects', 'Education', 'Certifications']);
+});

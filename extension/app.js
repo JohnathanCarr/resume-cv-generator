@@ -784,15 +784,20 @@ class ResumeStudioApp {
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
-        const { tailorResume } = await this.generation();
-        return tailorResume(this.apiKey.value, body);
+        const { tailorResume, composeResume, CONFIG } = await this.generation();
+        if (CONFIG.RESUME_ENGINE !== 'compose') return tailorResume(this.apiKey.value, body);
+        // Tailoring v2: written from the whole profile, with the company brief
+        // (cached, or one search when research is on) deciding emphasis.
+        const result = await composeResume(this.apiKey.value, { ...body, research: this.researchEnabled, briefCache: this.companyBriefs });
+        if (result.metadata?.briefSource === 'research' && result.companyBrief?.company) await this.cacheBrief(result.companyBrief);
+        return result;
     }
 
     describeResumeResult(result, { overflow, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
         const n = (result.changes || []).filter(c => c.op !== 'remove').length;
-        parts.push(n
+        parts.push(meta.engine === 'compose' ? 'Resume written for this posting from your profile.' : n
             ? `Resume tailored with ${n} edit${n === 1 ? '' : 's'}.`
             : 'Your resume already matches this posting well; nothing was reworded.');
         const cov = meta.coverage;
@@ -802,7 +807,7 @@ class ResumeStudioApp {
         if (added.length) {
             parts.push(`Added to your skills: ${added.join(', ')}.`);
         }
-        const removed = (result.changes || []).filter(c => c.op === 'remove').length;
+        const removed = (result.changes || []).filter(c => c.op === 'remove').length + (meta.page?.trimmed?.length || 0);
         if (removed) {
             parts.push(`Removed ${removed} less relevant item${removed === 1 ? '' : 's'} to fit one page.`);
         }

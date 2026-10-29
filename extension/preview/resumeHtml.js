@@ -70,6 +70,136 @@ export function formatResume(resumeContent, profile) {
     const sectionSpacing = "0.8em";
     const entrySpacing = "0.6em";
 
+    // Sections after the summary and skills, in the resume's chosen order
+    // (composed resumes choose; everything else keeps education first).
+    const sections = {
+        education: `
+            <!-- Education Section -->
+            ${eduList.length > 0 ? `
+            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
+            <h2 style="
+                margin: 0 0 0.4em 0;
+                font-size: ${sectionHeaderSize};
+                font-weight: bold;
+                text-transform: uppercase;
+                border-bottom: 1pt solid #000;
+                padding-bottom: 2pt;
+            ">Education</h2>
+            ${eduList.map(edu => `
+            <div class="education-entry" style="margin-bottom: ${entrySpacing};">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <span style="font-size: ${contactFontSize}; font-weight: bold;">
+                    ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
+                    </span>
+                    <span style="font-size: ${contactFontSize};">
+                    ${edu.dates}
+                    </span>
+                </div>
+                ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
+                ${edu.major ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Major: ${edu.major}</div>` : ''}
+                ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
+                ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
+                ${(edu.honors || edu.coursework) ? `
+                <div data-kind="coursework" style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
+                    ${edu.honors ? `• ${edu.honors}<br>` : ''}
+                    ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
+                </div>` : ''}
+            </div>`).join('')}
+            </div>` : ''}
+`,
+        experience: `
+            <!-- Experience Section -->
+            ${resume.experience && resume.experience.length > 0 ? `
+            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
+                <h2 style="
+                    margin: 0 0 0.4em 0;
+                    font-size: ${sectionHeaderSize};
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    border-bottom: 1pt solid #000;
+                    padding-bottom: 2pt;
+                ">Experience</h2>
+                ${resume.experience.map(exp => `
+                    <div class="experience-entry" style="margin-bottom: ${entrySpacing};">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <span style="font-size: ${contactFontSize}; font-weight: bold;">
+                                ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
+                            </span>
+                            <span style="font-size: ${contactFontSize};">
+                                ${formatDates(exp.dates)}
+                            </span>
+                        </div>
+                        <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">
+                            ${exp.title}
+                        </div>
+                        <ul style="
+                            margin: 0;
+                            padding-left: 1.2em;
+                            font-size: ${bodyFontSize};
+                            line-height: ${lineHeight};
+                        ">
+                            ${exp.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
+                        </ul>
+                    </div>
+                `).join('')}
+            </div>` : ''}
+`,
+        projects: `
+            <!-- Projects Section -->
+            ${resume.projects && resume.projects.length > 0 ? `
+            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
+                <h2 style="
+                    margin: 0 0 0.4em 0;
+                    font-size: ${sectionHeaderSize};
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    border-bottom: 1pt solid #000;
+                    padding-bottom: 2pt;
+                ">Projects</h2>
+                ${resume.projects.map(proj => `
+                    <div class="project-entry" style="margin-bottom: ${entrySpacing};">
+                        <div data-kind="projectHeader" style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
+                            ${proj.name}${proj.link ? ` | ${proj.link}` : ''}
+                        </div>
+                        <ul style="
+                            margin: 0;
+                            padding-left: 1.2em;
+                            font-size: ${bodyFontSize};
+                            line-height: ${lineHeight};
+                        ">
+                            ${proj.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
+                        </ul>
+                    </div>
+                `).join('')}
+            </div>` : ''}
+`,
+        extras: `
+                                ${
+                (
+                    (resume.programs && resume.programs.length > 0) ||
+                    (resume.certifications && resume.certifications.length > 0)
+                ) ? `
+                    <!-- Programs/Certifications Section -->
+                    <div class="resume-section">
+                    <h2 style="
+                        margin: 0 0 0.4em 0;
+                        font-size: ${sectionHeaderSize};
+                        font-weight: bold;
+                        text-transform: uppercase;
+                        border-bottom: 1pt solid #000;
+                        padding-bottom: 2pt;
+                    ">${extrasHeading(resume)}</h2>
+                    ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
+                    <div data-kind="extra" style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
+                    </div>
+                ` : ''
+                }
+`
+    };
+    const order = Array.isArray(resume.sectionOrder) && resume.sectionOrder.length
+        ? resume.sectionOrder.filter(k => sections[k] !== undefined)
+        : ['education', 'experience', 'projects', 'extras'];
+
     let formatted = `
         <div class="resume-page" style="
             font-family: ${baseFont};
@@ -118,129 +248,7 @@ export function formatResume(resumeContent, profile) {
                     ${formatSkills(resume.skills)}
                 </div>
             </div>` : ''}
-
-           
-
-            <!-- Education Section -->
-            ${eduList.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-            <h2 style="
-                margin: 0 0 0.4em 0;
-                font-size: ${sectionHeaderSize};
-                font-weight: bold;
-                text-transform: uppercase;
-                border-bottom: 1pt solid #000;
-                padding-bottom: 2pt;
-            ">Education</h2>
-            ${eduList.map(edu => `
-            <div class="education-entry" style="margin-bottom: ${entrySpacing};">
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                    ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
-                    </span>
-                    <span style="font-size: ${contactFontSize};">
-                    ${edu.dates}
-                    </span>
-                </div>
-                ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
-                ${edu.major ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Major: ${edu.major}</div>` : ''}
-                ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
-                ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
-                ${(edu.honors || edu.coursework) ? `
-                <div data-kind="coursework" style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
-                    ${edu.honors ? `• ${edu.honors}<br>` : ''}
-                    ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
-                </div>` : ''}
-            </div>`).join('')}
-            </div>` : ''}
-
-
-
-
-            <!-- Experience Section -->
-            ${resume.experience && resume.experience.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                <h2 style="
-                    margin: 0 0 0.4em 0;
-                    font-size: ${sectionHeaderSize};
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;
-                ">Experience</h2>
-                ${resume.experience.map(exp => `
-                    <div class="experience-entry" style="margin-bottom: ${entrySpacing};">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                            <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                                ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
-                            </span>
-                            <span style="font-size: ${contactFontSize};">
-                                ${formatDates(exp.dates)}
-                            </span>
-                        </div>
-                        <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">
-                            ${exp.title}
-                        </div>
-                        <ul style="
-                            margin: 0;
-                            padding-left: 1.2em;
-                            font-size: ${bodyFontSize};
-                            line-height: ${lineHeight};
-                        ">
-                            ${exp.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
-                        </ul>
-                    </div>
-                `).join('')}
-            </div>` : ''}
-
-            <!-- Projects Section -->
-            ${resume.projects && resume.projects.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                <h2 style="
-                    margin: 0 0 0.4em 0;
-                    font-size: ${sectionHeaderSize};
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;
-                ">Projects</h2>
-                ${resume.projects.map(proj => `
-                    <div class="project-entry" style="margin-bottom: ${entrySpacing};">
-                        <div data-kind="projectHeader" style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
-                            ${proj.name}${proj.link ? ` | ${proj.link}` : ''}
-                        </div>
-                        <ul style="
-                            margin: 0;
-                            padding-left: 1.2em;
-                            font-size: ${bodyFontSize};
-                            line-height: ${lineHeight};
-                        ">
-                            ${proj.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
-                        </ul>
-                    </div>
-                `).join('')}
-            </div>` : ''}
-
-                                ${
-                (
-                    (resume.programs && resume.programs.length > 0) ||
-                    (resume.certifications && resume.certifications.length > 0)
-                ) ? `
-                    <!-- Programs/Certifications Section -->
-                    <div class="resume-section">
-                    <h2 style="
-                        margin: 0 0 0.4em 0;
-                        font-size: ${sectionHeaderSize};
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        border-bottom: 1pt solid #000;
-                        padding-bottom: 2pt;
-                    ">${extrasHeading(resume)}</h2>
-                    ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
-                    <div data-kind="extra" style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
-                    </div>
-                ` : ''
-                }
+            ${order.map(k => sections[k]).join('')}
         </div>
     `;
 

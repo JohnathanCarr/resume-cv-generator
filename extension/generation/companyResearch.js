@@ -44,7 +44,8 @@ function countSearches(response) {
   return (response.output || []).filter(o => o.type === 'web_search_call').length;
 }
 
-async function researchCompany(openai, { company, role, aboutCompany, jobText }) {
+// maxSearches: the search cap (resumes use 1; cover letters the configured cap).
+async function researchCompany(openai, { company, role, aboutCompany, jobText, maxSearches = RESEARCH.maxSearches }) {
   const input = `Company: ${company}
 Role being applied for: ${role || 'unknown'}
 What the job posting says about the company: ${aboutCompany || '(nothing beyond the role itself)'}
@@ -57,7 +58,7 @@ ${String(jobText || '').slice(0, 1500)}`;
     reasoning: { effort: REASONING.extract },
     max_output_tokens: 2500,
     tools: [{ type: 'web_search', search_context_size: RESEARCH.searchContextSize }],
-    instructions: INSTRUCTIONS.replace('${MAX_SEARCHES}', String(RESEARCH.maxSearches)),
+    instructions: INSTRUCTIONS.replace('${MAX_SEARCHES}', String(maxSearches)),
     input,
     text: { format: { type: 'json_schema', name: 'company_brief', strict: true, schema: BRIEF_SCHEMA } }
   });

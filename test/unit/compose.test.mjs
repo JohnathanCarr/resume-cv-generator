@@ -3,7 +3,8 @@
 // schema, the validator's rules, and the conversion to a resume document.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn } from '../../extension/generation/compose.js';
+import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER } from '../../extension/generation/compose.js';
+import { makeLayout } from '../../extension/generation/layout.js';
 import { resumeDocToSchema } from '../../extension/generation/baseline.js';
 import { scoreResumeV2 } from '../eval/scoreV2.mjs';
 
@@ -79,6 +80,7 @@ test('the schema is strict', () => {
 test('facts: named terms and numbers', () => {
   assert.deepEqual(namedTerms('Built Go services on Kubernetes with Node.js and CI/CD. Shipped at Stripe.'), ['Go', 'Kubernetes', 'Node.js', 'CI/CD', 'Stripe']);
   assert.deepEqual(namedTerms('Served 10K+ users and 2M requests'), [], 'number units are not names');
+  assert.deepEqual(namedTerms('ML-focused engineer, well-tested code'), ['ML']);
   assert.deepEqual([...numbersIn('Cut 40% for 2,000 stores, $1.2M saved, 3x faster')], ['40%', '2000', '1200000', '3x']);
 });
 
@@ -153,4 +155,46 @@ test('warnings: acronym pairs, skills in bullets, hard requirements', () => {
   const { errors, warnings } = validateComposition(c, profile, { ...match, hard_requirements: [{ type: 'license', text: 'AWS', kind: 'required', met: 'yes', evidence: ['extra:9'] }] });
   assert.deepEqual(errors, []);
   assert.deepEqual(warnings.map(w => w.code).sort(), ['acronym', 'hard_requirement', 'skills_in_context']);
+});
+
+test('section order: known sections once each, the rest in the default order', () => {
+  assert.deepEqual(normalizeSectionOrder(null), DEFAULT_SECTION_ORDER);
+  assert.deepEqual(normalizeSectionOrder(['education', 'bogus', 'education']), ['education', 'experience', 'projects', 'extras']);
+  assert.deepEqual(toResumeDoc({ ...good(), section_order: ['projects'] }, profile).sectionOrder, ['projects', 'experience', 'education', 'extras']);
+});
+
+test('sanitize: what still fails after repairs is removed, never shown', () => {
+  const c = good();
+  c.summary = { text: 'Engineer with 9 years', sources: ['profile:summary'] };
+  c.skill_groups = [{ label: 'Languages', items: ['Go', 'Rust', 'go'] }];
+  c.experience[1].bullets.push({ text: 'Built Go services on Kubernetes', sources: ['exp:3.b1'] });
+  c.projects[0].bullets = [{ text: 'Ran 99 queues', sources: ['proj:5.b1'] }];
+  c.education = [];
+  const { errors } = validateComposition(c, profile, match);
+  const { comp, dropped } = sanitizeComposition(c, errors, profile);
+  assert.equal(comp.summary.text, '');
+  assert.deepEqual(comp.skill_groups[0].items, ['Go']);
+  assert.equal(comp.experience[1].bullets.length, 2, 'the Kubernetes bullet is gone');
+  assert.deepEqual(comp.projects, [], 'a project with no usable bullet goes');
+  assert.deepEqual(comp.education, [{ id: 'edu:1' }], 'education is restored');
+  assert.ok(dropped.length >= 4);
+  assert.deepEqual(validateComposition(comp, profile, match).errors.filter(e => ['number', 'term', 'skill', 'duplicate_skill', 'no_education'].includes(e.code)), []);
+});
+
+test('fit: trims extras, projects, then old jobs\' bullets, keeping proof of requirements', () => {
+  const layout = makeLayout({});
+  const long = 'Built Go services handling 2M requests a day for the platform team across many regions and stores';
+  const c = good();
+  c.experience[1].bullets = Array.from({ length: 30 }, () => ({ text: long, sources: ['exp:3.b1'] }));
+  c.experience[0].bullets = Array.from({ length: 6 }, () => ({ text: 'Wrote PostgreSQL reports for 40 stores', sources: ['exp:4.b1'] }));
+  const fit = fitComposition(c, profile, match, layout);
+  assert.ok(fit.page.fits, `${fit.page.afterPx} > ${fit.page.limitPx}`);
+  assert.ok(fit.trimmed[0].startsWith('extra'), 'extras go first');
+  assert.deepEqual(fit.comp.experience.map(e => e.id), ['exp:4', 'exp:3'], 'no job is removed');
+  assert.ok(fit.comp.experience.every(e => e.bullets.length >= 1));
+  // A page that already fits is left alone.
+  const ok = fitComposition(good(), profile, match, layout);
+  assert.deepEqual(ok.trimmed, []);
+  // The extension's measured offset makes it trim more.
+  assert.ok(fitComposition(good(), profile, match, layout, { offsetPx: 10000 }).trimmed.length > 0);
 });

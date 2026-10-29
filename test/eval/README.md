@@ -11,6 +11,7 @@ node test/eval/run.js --label x --baseline         # also copy the summary to ba
 node test/eval/run.js --rescore test/eval/runs/<dir>  # re-apply a changed rubric to saved outputs (no API calls)
 node test/eval/run.js --only resume --judge --label x  # add the recruiter judge (one extra call per resume)
 node test/eval/run.js --rubric v1 ...                  # the old edit-list resume rubric instead of v2
+node test/eval/run.js --only resume --engine compose --judge --label x  # tailoring v2's composer instead of edit-list tailoring
 ```
 
 The pipeline (`extension/generation/`) runs in-process; no server is needed.
@@ -33,7 +34,8 @@ summaries to compare against.
   bullets (70% is full marks), met hard requirements stated, a summary. Page:
   fits, and fills ≥ 90% (by the layout estimate). Never: no keyword more than
   three times, no filler phrases, parse-safe when rendered with the real
-  template. `judge.mjs` (`--judge`) adds a recruiter judge: relevance,
+  template. Skill group labels ("Cloud & DevOps:") are headings, so the tools
+  check reads only the skill items. `judge.mjs` (`--judge`) adds a recruiter judge: relevance,
   tailoring, specificity, readability and credibility, 1–5 each, scored
   strictly, with a note on the biggest weakness.
 - `score.js` — the cover-letter rubric, and the v1 resume rubric

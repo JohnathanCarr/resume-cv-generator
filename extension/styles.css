@@ -1325,6 +1325,64 @@ input[type="checkbox"]:checked::after { opacity: 1; }
     box-shadow: inset 3px 0 0 #5E8C4A;
 }
 
+/* Match report: the posting's requirements and keywords against the
+   profile. Status is never colour alone: each row has a symbol and a
+   screen-reader label. */
+.match-report {
+    margin-bottom: 12px;
+    font-size: 0.8125rem;
+    color: var(--text);
+    background: var(--surface-input);
+    border: var(--border-w) solid var(--frame);
+}
+
+.match-report summary {
+    padding: 8px 12px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.match-summary { font-weight: 400; color: var(--text-label); }
+
+.match-body { padding: 0 12px 10px; }
+
+.match-body h3 {
+    margin: 10px 0 4px;
+    font: 600 0.75rem var(--font-body);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-label);
+}
+
+.match-list { margin: 0; padding: 0; list-style: none; }
+
+.match-list li {
+    display: grid;
+    grid-template-columns: 1.5em 1fr;
+    column-gap: 4px;
+    padding: 3px 0;
+}
+
+.match-evidence, .match-list .match-hint { grid-column: 2; }
+
+.match-evidence, .match-hint { color: var(--text-label); font-size: 0.75rem; }
+
+.match-hint { margin: 2px 0 0; }
+
+.match-status { font-weight: 700; text-align: center; }
+.match-yes { color: var(--success-text); }
+.match-partial { color: var(--primary-text); }
+.match-no, .match-unknown { color: var(--danger-text); }
+
+.match-chips { margin: 4px 0; line-height: 1.9; }
+.match-chips-label { margin-right: 4px; }
+
+.match-chip {
+    padding: 1px 7px;
+    border: var(--border-w) solid currentColor;
+    white-space: nowrap;
+}
+
 .resume-original {
     display: flex;
     flex-direction: column;

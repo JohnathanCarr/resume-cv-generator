@@ -7,6 +7,7 @@ import { ProfileMerge } from './profileMerge.js';
 import { GenerationProgress } from './progress.js';
 import { escapeResume, formatResume } from './preview/resumeHtml.js';
 import { formatCoverLetter } from './preview/coverLetterHtml.js';
+import { formatMatchReport } from './preview/matchHtml.js';
 import { runGeneration, COVER_LETTER, RESUME } from './generationFlow.js';
 import { Dialogs } from './dialogs.js';
 import { ProfileEditor } from './profile/profileEditor.js';
@@ -23,6 +24,8 @@ class ResumeStudioApp {
             name: '',
             contact: '',
             location: '',
+            workAuthorization: '',
+            clearance: '',
             summary: '',
             education: [],
             skills: [],
@@ -141,6 +144,8 @@ class ResumeStudioApp {
             'profile-name',
             'profile-contact',
             'profile-location',
+            'profile-work-authorization',
+            'profile-clearance',
             'profile-summary'
         ];
         profileFields.forEach(fieldId => {
@@ -268,6 +273,7 @@ class ResumeStudioApp {
             tailored: result.tailored || null, // tailored resume document, same ids as the baseline
             changes: result.changes || [],     // one record per applied edit, for the preview highlights
             coverage: result.metadata?.coverage || null,
+            matchAnalysis: result.matchAnalysis || null, // for the match report
             jobText,
             company: result.matchAnalysis?.company || '',
             role: result.matchAnalysis?.role || '',
@@ -338,6 +344,12 @@ class ResumeStudioApp {
                 chip.textContent = `Key ATS keywords ${cov.before.found}/${cov.after.total} → ${cov.after.found}/${cov.after.total}`;
                 chip.title = cov.after.missing?.length ? `Still missing (not in your profile): ${cov.after.missing.join(', ')}` : 'Every key keyword from the posting is on your resume.';
             }
+        }
+        const report = document.getElementById('resume-match');
+        if (report) {
+            const html = entry.tailored ? formatMatchReport(entry.matchAnalysis, this.profile, cov) : '';
+            report.innerHTML = html;
+            report.classList.toggle('hidden', !html);
         }
         const legend = document.getElementById('resume-legend');
         if (legend) legend.classList.toggle('hidden', !(entry.changes || []).some(c => c.op !== 'remove'));

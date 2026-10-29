@@ -60,8 +60,7 @@
       requirements: [{ text: 'Backend services in Go', kind: 'required', evidence: [], strength: 'partial' }],
       keywords: [{ term: 'Go', importance: 'core' }, ...MISSING.map(term => ({ term, importance: 'core' }))]
     }),
-    resume_edits: () => ({ edits: [] }),
-    // Tailoring v2: the profile's own lines, each citing itself.
+    // The composer: the profile's own lines, each citing itself.
     resume_composition: () => {
       const p = store.profile;
       const entry = (kind) => (x) => ({ id: `${kind}:${x.id}`, bullets: (x.bullets || []).map((text, i) => ({ text, sources: [`${kind}:${x.id}.b${i + 1}`] })) });
@@ -243,7 +242,7 @@
     assert(!pageInert(), 'page still inert');
     await waitFor('strip to hide after Done', () => progressHidden(), 3000);
     const line = infos.find(l => l.startsWith('[timing] resume done'));
-    assert(line && /tailor \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
+    assert(line && /compose \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
     assert(stub.requests.includes('resume_composition'), `the composer was not called: ${stub.requests.join(', ')}`);
     const report = $('#resume-match .match-report');
     assert(report && !$('#resume-match').classList.contains('hidden'), 'no match report');

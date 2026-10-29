@@ -8,7 +8,7 @@ import { renderProfileForCompose, toResumeDoc } from './compose.js';
 import { renderMatchForPrompt } from './matchAnalysis.js';
 import { keywordTerms, normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
 import { estimateDocHeight } from './layout.js';
-import { extraText } from './tailor.js';
+import { extraText } from './resumeDoc.js';
 
 const SYSTEM = `You write a candidate's resume for one job posting, using only the candidate's own profile. The resume must get past applicant tracking systems and then convince a recruiter in a few seconds, without one word that is not true.
 

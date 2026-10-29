@@ -41,7 +41,7 @@ class ResumeStudioApp {
         this.researchEnabled = true;
         this.lastApiCall = null;
         this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
-        this.baselineResume = null;  // frozen snapshot of the uploaded resume; what generation edits (generation/baseline.js)
+        this.baselineResume = null;  // frozen snapshot of the uploaded resume: page layout, Original view, "before" coverage (generation/baseline.js)
         this.dialogs = new Dialogs({
             cancelActions: { 'settings-modal': () => this.settings.close() },
             sanitizeFilename
@@ -270,8 +270,8 @@ class ResumeStudioApp {
     async rememberResume(result, jobText) {
         this.lastResume = {
             resumeContent: result.resumeContent,
-            tailored: result.tailored || null, // tailored resume document, same ids as the baseline
-            changes: result.changes || [],     // one record per applied edit, for the preview highlights
+            tailored: result.tailored || null, // the composed resume document (compose.js toResumeDoc)
+            changes: result.changes || [],     // composed lines and their sources, for the preview highlights
             coverage: result.metadata?.coverage || null,
             matchAnalysis: result.matchAnalysis || null, // for the match report
             jobText,
@@ -312,7 +312,7 @@ class ResumeStudioApp {
 
     // Shows a tailored resume with its changes marked, and keeps the unmarked
     // markup for the PDF. entry: { resumeContent, tailored?, changes?, coverage? }
-    // (a tailorResume() result or lastResume). Older entries without a
+    // (a composeResume() result or lastResume). Older entries without a
     // tailored document render as they are.
     async renderResumePreview(entry) {
         const previewEl = document.querySelector('.resume-content');
@@ -618,8 +618,8 @@ class ResumeStudioApp {
         return ResumeParser.parse(pdfjsLib, buffer);
     }
 
-    // The baseline is the uploaded resume as parsed, frozen: generation edits
-    // it, and only a new upload replaces it (profile edits do not).
+    // The baseline is the uploaded resume as parsed, frozen: generation measures
+    // its layout, and only a new upload replaces it (profile edits do not).
     async saveBaseline(parsed) {
         const { createBaseline } = await this.generation();
         this.baselineResume = createBaseline(parsed, this.uploadedResume || {});
@@ -796,10 +796,9 @@ class ResumeStudioApp {
 
     async requestResume(body) {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
-        const { tailorResume, composeResume, CONFIG } = await this.generation();
-        if (CONFIG.RESUME_ENGINE !== 'compose') return tailorResume(this.apiKey.value, body);
-        // Tailoring v2: written from the whole profile, with the company brief
-        // (cached, or one search when research is on) deciding emphasis.
+        const { composeResume } = await this.generation();
+        // Written from the whole profile, with the company brief (cached, or
+        // one search when research is on) deciding emphasis.
         const result = await composeResume(this.apiKey.value, { ...body, research: this.researchEnabled, briefCache: this.companyBriefs });
         if (result.metadata?.briefSource === 'research' && result.companyBrief?.company) await this.cacheBrief(result.companyBrief);
         return result;
@@ -808,10 +807,7 @@ class ResumeStudioApp {
     describeResumeResult(result, { overflow, added = [] }) {
         const meta = result.metadata || {};
         const parts = [];
-        const n = (result.changes || []).filter(c => c.op !== 'remove').length;
-        parts.push(meta.engine === 'compose' ? 'Resume written for this posting from your profile.' : n
-            ? `Resume tailored with ${n} edit${n === 1 ? '' : 's'}.`
-            : 'Your resume already matches this posting well; nothing was reworded.');
+        parts.push('Resume written for this posting from your profile.');
         const cov = meta.coverage;
         if (cov && cov.after.total) {
             parts.push(`Key ATS keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
@@ -819,15 +815,15 @@ class ResumeStudioApp {
         if (added.length) {
             parts.push(`Added to your skills: ${added.join(', ')}.`);
         }
-        const removed = (result.changes || []).filter(c => c.op === 'remove').length + (meta.page?.trimmed?.length || 0);
+        const removed = meta.page?.trimmed?.length || 0;
         if (removed) {
             parts.push(`Removed ${removed} less relevant item${removed === 1 ? '' : 's'} to fit one page.`);
         }
         if (overflow > 1) {
-            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Remove a bullet or two from your uploaded resume and try again.`);
+            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Shorten a few bullets in your profile and try again.`);
         }
         if (meta.rejected?.length) {
-            console.warn('Edits rejected by the validator:', meta.rejected);
+            console.warn('Lines removed by the validator:', meta.rejected);
         }
         return parts.join(' ');
     }

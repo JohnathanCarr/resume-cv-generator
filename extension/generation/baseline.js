@@ -1,7 +1,8 @@
 // The baseline resume: a frozen snapshot of what the user's uploaded resume
-// parsed to. Generation edits this document for each posting; the profile is
-// only the pool of extra material it may swap in. Re-uploading replaces it;
-// editing the profile does not touch it.
+// parsed to. Generation measures its layout (fonts, widths, line heights) to
+// plan the one page, the preview's Original view shows it, and it gives the
+// "before" keyword coverage; the resume itself is composed from the whole
+// profile. Re-uploading replaces it; editing the profile does not touch it.
 //
 // Pure functions, no DOM: the extension stores the snapshot under the
 // `baselineResume` storage key, and the same code runs under Node for tests.
@@ -57,8 +58,8 @@ function hasSummary(baseline) {
 
 const dates = (e) => [str(e.start), str(e.end)].filter(Boolean).join(' - ') || null;
 
-// A resume document (the snapshot's `resume`, or a tailored copy of it from
-// tailor.js) in the RESUME_SCHEMA shape the extension's formatResume()
+// A resume document (the snapshot's `resume`, or a composed one from
+// compose.js toResumeDoc) in the RESUME_SCHEMA shape the extension's formatResume()
 // renders. summary is null when there is none.
 function resumeDocToSchema(doc) {
   const r = doc || {};

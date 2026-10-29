@@ -1320,11 +1320,6 @@ input[type="checkbox"]:checked::after { opacity: 1; }
     -webkit-box-decoration-break: clone;
 }
 
-.rs-added.rs-line {
-    background: #EFF5EA;
-    box-shadow: inset 3px 0 0 #5E8C4A;
-}
-
 /* Match report: the posting's requirements and keywords against the
    profile. Status is never colour alone: each row has a symbol and a
    screen-reader label. */

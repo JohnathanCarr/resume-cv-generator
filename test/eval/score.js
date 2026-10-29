@@ -1,4 +1,5 @@
-// Rubric checks for generated resumes and cover letters.
+// Rubric checks for generated cover letters (resumes: scoreV2.mjs), and the
+// number check rubric v2 shares.
 //
 // Every check is heuristic and deterministic so runs are comparable across
 // prompt changes. Scores are 0–1 per check; `fails` lists hard failures.
@@ -158,93 +159,6 @@ function profileAnchors(text, profile) {
 
 // ── Public scorers ────────────────────────────────────────────────────────
 
-// Scores a tailored resume (pipeline tailorResume() result) against the
-// baseline it edited. Tailoring keeps the user's resume, so length and page
-// fill are the user's own; the rubric measures what the edits did and whether
-// they stayed honest.
-function scoreResume({ result, baseline, profile, jobText }) {
-  const checks = {};
-  const fails = [];
-  const r = result?.resumeContent || {};
-  const doc = result?.tailored || {};
-  const base = baseline?.resume || {};
-  const meta = result?.metadata || {};
-  const changes = result?.changes || [];
-
-  checks.validShape = typeof r === 'object' && Array.isArray(r.experience) && Array.isArray(changes) ? 1 : 0;
-  if (!checks.validShape) fails.push('invalid shape');
-
-  // Jobs and education are never touched: same entries, same headers, same order.
-  const header = (e) => [e.title, e.company, e.start, e.end].join('|');
-  const jobsSame = (doc.experiences || []).map(header).join('\n') === (base.experiences || []).map(header).join('\n');
-  const eduSame = (doc.education || []).map(e => e.institution).join('|') === (base.education || []).map(e => e.institution).join('|');
-  checks.historyIntact = jobsSame && eduSame ? 1 : 0;
-  if (!checks.historyIntact) fails.push('jobs or education changed');
-
-  // A summary only when the upload had one.
-  checks.summaryRule = Boolean((doc.summary || '').trim()) === Boolean((base.summary || '').trim()) ? 1 : 0;
-  if (!checks.summaryRule) fails.push('summary added or removed');
-
-  const flat = [];
-  const pushAll = (v) => { if (Array.isArray(v)) v.forEach(pushAll); else if (v && typeof v === 'object') Object.values(v).forEach(pushAll); else if (v != null) flat.push(String(v)); };
-  pushAll(r);
-  const text = flat.join('\n');
-  const fab = fabricatedNumbers(text, profile, jobText);
-  checks.noFabricatedNumbers = fab.length ? 0 : 1;
-  if (fab.length) fails.push(`fabricated numbers: ${fab.join(', ')}`);
-
-  // Core keyword coverage after tailoring, as a share of what was reachable:
-  // a keyword the candidate has nowhere in the profile cannot be added honestly.
-  const cov = meta.coverage || { before: { found: 0, total: 0 }, after: { found: 0, total: 0, missing: [] } };
-  const profileCorpus = lower(profileText(profile));
-  const reachable = cov.after.total - (cov.after.missing || []).filter(k => !profileCorpus.includes(lower(k))).length;
-  checks.coreKeywordCoverage = reachable ? +Math.min(1, cov.after.found / reachable).toFixed(2) : 1;
-
-  // No keyword stuffing: no core keyword more than three times.
-  const coreTerms = (result?.matchAnalysis?.keywords || []).filter(k => k.importance === 'core').map(k => k.term);
-  const stuffed = coreTerms.filter(t => (lower(text).match(new RegExp(`\\b${lower(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')) || []).length > 3);
-  checks.noStuffing = stuffed.length ? 0 : 1;
-  if (stuffed.length) fails.push(`keyword used more than 3 times: ${stuffed.join(', ')}`);
-
-  // One page, hard limit (by the layout estimate under Node).
-  checks.fitsOnePage = meta.page ? (meta.page.fits ? 1 : 0) : 1;
-  if (!checks.fitsOnePage) fails.push(`over one page: ${meta.page.afterPx}/${meta.page.limitPx}px`);
-
-  // Restraint: a handful of edits, none rejected after the repair pass.
-  const n = changes.filter(c => c.op !== 'remove').length;
-  checks.editRestraint = n <= 12 ? 1 : 0.5;
-  if (n > 12) fails.push(`${n} edits`);
-  checks.noRejectedEdits = (meta.rejected || []).length ? 0.5 : 1;
-  if ((meta.rejected || []).length) fails.push(`rejected: ${meta.rejected.join(' / ')}`);
-
-  // Unchanged lines must be byte-identical (true by construction; guards applyEdits).
-  // A bullet may only disappear if it was edited or its project was swapped out.
-  const swapped = new Set(changes.filter(c => /^proj:\d+$/.test(c.id)).map(c => c.id));
-  const edited = new Set(changes.map(c => c.id));
-  const docBullets = new Set([...(doc.experiences || []), ...(doc.projects || [])].flatMap(e => e.bullets || []));
-  const lostUnedited = [...(base.experiences || []), ...(base.projects || [])]
-    .filter(e => !swapped.has(e.id))
-    .flatMap(e => (e.bullets || []).map((b, i) => ({ id: `${e.id}.b${i + 1}`, b })))
-    .filter(({ id, b }) => !edited.has(id) && !docBullets.has(b));
-  checks.verbatimElsewhere = lostUnedited.length ? 0 : 1;
-  if (lostUnedited.length) fails.push(`unedited lines changed: ${lostUnedited.map(x => x.id).join(', ')}`);
-  const keptBullets = [...docBullets].filter(b => (base.experiences || []).concat(base.projects || []).some(e => (e.bullets || []).includes(b))).length;
-
-  const score = Object.values(checks).reduce((a, b) => a + b, 0) / Object.keys(checks).length;
-  return {
-    score: +score.toFixed(3), checks, fails,
-    info: {
-      edits: n,
-      byOp: changes.reduce((a, c) => ({ ...a, [c.op]: (a[c.op] || 0) + 1 }), {}),
-      coverage: `${cov.before.found}/${cov.before.total} → ${cov.after.found}/${cov.after.total}`,
-      missingCore: cov.after.missing,
-      keptBullets,
-      words: `${meta.wordsBefore} → ${meta.wordsAfter}`,
-      page: meta.page ? `${meta.page.usedPx} → ${meta.page.afterPx}/${meta.page.limitPx}px${meta.page.trimmed.length ? ` trimmed ${meta.page.trimmed.join(',')}` : ''}` : null
-    }
-  };
-}
-
 function scoreCoverLetter({ coverLetter, profile, jobText, company, unsourcedClaims }) {
   const checks = {};
   const fails = [];
@@ -306,4 +220,4 @@ function scoreCoverLetter({ coverLetter, profile, jobText, company, unsourcedCla
   return { score: +score.toFixed(3), checks, fails, info: { words: n, paragraphs: paras.length, buzzwords: buzz, aiTells: tells, anchors, sentences: st } };
 }
 
-module.exports = { scoreResume, scoreCoverLetter, relevantJdKeywords, fabricatedNumbers, buzzwordHits, aiTellHits };
+module.exports = { scoreCoverLetter, relevantJdKeywords, fabricatedNumbers, buzzwordHits, aiTellHits };

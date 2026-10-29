@@ -1,6 +1,7 @@
-// Page model for the one-page limit. Tailoring has to know, before it edits,
-// how much room the page has and how much each edit costs, so the limit is
-// planned for rather than repaired afterwards.
+// Page model for the one-page limit. The composer has to know, before it
+// writes, how much room the page has (composePrompt.js pageBudget) and how
+// tall the result is (compose.js fitComposition), so the limit is planned
+// for rather than repaired afterwards.
 //
 // A layout describes how formatResume() in the extension sets text: for each
 // kind of line, its font, usable width, line height and the gap after it,
@@ -62,20 +63,6 @@ function lineCount(layout, kind, text) {
   return lines;
 }
 
-// Characters that still fit on the text's last line before it wraps again.
-function spareChars(layout, kind, text) {
-  const k = layout.kinds[kind];
-  const t = `${k.prefix || ''}${String(text || '').trim()}`;
-  const space = layout.textWidth(' ', k.font);
-  let x = 0;
-  for (const w of t.split(/\s+/).filter(Boolean)) {
-    const ww = layout.textWidth(w, k.font);
-    x = (x > 0 && x + space + ww > k.width) ? ww : x + (x > 0 ? space : 0) + ww;
-  }
-  const avg = layout.textWidth('abcdefghijklmnopqrstuvwxyz', k.font) / 26;
-  return Math.max(0, Math.floor((k.width - x - space) / avg));
-}
-
 // Height of one line item (bullet, skills line, extra…) including its gap.
 function itemHeight(layout, kind, text) {
   const k = layout.kinds[kind];
@@ -118,4 +105,4 @@ function estimateDocHeight(layout, doc, extraText) {
   return h;
 }
 
-export { makeLayout, lineCount, spareChars, itemHeight, projectHeight, estimateDocHeight, approxTextWidth };
+export { makeLayout, lineCount, itemHeight, projectHeight, estimateDocHeight, approxTextWidth };

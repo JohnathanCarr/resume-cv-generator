@@ -145,7 +145,7 @@ export const RESUME = {
     retry: (app) => app.generateResume(),
 
     missingInput: (app) => app.uploadedResume ? null
-        : 'Upload your current resume in the Profile tab first. The generator tailors that resume to the posting.',
+        : 'Upload your current resume in the Profile tab first. Its layout sets the page the generator writes to.',
 
     async prepare({ app, timed }) {
         if (!(await timed('load resume', () => app.ensureBaseline()))) {
@@ -156,21 +156,20 @@ export const RESUME = {
     async generate({ app, jobText, timed, detail }, checked) {
         const { match, profile } = checked;
 
-        // Every posting starts from the user's own resume, never from the last
-        // tailored version. The model returns edits; the pipeline applies them.
-        // One page is a hard limit, planned from the start: measure how the
-        // upload lays out at print size and hand that to the pipeline, which
-        // gives the model each line's room and the page's free space.
-        app.showStatus('Tailoring your resume…', 'loading');
+        // The resume is written for this posting from the whole profile. One
+        // page is a hard limit, planned from the start: measure how the upload
+        // lays out at print size (fonts, widths, line heights) and hand that to
+        // the pipeline, which budgets the page and trims to fit.
+        app.showStatus('Writing your resume for this posting…', 'loading');
         const { resumeDocToSchema } = await app.generation();
         const layout = await timed('measure layout', () => measureLayout(resumeDocToSchema(app.baselineResume.resume), app.profile));
         app.progress.mark(0.3, 0.7, 9000);
-        let result = await timed('tailor', () => app.requestResume({ profile, jobText, match, baseline: app.baselineResume, layout }));
-        detail('tailor', result.metadata?.timings);
+        let result = await timed('compose', () => app.requestResume({ profile, jobText, match, baseline: app.baselineResume, layout }));
+        detail('compose', result.metadata?.timings);
 
         // Confirm on the real layout. The pipeline works from per-line
-        // estimates; if the result still spills over, fold the measured error
-        // into the budget and ask again (twice at most).
+        // estimates; if the result still spills over, trim again locally with
+        // the measured error folded in (no model call; twice at most).
         app.progress.mark(0.75, 0.9, 4000);
         let height = await timed('measure page', () => measureResumeHeight(result.resumeContent, app.profile));
         let refits = 0;
@@ -178,16 +177,9 @@ export const RESUME = {
             app.showStatus('Fitting it to one page…', 'loading');
             app.progress.mark(0.75, 0.9, 4000);
             const step = `refit ${refits + 1}`;
-            if (result.metadata?.engine === 'compose') {
-                // A composed resume is trimmed again locally, no model call.
-                const { refitComposedResume } = await app.generation();
-                const measuredPx = height;
-                result = await timed(step, () => refitComposedResume(result, { profile, layout, baseline: app.baselineResume, measuredPx }));
-            } else {
-                const predicted = result.metadata?.page?.afterPx || layout.usedPx;
-                layout.usedPx += (height - predicted) * (refits + 1);
-                result = await timed(step, () => app.requestResume({ profile, jobText, match, baseline: app.baselineResume, layout }));
-            }
+            const { refitComposedResume } = await app.generation();
+            const measuredPx = height;
+            result = await timed(step, () => refitComposedResume(result, { profile, layout, baseline: app.baselineResume, measuredPx }));
             detail(step, result.metadata?.timings);
             height = await timed('measure page', () => measureResumeHeight(result.resumeContent, app.profile));
             refits++;

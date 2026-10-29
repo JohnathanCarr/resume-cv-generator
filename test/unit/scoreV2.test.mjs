@@ -85,3 +85,19 @@ test('page and never-do checks', () => {
   assert.equal(s.checks.fitsOnePage, 0);
   assert.equal(score(good, { page: { fits: true, afterPx: 860, limitPx: 1048 } }).checks.pageFill, 0.5);
 });
+
+test('skill group labels are headings, not tool claims', () => {
+  const s = score({ ...good, skills: ['Cloud & DevOps: Docker', 'Languages: Go, PostgreSQL', 'Marketing: SEO (Search Engine Optimization)'] });
+  assert.equal(s.checks.noUnsupportedTools, 1, s.fails.join('; '));
+});
+
+test('supported aliases, plain keywords and the posting title in the summary are not tool claims', () => {
+  const m = { ...match, role: 'ML Engineer', keywords: [...match.keywords, { term: 'text', importance: 'supporting', alias: '' }, { term: 'CI/CD', importance: 'supporting', alias: 'Continuous Integration/Continuous Delivery' }] };
+  const p = { ...profile, skills: [...profile.skills, 'CI/CD'] };
+  const r = { ...good, summary: 'ML-focused backend engineer building Go services.', skills: [...good.skills, 'Delivery: CI/CD (Continuous Integration/Continuous Delivery)'], experience: [{ ...good.experience[0], bullets: [...good.experience[0].bullets, 'Cleaned text data'] }, good.experience[1]] };
+  const s = scoreResumeV2({ resume: r, profile: p, jobText, match: m, page });
+  assert.equal(s.checks.noUnsupportedTools, 1, s.fails.join('; '));
+  // In a bullet, ML is still a claim.
+  const b = scoreResumeV2({ resume: { ...r, experience: [{ ...good.experience[0], bullets: ['Built ML services'] }, good.experience[1]] }, profile: p, jobText, match: m, page });
+  assert.ok(b.info.unsupportedTools.includes('ML'));
+});

@@ -2,11 +2,12 @@
 // Runs the generation pipeline (extension/generation/) over profiles × job
 // postings in-process and scores the output with score.js. No server needed.
 //
-//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research] [--judge] [--rubric v1]
+//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research] [--judge] [--rubric v1] [--engine compose]
 //
 // Resumes are scored with rubric v2 (scoreV2.mjs: truth, match, page, never)
 // unless --rubric v1 asks for the edit-list rubric in score.js. --judge adds a
 // recruiter-judge score per resume (judge.mjs, one extra model call each).
+// --engine compose runs tailoring v2 (composeResume) instead of the edit list.
 //
 // Resumes are tailored the way the extension does it: an edit list against
 // the user's uploaded resume. The eval profiles have no uploaded resume, so
@@ -180,7 +181,8 @@ async function main() {
 
   // The pipeline is an ES module; the extension page logs progress to the
   // console, which is noise here.
-  const { tailorResume, generateCoverLetter, createBaseline } = await import(pathToFileURL(PIPELINE).href);
+  const { tailorResume, composeResume, generateCoverLetter, createBaseline } = await import(pathToFileURL(PIPELINE).href);
+  const engine = arg('engine', 'edit');
   const { scoreResumeV2 } = await import(pathToFileURL(path.join(ROOT, 'scoreV2.mjs')).href);
   const judge = arg('judge', false) && rubric === 'v2' ? (await import(pathToFileURL(path.join(ROOT, 'judge.mjs')).href)).judgeResume : null;
   const quiet = (fn) => async (...args) => {
@@ -204,7 +206,7 @@ async function main() {
 
       if (!only || only === 'resume') {
         const resumeBody = { ...body, baseline };
-        const r = await call(quiet(tailorResume), key, resumeBody);
+        const r = await call(quiet(engine === 'compose' ? composeResume : tailorResume), key, resumeBody);
         const scored = r.ok ? scoreResumeWith(rubric, scoreResumeV2, { result: r.data, baseline, profile: p.profile, jobText: j.text }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
         if (r.ok && judge) {
           try { addJudge(scored, await judge(key, { resume: r.data.resumeContent, profile: p.profile, jobText: j.text })); }
@@ -212,7 +214,7 @@ async function main() {
         }
         const reuse = !r.ok ? ''
           : rubric === 'v1' ? `  ${scored.info.edits} edits ${JSON.stringify(scored.info.byOp)}  core kw ${scored.info.coverage}  page ${scored.info.page}`
-          : `  core ${scored.info.coverage}  req ${scored.info.requirements}  fill ${scored.info.pageFill || '-'}${scored.info.judge ? `  judge ${['relevance', 'tailoring', 'specificity', 'readability', 'credibility'].map(d => scored.info.judge[d]).join('/')}` : ''}`;
+          : `  core ${scored.info.coverage}  req ${scored.info.requirements}  fill ${scored.info.pageFill || '-'}${r.data.metadata && r.data.metadata.engine === 'compose' ? `  repairs ${r.data.metadata.repairs} dropped ${r.data.metadata.rejected.length} trimmed ${r.data.metadata.page.trimmed.length}` : ''}${scored.info.judge ? `  judge ${['relevance', 'tailoring', 'specificity', 'readability', 'credibility'].map(d => scored.info.judge[d]).join('/')}` : ''}`;
         results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
         fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored }, null, 2));
         console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
@@ -229,7 +231,7 @@ async function main() {
     }
   }
 
-  const summary = { ...summarise(results, label), stamp, rubric, judge: !!judge, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
+  const summary = { ...summarise(results, label), stamp, rubric, engine, judge: !!judge, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
 
   fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify({ summary, results }, null, 2));
   if (arg('baseline', false)) {

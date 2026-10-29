@@ -1,0 +1,67 @@
+{
+  "label": "compose-v1",
+  "kinds": {
+    "resume": {
+      "n": 15,
+      "meanScore": 0.907,
+      "meanMs": 40923,
+      "failures": 4,
+      "checks": {
+        "noFabricatedNumbers": 1,
+        "noUnsupportedTools": 0.87,
+        "historyTruthful": 1,
+        "skillsFromProfile": 1,
+        "coreCoverage": 1,
+        "requirementEvidence": 1,
+        "acronymPairs": 0.8,
+        "skillsInContext": 0.5,
+        "hardRequirementsStated": 1,
+        "summaryPresent": 1,
+        "fitsOnePage": 1,
+        "pageFill": 0.83,
+        "noStuffing": 0.93,
+        "noFiller": 1,
+        "parseSafe": 1,
+        "recruiterJudge": 0.58
+      }
+    }
+  },
+  "stamp": "2026-10-29T18-46-47",
+  "rubric": "v2",
+  "engine": "compose",
+  "judge": true,
+  "profiles": [
+    "david_analyst_undergrad",
+    "maria_backend_ms",
+    "johnathan"
+  ],
+  "jobs": [
+    "01_senior_backend_vercel",
+    "02_data_analyst_intern_shopify",
+    "03_ml_engineer_lumen_health",
+    "04_mobile_fullstack_northwind",
+    "05_product_analyst_notion"
+  ],
+  "rescored": {
+    "rubric": "v2 (2026-10-29 label/alias/plain-word fixes)",
+    "meanScore": 0.935,
+    "checks": {
+      "noFabricatedNumbers": 1,
+      "noUnsupportedTools": 0.97,
+      "historyTruthful": 1,
+      "skillsFromProfile": 1,
+      "coreCoverage": 1,
+      "requirementEvidence": 1,
+      "acronymPairs": 0.8,
+      "skillsInContext": 0.5,
+      "hardRequirementsStated": 1,
+      "summaryPresent": 1,
+      "fitsOnePage": 1,
+      "pageFill": 0.83,
+      "noStuffing": 0.93,
+      "noFiller": 1,
+      "parseSafe": 1
+    },
+    "editListBaselineRescored": 0.881
+  }
+}

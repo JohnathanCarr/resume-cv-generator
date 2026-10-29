@@ -5,16 +5,21 @@
 // Every requirement carries `evidence`: ids of profile items that support it
 // (exp:<id>, proj:<id>, edu:<id>, extra:<id>, skill:<name>). A requirement
 // with strength "none" has no evidence and must not be claimed downstream.
+// Hard requirements (work authorization, clearance, license, degree,
+// location, years) are listed separately: recruiters filter on them and
+// knockout questions mirror them. Each keyword carries its other form
+// (acronym ↔ full name) when it has one. cleanMatch() checks the model's
+// answer in code: keywords must be in the posting, evidence must exist.
 
 import { CONFIG } from './config.js';
-import { keywordTerms } from './keywords.js';
+import { keywordTerms, normalizeTerm, corpusHas } from './keywords.js';
 const { GENERATION_MODEL, REASONING } = CONFIG;
 
 // Renders the profile with stable ids so the model can cite items.
 function renderProfileWithIds(profile) {
   const lines = [];
   lines.push(`Name: ${profile.name || 'Unknown'}`);
-  if (profile.location) lines.push(`Location: ${profile.location}`);
+  if (profile.location) lines.push(`[profile:location] Location: ${profile.location}`);
   if (profile.summary) lines.push(`Summary: ${profile.summary}`);
 
   const edu = Array.isArray(profile.education) ? profile.education : [];
@@ -99,13 +104,30 @@ const MATCH_SCHEMA = {
         additionalProperties: false,
         properties: {
           term: { type: 'string', description: 'The posting\'s exact wording.' },
-          importance: { type: 'string', enum: ['core', 'supporting'] }
+          importance: { type: 'string', enum: ['core', 'supporting'] },
+          alias: { type: 'string', description: 'The term\'s other standard form if it has one: the full name for an acronym ("Search Engine Optimization" for "SEO") or the acronym for a full name. Empty string if none.' }
         },
-        required: ['term', 'importance']
+        required: ['term', 'importance', 'alias']
+      }
+    },
+    hard_requirements: {
+      type: 'array',
+      description: 'Requirements a recruiter or a knockout question screens on directly. Empty if the posting has none.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          type: { type: 'string', enum: ['work_authorization', 'sponsorship', 'clearance', 'license', 'certification', 'degree', 'location', 'years_experience', 'other'] },
+          text: { type: 'string', description: 'The requirement in the posting\'s own words.' },
+          kind: { type: 'string', enum: ['required', 'preferred'] },
+          met: { type: 'string', enum: ['yes', 'no', 'unknown'], description: 'yes only when the profile shows it; no when the profile shows otherwise; unknown when the profile does not say.' },
+          evidence: { type: 'array', items: { type: 'string' }, description: 'Profile item ids showing it is met. Empty unless met is yes.' }
+        },
+        required: ['type', 'text', 'kind', 'met', 'evidence']
       }
     }
   },
-  required: ['company', 'role', 'seniority', 'location', 'about_company', 'requirements', 'keywords']
+  required: ['company', 'role', 'seniority', 'location', 'about_company', 'requirements', 'keywords', 'hard_requirements']
 };
 
 const SYSTEM = `You compare a job posting with a candidate's profile. Be literal and careful.
@@ -116,13 +138,15 @@ Rules:
 - For each requirement, cite the profile ids that genuinely support it. Cite an item only if it demonstrates the requirement, not merely mentions a related word. strength is "strong" when the evidence clearly meets it, "partial" when it is adjacent or below the stated bar (for example fewer years, related tool, coursework only), and "none" when nothing in the profile supports it — in which case evidence must be empty.
 - keywords are the posting's exact terms an applicant tracking system would look for: languages, tools, frameworks, methodologies, certifications, and short phrases like "incident response". Do not paraphrase them.
 - Mark a keyword "core" only if a recruiter would plausibly filter candidates on it: a concrete, nameable hard skill, tool, language, platform, methodology or certification (usually 1–3 words, e.g. "PyTorch", "A/B testing", "HIPAA") that is in a required qualification or named more than once. Usually 3–8 per posting. Everything else is "supporting": the job title itself, descriptions of experience ("reliable APIs at scale", "applied ML in production"), categories where the posting also names the specific tools ("data visualization tool" when it lists Tableau), preferred or nice-to-have items mentioned once, soft skills ("communication", "ownership"), and generic phrases ("fast-paced environment", "problem solving").
+- alias: for each keyword that is an acronym or has a standard acronym, give the other form ("SEO" ↔ "Search Engine Optimization", "CI/CD" ↔ "Continuous Integration/Continuous Delivery", "GCP" ↔ "Google Cloud Platform"). Only an acronym and its full name; never a plural, tense or spelling variant ("A/B tests" is not an alias of "A/B testing") and never a related but different skill. Otherwise an empty string.
+- hard_requirements: the things the posting screens on directly — work authorization, visa sponsorship, security clearance, licenses, required certifications, degree level, on-site location, and minimum years of experience. One entry each, in the posting's words. met is "yes" only when the profile shows it (cite the ids; the candidate's location is [profile:location]), "no" when the profile shows otherwise, and "unknown" when the profile does not say; never assume.
 - about_company contains only what the posting says. Do not add outside knowledge.`;
 
 async function analyzeMatch(openai, { profile, jobText }) {
   const completion = await openai.chat.completions.create({
     model: GENERATION_MODEL,
     reasoning_effort: REASONING.extract,
-    max_completion_tokens: 3000,
+    max_completion_tokens: 4000,
     messages: [
       { role: 'system', content: SYSTEM },
       { role: 'user', content: `JOB POSTING:\n${jobText}\n\nCANDIDATE PROFILE:\n${renderProfileWithIds(profile)}` }
@@ -130,10 +154,74 @@ async function analyzeMatch(openai, { profile, jobText }) {
     response_format: { type: 'json_schema', json_schema: { name: 'match_analysis', strict: true, schema: MATCH_SCHEMA } }
   });
 
-  const match = JSON.parse(completion.choices[0].message.content);
-  // Belt and braces: a requirement with no evidence cannot be strong/partial.
-  for (const r of match.requirements) if (!r.evidence.length) r.strength = 'none';
-  return match;
+  return cleanMatch(JSON.parse(completion.choices[0].message.content), { jobText, profile });
+}
+
+// Every id renderProfileWithIds() gives the model, lower-cased.
+function profileIds(profile) {
+  const ids = new Set();
+  if (profile.location) ids.add('profile:location');
+  for (const e of profile.education || []) ids.add(`edu:${e.id}`);
+  for (const x of profile.experiences || []) ids.add(`exp:${x.id}`);
+  for (const p of profile.projects || []) ids.add(`proj:${p.id}`);
+  for (const x of profile.extras || []) ids.add(`extra:${x.id}`);
+  for (const s of profile.skills || []) ids.add(`skill:${s}`);
+  return new Set([...ids].map(id => id.toLowerCase()));
+}
+
+// Checks the model's answer in code and returns it corrected:
+// - evidence must name ids the profile has; a requirement left without
+//   evidence is "none", and a hard requirement left without it is not "yes";
+// - keywords must be in the posting: when only the alias is, the two swap
+//   (the posting's wording is the term); otherwise the keyword is dropped.
+//   Duplicates and an alias equal to its term are removed.
+// What was removed is listed in match.checks. Pure; the input is not mutated.
+function cleanMatch(match, { jobText, profile }) {
+  const ids = profileIds(profile || {});
+  const droppedEvidence = [];
+  // The model sometimes copies the brackets the profile shows ("[exp:3]").
+  const realIds = (evidence) => (evidence || [])
+    .map(id => String(id).trim().replace(/^\[\s*|\s*\]$/g, ''))
+    .filter(id => {
+      const ok = ids.has(id.toLowerCase());
+      if (!ok) droppedEvidence.push(id);
+      return ok;
+    });
+  const requirements = (match.requirements || []).map(r => {
+    const evidence = realIds(r.evidence);
+    return { ...r, evidence, strength: evidence.length ? r.strength : 'none' };
+  });
+  const hardRequirements = (match.hard_requirements || []).map(h => {
+    const evidence = realIds(h.evidence);
+    return { ...h, evidence, met: h.met === 'yes' && !evidence.length ? 'unknown' : h.met };
+  });
+
+  const posting = ` ${normalizeTerm(jobText)} `;
+  const inPosting = (t) => !!normalizeTerm(t) && corpusHas(posting, normalizeTerm(t));
+  const droppedKeywords = [];
+  const seen = new Set();
+  const keywords = [];
+  for (const k of match.keywords || []) {
+    let term = String(k.term || '').trim();
+    let alias = String(k.alias || '').trim();
+    if (!inPosting(term)) {
+      if (alias && inPosting(alias)) [term, alias] = [alias, term];
+      else { droppedKeywords.push(term); continue; }
+    }
+    if (normalizeTerm(alias) === normalizeTerm(term)) alias = '';
+    const key = normalizeTerm(term);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    keywords.push({ ...k, term, alias });
+  }
+
+  return {
+    ...match,
+    requirements,
+    hard_requirements: hardRequirements,
+    keywords,
+    checks: { droppedKeywords, droppedEvidence }
+  };
 }
 
 // Text block the generators receive. Keeps the ids so prompts can refer back.
@@ -153,4 +241,4 @@ function renderMatchForPrompt(match) {
   return lines.join('\n');
 }
 
-export { analyzeMatch, renderProfileWithIds, renderMatchForPrompt, MATCH_SCHEMA };
+export { analyzeMatch, cleanMatch, profileIds, renderProfileWithIds, renderMatchForPrompt, MATCH_SCHEMA };

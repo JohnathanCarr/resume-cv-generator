@@ -55,17 +55,31 @@ function keywordTerms(match, { coreOnly = false } = {}) {
     .filter(Boolean);
 }
 
+// Each core keyword's other form (acronym or full name), keyed by the
+// normalised term. Empty for plain-string keywords.
+function keywordAliases(match) {
+  const out = new Map();
+  for (const k of (match && match.keywords) || []) {
+    if (k && typeof k === 'object' && k.alias) out.set(normalizeTerm(k.term), normalizeTerm(k.alias));
+  }
+  return out;
+}
+
 // Core keywords that appear nowhere in the profile, in the posting's wording,
-// deduplicated case-insensitively, in posting order, capped at `limit`.
+// deduplicated case-insensitively, in posting order, capped at `limit`. A
+// term counts as present when the profile has it or its other form ("Search
+// Engine Optimization" for "SEO"): the user has the skill either way.
 function missingKeywords(match, profile, { limit = MAX_ASKED } = {}) {
   const corpus = profileCorpus(profile);
+  const aliases = keywordAliases(match);
   const seen = new Set();
   const out = [];
   for (const kw of keywordTerms(match, { coreOnly: true })) {
     const term = normalizeTerm(kw);
     if (!term || seen.has(term)) continue;
     seen.add(term);
-    if (!corpusHas(corpus, term)) out.push(kw);
+    const alias = aliases.get(term);
+    if (!corpusHas(corpus, term) && !(alias && corpusHas(corpus, alias))) out.push(kw);
     if (out.length >= limit) break;
   }
   return out;
@@ -100,4 +114,4 @@ function applyKeywords(match, profile, accepted) {
   return { profile: nextProfile, match: nextMatch, added };
 }
 
-export { missingKeywords, applyKeywords, keywordTerms, normalizeTerm, MAX_ASKED };
+export { missingKeywords, applyKeywords, keywordTerms, normalizeTerm, corpusHas, MAX_ASKED };

@@ -212,7 +212,9 @@
     await waitFor('error dialog to close', () => !visible('error-modal'));
   });
 
-  $('#job-text').value = sample.jobText;
+  // The stubbed analysis returns MISSING as core keywords; cleanMatch() keeps
+  // only keywords the posting really contains, so the posting names them.
+  $('#job-text').value = `${sample.jobText}\n\nAlso required: ${MISSING.join(', ')}.`;
 
   await check('resume: keyword dialog, Continue with none ticked, done', async () => {
     $('#generate-resume-btn').click();

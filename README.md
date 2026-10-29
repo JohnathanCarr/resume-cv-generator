@@ -59,7 +59,7 @@ Unit tests cover the code that runs without the API: the baseline snapshot, the 
 node --test 'test/unit/*.test.mjs'
 ```
 
-The smoke test runs the real extension page in headless Chrome with the `chrome` API and OpenAI stubbed (nothing is sent or billed) and clicks through the main flows: a resume and a cover letter end to end, the keyword dialog (continue and cancel), both downloads with the file-name dialog, a failed generation and Retry, Settings, the theme toggle and the tour. It fails on any console error, and it compares the tailored resume's measured page height with `test/smoke/expected.json` so layout drift in the preview is caught. It takes a few seconds and needs Google Chrome.
+The smoke test runs the real extension page in headless Chrome with the `chrome` API and OpenAI stubbed (nothing is sent or billed) and clicks through the main flows: a resume and a cover letter end to end, the keyword dialog (continue and cancel), both downloads with the file-name dialog, a failed generation and Retry, Settings, the theme toggle and the tour. It fails on any console error. It also checks that the resume is parse-safe for applicant tracking systems (standard headings, reading order, no tables, images or ligatures), prints it through the real print view to a PDF and reads the PDF's text back the way a parser would, and compares the resume's measured page height with `test/smoke/expected.json` so layout drift is caught. It takes a few seconds and needs Google Chrome.
 
 ```bash
 ./scripts/smoke.sh            # run it

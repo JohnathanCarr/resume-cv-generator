@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 // Runs the generation pipeline (extension/generation/) over profiles × job
-// postings in-process and scores the output with score.js. No server needed.
+// postings in-process and scores the output (scoreV2.mjs for resumes,
+// score.js for cover letters). No server needed.
 //
-//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research] [--judge] [--rubric v1] [--engine compose]
+//   OPENAI_API_KEY=sk-... node test/eval/run.js [--profiles a,b] [--jobs 01,03] [--only resume|cover] [--label name] [--no-research] [--judge]
 //
-// Resumes are scored with rubric v2 (scoreV2.mjs: truth, match, page, never)
-// unless --rubric v1 asks for the edit-list rubric in score.js. --judge adds a
-// recruiter-judge score per resume (judge.mjs, one extra model call each).
-// --engine compose runs tailoring v2 (composeResume) instead of the edit list.
+// Resumes are composed from the whole profile (composeResume) and scored with
+// rubric v2 (scoreV2.mjs: truth, match, page, never); cover letters with
+// score.js. --judge adds a recruiter-judge score per resume (judge.mjs, one
+// extra model call each).
 //
-// Resumes are tailored the way the extension does it: an edit list against
-// the user's uploaded resume. The eval profiles have no uploaded resume, so
-// evalBaseline() stands one in: the profile minus some material (see there),
-// which also gives the swaps something to draw on.
+// The extension also passes the user's uploaded resume, which sets the
+// "before" keyword coverage. The eval profiles have no uploaded resume, so
+// evalBaseline() stands one in: the profile minus some material (see there).
 //
 // The key may also be read from test/eval/.env (OPENAI_API_KEY=...) for local
 // convenience. Outputs go to test/eval/runs/<timestamp>-<label>/ (gitignored);
@@ -23,7 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { scoreResume, scoreCoverLetter } = require('./score');
+const { scoreCoverLetter } = require('./score');
 
 const ROOT = path.resolve(__dirname);
 const PIPELINE = path.resolve(ROOT, '../../extension/generation/pipeline.js');
@@ -64,8 +64,8 @@ function listProfiles(filter) {
 // The "uploaded resume" for an eval profile: the whole profile except the
 // last project and last certification/award (when there are two or more),
 // the last bullet of every job or project with three or more, the last
-// course of each school, and the last two skills. What is held back is the
-// pool the tailoring may swap in.
+// course of each school, and the last two skills, so the resume starts short
+// of what the profile can show, as a real upload usually does.
 function evalBaseline(profile, createBaseline) {
   const lastOff = (list, min) => (list.length >= min ? list.slice(0, -1) : list);
   const trimBullets = (e) => ({ ...e, bullets: lastOff(e.bullets || [], 3) });
@@ -103,9 +103,8 @@ async function call(fn, key, body) {
 
 function fmt(n) { return (n * 100).toFixed(0).padStart(3) + '%'; }
 
-// Scores one resume result with the chosen rubric.
-function scoreResumeWith(rubric, scoreResumeV2, { result, baseline, profile, jobText }) {
-  if (rubric === 'v1') return scoreResume({ result, baseline, profile, jobText });
+// Scores one resume result with rubric v2.
+function scoreResumeWith(scoreResumeV2, { result, profile, jobText }) {
   return scoreResumeV2({ resume: result.resumeContent, profile, jobText, match: result.matchAnalysis, page: result.metadata && result.metadata.page });
 }
 
@@ -119,7 +118,7 @@ function addJudge(scored, judged) {
 }
 
 // Re-apply the current rubric to a saved run without calling the API.
-async function rescore(runDir, rubric) {
+async function rescore(runDir) {
   const { scoreResumeV2 } = await import(pathToFileURL(path.join(ROOT, 'scoreV2.mjs')).href);
   const files = fs.readdirSync(runDir).filter(f => /__(resume|cover)\.json$/.test(f));
   const results = [];
@@ -129,7 +128,7 @@ async function rescore(runDir, rubric) {
     if (!saved.response || saved.response.error) continue;
     const company = (saved.request.jobText.split('\n')[1] || '').split('·')[0].trim();
     const scored = kind === 'resume'
-      ? scoreResumeWith(rubric, scoreResumeV2, { result: saved.response, baseline: saved.request.baseline, profile: saved.request.profile, jobText: saved.request.jobText })
+      ? scoreResumeWith(scoreResumeV2, { result: saved.response, profile: saved.request.profile, jobText: saved.request.jobText })
       : scoreCoverLetter({ coverLetter: saved.response.coverLetter, profile: saved.request.profile, jobText: saved.request.jobText, company, unsourcedClaims: saved.response.unsourcedClaims });
     results.push({ kind, profile, job, ms: 0, ...scored });
     console.log(`${kind.padEnd(7)} ${fmt(scored.score)}  ${profile} × ${job}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
@@ -161,11 +160,10 @@ function summarise(results, label) {
 }
 
 async function main() {
-  const rubric = arg('rubric', 'v2');
   const rescoreDir = arg('rescore', null);
   if (rescoreDir) {
     const dir = path.isAbsolute(rescoreDir) ? rescoreDir : path.resolve(process.cwd(), rescoreDir);
-    const results = await rescore(dir, rubric);
+    const results = await rescore(dir);
     const summary = summarise(results, `rescore:${path.basename(dir)}`);
     fs.writeFileSync(path.join(dir, 'summary.rescored.json'), JSON.stringify({ summary, results }, null, 2));
     return;
@@ -181,10 +179,9 @@ async function main() {
 
   // The pipeline is an ES module; the extension page logs progress to the
   // console, which is noise here.
-  const { tailorResume, composeResume, generateCoverLetter, createBaseline } = await import(pathToFileURL(PIPELINE).href);
-  const engine = arg('engine', 'edit');
+  const { composeResume, generateCoverLetter, createBaseline } = await import(pathToFileURL(PIPELINE).href);
   const { scoreResumeV2 } = await import(pathToFileURL(path.join(ROOT, 'scoreV2.mjs')).href);
-  const judge = arg('judge', false) && rubric === 'v2' ? (await import(pathToFileURL(path.join(ROOT, 'judge.mjs')).href)).judgeResume : null;
+  const judge = arg('judge', false) ? (await import(pathToFileURL(path.join(ROOT, 'judge.mjs')).href)).judgeResume : null;
   const quiet = (fn) => async (...args) => {
     const { log, warn } = console;
     console.log = () => {}; console.warn = () => {};
@@ -206,15 +203,14 @@ async function main() {
 
       if (!only || only === 'resume') {
         const resumeBody = { ...body, baseline };
-        const r = await call(quiet(engine === 'compose' ? composeResume : tailorResume), key, resumeBody);
-        const scored = r.ok ? scoreResumeWith(rubric, scoreResumeV2, { result: r.data, baseline, profile: p.profile, jobText: j.text }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
+        const r = await call(quiet(composeResume), key, resumeBody);
+        const scored = r.ok ? scoreResumeWith(scoreResumeV2, { result: r.data, profile: p.profile, jobText: j.text }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
         if (r.ok && judge) {
           try { addJudge(scored, await judge(key, { resume: r.data.resumeContent, profile: p.profile, jobText: j.text })); }
           catch (e) { scored.fails.push(`judge failed: ${e.message}`); }
         }
         const reuse = !r.ok ? ''
-          : rubric === 'v1' ? `  ${scored.info.edits} edits ${JSON.stringify(scored.info.byOp)}  core kw ${scored.info.coverage}  page ${scored.info.page}`
-          : `  core ${scored.info.coverage}  req ${scored.info.requirements}  fill ${scored.info.pageFill || '-'}${r.data.metadata && r.data.metadata.engine === 'compose' ? `  repairs ${r.data.metadata.repairs} dropped ${r.data.metadata.rejected.length} trimmed ${r.data.metadata.page.trimmed.length}` : ''}${scored.info.judge ? `  judge ${['relevance', 'tailoring', 'specificity', 'readability', 'credibility'].map(d => scored.info.judge[d]).join('/')}` : ''}`;
+          : `  core ${scored.info.coverage}  req ${scored.info.requirements}  fill ${scored.info.pageFill || '-'}  repairs ${r.data.metadata.repairs} dropped ${r.data.metadata.rejected.length} trimmed ${r.data.metadata.page.trimmed.length}${scored.info.judge ? `  judge ${['relevance', 'tailoring', 'specificity', 'readability', 'credibility'].map(d => scored.info.judge[d]).join('/')}` : ''}`;
         results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
         fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored }, null, 2));
         console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
@@ -231,7 +227,7 @@ async function main() {
     }
   }
 
-  const summary = { ...summarise(results, label), stamp, rubric, engine, judge: !!judge, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
+  const summary = { ...summarise(results, label), stamp, rubric: 'v2', judge: !!judge, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
 
   fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify({ summary, results }, null, 2));
   if (arg('baseline', false)) {

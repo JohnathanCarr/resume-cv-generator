@@ -18,6 +18,8 @@
 // extra:<id>, skill:<name>, profile:summary and profile:location.
 
 import { normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
+import { estimateDocHeight } from './layout.js';
+import { extraText } from './tailor.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const words = (s) => str(s).split(/\s+/).filter(Boolean);
@@ -130,10 +132,28 @@ export const COMPOSE_SCHEMA = {
     experience: { type: 'array', items: ENTRY('exp:<id> of a profile job') },
     projects: { type: 'array', items: ENTRY('proj:<id> of a profile project') },
     education: { type: 'array', items: PICK('edu:<id>') },
-    extras: { type: 'array', items: PICK('extra:<id>') }
+    extras: { type: 'array', items: PICK('extra:<id>') },
+    section_order: {
+      type: 'array',
+      items: { type: 'string', enum: ['experience', 'projects', 'education', 'extras'] },
+      description: 'Order of the sections after the summary and skills.'
+    }
   },
-  required: ['summary', 'skill_groups', 'experience', 'projects', 'education', 'extras']
+  required: ['summary', 'skill_groups', 'experience', 'projects', 'education', 'extras', 'section_order']
 };
+
+// Sections after the summary and skills, in the order a resume shows them
+// when nothing says otherwise.
+export const DEFAULT_SECTION_ORDER = ['experience', 'projects', 'education', 'extras'];
+
+// The model's order made valid: known sections, each once, missing ones
+// appended in the default order.
+export function normalizeSectionOrder(order) {
+  const out = [];
+  for (const s of order || []) if (DEFAULT_SECTION_ORDER.includes(s) && !out.includes(s)) out.push(s);
+  for (const s of DEFAULT_SECTION_ORDER) if (!out.includes(s)) out.push(s);
+  return out;
+}
 
 // ── Facts: numbers and named terms ────────────────────────────────────────────
 
@@ -164,6 +184,9 @@ export function namedTerms(text) {
     if (/\d/.test(s[m.index - 1] || '')) continue;   // the unit of a number: 10K+, 2M
     const before = s.slice(0, m.index).trimEnd();
     const sentenceStart = !before || /[.!?:;•(]$/.test(before);
+    // An acronym joined to a word is still a claim: "ML-focused".
+    const head = w.split('-')[0];
+    if (head !== w && /^[A-Z]{2,}s?$/.test(head)) { out.push(head); continue; }
     const toolish = /[0-9+#./]/.test(w) && /[A-Za-z]/.test(w);
     const camel = /[a-z][A-Z]/.test(w);
     const acronym = /^[A-Z]{2,}s?$/.test(w);
@@ -250,10 +273,10 @@ export function validateComposition(comp, profile, match = null) {
     for (const item of g.items || []) {
       const forms = (item.match(/^(.*?)\s*\((.*)\)$/) || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
       if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(corpus, f) || aliases.has(f))) {
-        fail('skill', `skill_groups[${gi}]`, `"${item}" is not in the profile.`);
+        errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not in the profile.` });
       }
       const key = forms[0];
-      if (seenSkills.has(key)) fail('duplicate_skill', `skill_groups[${gi}]`, `"${item}" is listed twice.`);
+      if (seenSkills.has(key)) errors.push({ code: 'duplicate_skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is listed twice.` });
       seenSkills.add(key);
     }
   }
@@ -358,8 +381,126 @@ export function toResumeDoc(comp, profile) {
       ...withBullets({ x, e }, 'proj')
     })),
     education: pick(c.education, 'education', 'edu').map(({ x }) => ({ ...x, id: `edu:${x.id}` })),
-    extras: pick(c.extras, 'extras', 'extra').map(({ x }) => ({ ...x, id: `extra:${x.id}` }))
+    extras: pick(c.extras, 'extras', 'extra').map(({ x }) => ({ ...x, id: `extra:${x.id}` })),
+    sectionOrder: normalizeSectionOrder(c.section_order)
   };
+}
+
+// ── After the repair passes ───────────────────────────────────────────────────
+
+// Truth errors that make a line unusable; such lines are dropped, never shown.
+const DROP_LINE = new Set(['empty', 'unsourced', 'unknown_source', 'wrong_entry', 'number', 'term', 'too_long']);
+
+// Removes whatever the validator still rejects after the repair passes:
+// bad lines, skills and entries go; a job or project left without bullets
+// goes; a bad summary is emptied; education is restored if it was dropped.
+// Returns { comp, dropped } with a description of each removal. Pure.
+export function sanitizeComposition(comp, errors, profile) {
+  const c = JSON.parse(JSON.stringify(comp || {}));
+  const dropped = [];
+  const lineAt = (target) => target.match(/^(experience|projects)\[(\d+)\]\.bullets\[(\d+)\]$/);
+  const badLines = new Set();
+  const badEntries = new Set();
+  for (const e of errors || []) {
+    if (e.target === 'summary' && DROP_LINE.has(e.code)) {
+      if (c.summary && c.summary.text) dropped.push(`summary: ${e.message}`);
+      c.summary = { text: '', sources: [] };
+    } else if (lineAt(e.target) && DROP_LINE.has(e.code)) {
+      badLines.add(e.target);
+    } else if (/^(experience|projects|education|extras)\[\d+\]$/.test(e.target) && ['unknown_entry', 'duplicate_entry'].includes(e.code)) {
+      badEntries.add(e.target);
+    }
+  }
+  for (const kind of ['experience', 'projects']) {
+    c[kind] = (c[kind] || []).map((entry, i) => ({
+      ...entry,
+      bullets: (entry.bullets || []).filter((b, j) => {
+        const bad = badLines.has(`${kind}[${i}].bullets[${j}]`);
+        if (bad) dropped.push(`${entry.id} bullet: ${b.text}`);
+        return !bad;
+      })
+    }));
+  }
+  for (const kind of ['experience', 'projects', 'education', 'extras']) {
+    c[kind] = (c[kind] || []).filter((entry, i) => {
+      if (badEntries.has(`${kind}[${i}]`)) { dropped.push(`${kind} entry ${entry.id}`); return false; }
+      if ((kind === 'experience' || kind === 'projects') && !(entry.bullets || []).length) { dropped.push(`${entry.id}: no usable bullets`); return false; }
+      return true;
+    });
+  }
+  // Skills the profile lacks go, and so does every repeat of a skill.
+  const notInProfile = new Set((errors || []).filter(e => e.code === 'skill').map(e => e.item));
+  const seenSkills = new Set();
+  c.skill_groups = (c.skill_groups || []).map(g => ({
+    ...g,
+    items: (g.items || []).filter(item => {
+      const key = normalizeTerm(String(item).replace(/\s*\(.*\)$/, ''));
+      const keep = !notInProfile.has(item) && !seenSkills.has(key);
+      seenSkills.add(key);
+      if (!keep) dropped.push(`skill: ${item}`);
+      return keep;
+    })
+  })).filter(g => g.items.length);
+  if ((profile.education || []).length && !(c.education || []).length) c.education = profile.education.map(e => ({ id: `edu:${e.id}` }));
+  return { comp: c, dropped };
+}
+
+// ── One page ──────────────────────────────────────────────────────────────────
+
+// Lines and entries that prove a supported required qualification: trimming
+// never removes them.
+function protectedProof(match) {
+  const ids = new Set();
+  for (const q of ((match && match.requirements) || []).filter(q => q.kind === 'required' && q.strength !== 'none')) {
+    for (const id of q.evidence || []) ids.add(String(id).trim().replace(/^\[\s*|\s*\]$/g, ''));
+  }
+  return ids;
+}
+
+// Trims the composition to one page by the layout's estimate, least
+// relevant first: extras from the end, then project bullets beyond the first,
+// then whole projects from the end, then job bullets beyond two and then
+// beyond one, oldest jobs first (the model lists bullets most relevant first,
+// so the last bullet goes). Never removes a line or entry that is evidence for
+// a supported required qualification, never a job. offsetPx corrects the
+// estimate by what a real render measured (the extension's second pass).
+// Returns { comp, trimmed, page: { afterPx, limitPx, fits } }. Pure.
+export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = {}) {
+  const c = JSON.parse(JSON.stringify(comp || {}));
+  const keep = protectedProof(match);
+  const limitPx = layout.capacityPx - layout.kinds.bullet.lineHeight * 0.5;
+  const height = () => estimateDocHeight(layout, toResumeDoc(c, profile), extraText) + offsetPx;
+  const isProof = (b) => (b.sources || []).some(id => keep.has(id));
+  const entryProtected = (e) => keep.has(e.id) || (e.bullets || []).some(isProof);
+  const trimmed = [];
+
+  const dropLastBullet = (entry, min) => {
+    const bullets = entry.bullets || [];
+    if (bullets.length <= min) return false;
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      if (isProof(bullets[j])) continue;
+      trimmed.push(`${entry.id} bullet: ${bullets[j].text}`);
+      bullets.splice(j, 1);
+      return true;
+    }
+    return false;
+  };
+  const steps = [
+    () => { const i = [...(c.extras || [])].reverse().findIndex(e => !keep.has(e.id)); if (i < 0) return false; const at = c.extras.length - 1 - i; trimmed.push(`extra ${c.extras[at].id}`); c.extras.splice(at, 1); return true; },
+    () => [...(c.projects || [])].reverse().some(p => dropLastBullet(p, 1)),
+    () => { const i = [...(c.projects || [])].reverse().findIndex(p => !entryProtected(p)); if (i < 0) return false; const at = c.projects.length - 1 - i; trimmed.push(`project ${c.projects[at].id}`); c.projects.splice(at, 1); return true; },
+    () => oldestFirst().some(e => dropLastBullet(e, 2)),
+    () => oldestFirst().some(e => dropLastBullet(e, 1))
+  ];
+  // Jobs in profile order are newest first; trim from the oldest.
+  const order = (profile.experiences || []).map(x => `exp:${x.id}`);
+  const oldestFirst = () => [...(c.experience || [])].sort((a, b) => order.indexOf(b.id) - order.indexOf(a.id));
+
+  while (height() > limitPx) {
+    if (!steps.some(step => step())) break;
+  }
+  const afterPx = Math.round(height());
+  return { comp: c, trimmed, page: { afterPx, limitPx: Math.round(limitPx), fits: afterPx <= limitPx } };
 }
 
 // All visible text of a resume document.

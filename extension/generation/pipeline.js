@@ -10,6 +10,10 @@ import { makeLayout } from './layout.js';
 import { resumeDocToSchema } from './baseline.js';
 import { buildCoverLetterMessages, COVER_LETTER_SCHEMA, unsourcedClaims } from './coverLetter.js';
 import { researchCompany, briefFromPostingOnly, isResearchedBrief, renderBriefForPrompt } from './companyResearch.js';
+import { COMPOSE_SCHEMA, validateComposition, sanitizeComposition, fitComposition, toResumeDoc } from './compose.js';
+import { buildComposeMessages, repairMessage } from './composePrompt.js';
+import { estimateDocHeight } from './layout.js';
+import { extraText } from './tailor.js';
 import { createTimer } from './timing.js';
 export { missingKeywords, applyKeywords } from './keywords.js';
 export { createBaseline, isCurrentBaseline, baselineToResume, resumeDocToSchema } from './baseline.js';
@@ -113,6 +117,105 @@ export async function tailorResume(apiKey, { profile, jobText, baseline, match =
   };
 }
 
+// Tailoring v2 (design/tailoring-v2.md): composes a one-page resume for the
+// posting from the whole profile. The model writes; compose.js holds it to
+// the truth. Steps: analysis (unless `match` is passed), a company brief
+// (cached research, else one web search when `research` is on, else what the
+// posting says), the composition, up to two repair passes on the validator's
+// errors, then whatever is still invalid is dropped and the result is fitted
+// to one page by the layout. `baseline` (the uploaded resume) only provides
+// the "before" keyword coverage. Returns the shape tailorResume() returns,
+// plus `composition` (for the extension's local refit) and `companyBrief`.
+export async function composeResume(apiKey, { profile, jobText, match = null, layout = null, baseline = null, research = false, briefCache = {} }) {
+  const startTime = Date.now();
+  requireInputs(profile, jobText);
+  const openai = createClient(apiKey);
+  const timer = createTimer();
+  if (!match) match = await timer.step('analyze', () => analyzeJob(apiKey, { profile, jobText }));
+  const L = makeLayout(layout || {});
+
+  let brief = null;
+  let briefSource = 'posting';
+  const cacheKey = (match.company || '').trim().toLowerCase();
+  if (cacheKey && isResearchedBrief(briefCache?.[cacheKey])) {
+    brief = briefCache[cacheKey];
+    briefSource = 'cache';
+  } else if (research && match.company) {
+    try {
+      brief = await timer.step('research', () => researchCompany(openai, { company: match.company, role: match.role, aboutCompany: match.about_company, jobText, maxSearches: 1 }));
+      briefSource = 'research';
+    } catch (error) {
+      console.warn('Research failed, composing from the posting only:', safeErrorMessage(error));
+    }
+  }
+  const briefText = brief ? renderBriefForPrompt(brief) : (match.about_company ? `What the posting says about the company: ${match.about_company}` : null);
+
+  const messages = buildComposeMessages({ profile, jobText, match, briefText, layout: L });
+  const request = (msgs) => retryTruncated(() => generateStructured(openai, { messages: msgs, schema: COMPOSE_SCHEMA, schemaName: 'resume_composition', maxTokens: MAX_COMPLETION_TOKENS.compose }));
+  let { data } = await timer.step('compose', () => request(messages));
+  let check = validateComposition(data, profile, match);
+  let repairs = 0;
+  let convo = messages;
+  while (check.errors.length && repairs < 2) {
+    console.log(`Composition: ${check.errors.length} problem(s), requesting a repair`, check.errors.map(e => e.message));
+    convo = [...convo, { role: 'assistant', content: JSON.stringify(data) }, { role: 'user', content: repairMessage(check.errors) }];
+    ({ data } = await timer.step(`repair ${repairs + 1}`, () => request(convo)));
+    check = validateComposition(data, profile, match);
+    repairs++;
+  }
+
+  const { comp: clean, dropped } = sanitizeComposition(data, check.errors, profile);
+  const result = composedResult({ comp: clean, profile, match, layout: L, baseline });
+  const endTime = Date.now();
+  Object.assign(result.metadata, {
+    generatedAt: new Date().toISOString(),
+    processingTime: endTime - startTime,
+    repairs,
+    rejected: dropped,
+    briefSource,
+    searches: briefSource === 'research' ? brief.searches : 0,
+    timings: timer.steps
+  });
+  result.companyBrief = brief;
+  console.log(`[${new Date().toISOString()}] Resume composed in ${endTime - startTime}ms: ${repairs} repair(s), ${dropped.length} dropped, core keywords ${result.metadata.coverage.after.found}/${result.metadata.coverage.after.total}, page ${result.metadata.page.afterPx}/${result.metadata.page.limitPx}px${result.metadata.page.trimmed.length ? `, trimmed ${result.metadata.page.trimmed.length}` : ''}`);
+  return result;
+}
+
+// Fits a composition to one page and builds the result the extension renders.
+function composedResult({ comp, profile, match, layout, baseline, offsetPx = 0 }) {
+  const fit = fitComposition(comp, profile, match, layout, { offsetPx });
+  const doc = toResumeDoc(fit.comp, profile);
+  const final = validateComposition(fit.comp, profile, match);
+  const after = keywordCoverage(doc, match);
+  return {
+    resumeContent: resumeDocToSchema(doc),
+    tailored: doc,
+    composition: fit.comp,
+    changes: [],
+    matchAnalysis: match,
+    metadata: {
+      engine: 'compose',
+      coverage: { before: baseline?.resume ? keywordCoverage(baseline.resume, match) : after, after },
+      page: { estimated: !layout.measured, afterPx: fit.page.afterPx, limitPx: fit.page.limitPx, fits: fit.page.fits, trimmed: fit.trimmed, undone: [] },
+      warnings: final.warnings.map(w => w.message),
+      unmet: final.errors.map(e => e.message),
+      wordsAfter: docWords(doc)
+    }
+  };
+}
+
+// The extension's second pass: Chrome measured the composed resume at
+// measuredPx; when that is over the page, trim again with the estimate
+// corrected by the difference. No model call. Returns a new result.
+export function refitComposedResume(result, { profile, layout = null, baseline = null, measuredPx }) {
+  const L = makeLayout(layout || {});
+  const estimated = estimateDocHeight(L, result.tailored, extraText);
+  const next = composedResult({ comp: result.composition, profile, match: result.matchAnalysis, layout: L, baseline, offsetPx: measuredPx - estimated });
+  next.metadata = { ...result.metadata, ...next.metadata, refitted: true };
+  next.companyBrief = result.companyBrief;
+  return next;
+}
+
 // briefCache maps lower-cased company name → brief; a cached brief for the
 // matched company is reused instead of searching again.
 export async function generateCoverLetter(apiKey, { profile, jobText, research = true, briefCache = {}, match = null }) {
@@ -198,3 +301,4 @@ export async function generateCoverLetter(apiKey, { profile, jobText, research =
 }
 
 export { verifyKey, safeErrorMessage } from './openai.js';
+export { CONFIG } from './config.js';

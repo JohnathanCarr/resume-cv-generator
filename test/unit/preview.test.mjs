@@ -160,3 +160,9 @@ test('sections follow the resume\'s order; unknown names are ignored', () => {
   assert.deepEqual(heads({ ...resume, summary: '' }), ['Skills', 'Education', 'Experience', 'Projects', 'Certifications']);
   assert.deepEqual(heads({ ...resume, summary: '', sectionOrder: ['experience', 'projects', 'nope', 'education', 'extras'] }), ['Skills', 'Experience', 'Projects', 'Education', 'Certifications']);
 });
+
+test('licenses get a standard heading, alone or with certifications', () => {
+  assert.equal(extrasHeading({ extraTypes: ['license'] }), 'Licenses');
+  assert.equal(extrasHeading({ extraTypes: ['license', 'certification'] }), 'Licenses & Certifications');
+  assert.ok(STANDARD_HEADINGS.includes('Licenses & Certifications'));
+});

@@ -9,9 +9,9 @@ import { GettingStarted } from '../../extension/gettingStarted.js';
 import { Settings } from '../../extension/settings.js';
 import { TOUR_STEPS } from '../../extension/onboarding.js';
 
-test('extras types: eight, each with a value and a label', () => {
-  assert.equal(EXTRA_TYPES.length, 8);
-  assert.deepEqual(EXTRA_TYPES.map(([value]) => value), ['research', 'program', 'certification', 'award', 'publication', 'leadership', 'volunteer', 'other']);
+test('extras types: nine, each with a value and a label', () => {
+  assert.equal(EXTRA_TYPES.length, 9);
+  assert.deepEqual(EXTRA_TYPES.map(([value]) => value), ['research', 'program', 'certification', 'license', 'award', 'publication', 'leadership', 'volunteer', 'other']);
   assert.ok(EXTRA_TYPES.every(([, label]) => label && label[0] === label[0].toUpperCase()));
 });
 

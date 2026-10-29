@@ -55,6 +55,15 @@ export class ProfileEditor {
             this.app.profile.location = e.target.value;
         });
 
+        // Postings screen on these directly; stated only when they apply.
+        document.getElementById('profile-work-authorization')?.addEventListener('input', (e) => {
+            this.app.profile.workAuthorization = e.target.value;
+        });
+
+        document.getElementById('profile-clearance')?.addEventListener('input', (e) => {
+            this.app.profile.clearance = e.target.value;
+        });
+
         document.getElementById('profile-summary')?.addEventListener('input', (e) => {
             this.app.profile.summary = e.target.value;
         });
@@ -70,6 +79,8 @@ export class ProfileEditor {
         setFieldValue('profile-name', this.app.profile.name);
         setFieldValue('profile-contact', this.app.profile.contact);
         setFieldValue('profile-location', this.app.profile.location);
+        setFieldValue('profile-work-authorization', this.app.profile.workAuthorization);
+        setFieldValue('profile-clearance', this.app.profile.clearance);
         setFieldValue('profile-summary', this.app.profile.summary);
     }
 

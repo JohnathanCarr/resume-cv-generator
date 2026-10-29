@@ -20,6 +20,8 @@ function renderProfileWithIds(profile) {
   const lines = [];
   lines.push(`Name: ${profile.name || 'Unknown'}`);
   if (profile.location) lines.push(`[profile:location] Location: ${profile.location}`);
+  if (profile.workAuthorization) lines.push(`[profile:workAuthorization] Work authorization: ${profile.workAuthorization}`);
+  if (profile.clearance) lines.push(`[profile:clearance] Security clearance: ${profile.clearance}`);
   if (profile.summary) lines.push(`Summary: ${profile.summary}`);
 
   const edu = Array.isArray(profile.education) ? profile.education : [];
@@ -139,7 +141,7 @@ Rules:
 - keywords are the posting's exact terms an applicant tracking system would look for: languages, tools, frameworks, methodologies, certifications, and short phrases like "incident response". Do not paraphrase them.
 - Mark a keyword "core" only if a recruiter would plausibly filter candidates on it: a concrete, nameable hard skill, tool, language, platform, methodology or certification (usually 1–3 words, e.g. "PyTorch", "A/B testing", "HIPAA") that is in a required qualification or named more than once. Usually 3–8 per posting. Everything else is "supporting": the job title itself, descriptions of experience ("reliable APIs at scale", "applied ML in production"), categories where the posting also names the specific tools ("data visualization tool" when it lists Tableau), preferred or nice-to-have items mentioned once, soft skills ("communication", "ownership"), and generic phrases ("fast-paced environment", "problem solving").
 - alias: for each keyword that is an acronym or has a standard acronym, give the other form ("SEO" ↔ "Search Engine Optimization", "CI/CD" ↔ "Continuous Integration/Continuous Delivery", "GCP" ↔ "Google Cloud Platform"). Only an acronym and its full name; never a plural, tense or spelling variant ("A/B tests" is not an alias of "A/B testing") and never a related but different skill. Otherwise an empty string.
-- hard_requirements: the things the posting screens on directly — work authorization, visa sponsorship, security clearance, licenses, required certifications, degree level, on-site location, and minimum years of experience. One entry each, in the posting's words. met is "yes" only when the profile shows it (cite the ids; the candidate's location is [profile:location]), "no" when the profile shows otherwise, and "unknown" when the profile does not say; never assume.
+- hard_requirements: the things the posting screens on directly — work authorization, visa sponsorship, security clearance, licenses, required certifications, degree level, on-site location, and minimum years of experience. One entry each, in the posting's words. met is "yes" only when the profile shows it (cite the ids; the candidate's location, work authorization and clearance are [profile:location], [profile:workAuthorization] and [profile:clearance]), "no" when the profile shows otherwise, and "unknown" when the profile does not say; never assume.
 - about_company contains only what the posting says. Do not add outside knowledge.`;
 
 async function analyzeMatch(openai, { profile, jobText }) {
@@ -161,6 +163,8 @@ async function analyzeMatch(openai, { profile, jobText }) {
 function profileIds(profile) {
   const ids = new Set();
   if (profile.location) ids.add('profile:location');
+  if (profile.workAuthorization) ids.add('profile:workauthorization');
+  if (profile.clearance) ids.add('profile:clearance');
   for (const e of profile.education || []) ids.add(`edu:${e.id}`);
   for (const x of profile.experiences || []) ids.add(`exp:${x.id}`);
   for (const p of profile.projects || []) ids.add(`proj:${p.id}`);

@@ -29,7 +29,7 @@ Content:
 - Experience: every job from the last five years, newest first (code keeps that order). For each, 2–5 bullets for relevant roles and 1–2 for less relevant ones, the most relevant bullet first. Older jobs that do nothing for this posting may be left out.
 - Bullets: start with a strong past-tense verb, name the concrete work, tools and results, one or two lines each. Prefer bullets that prove the posting's required qualifications. No filler ("responsible for", "results-driven", "leveraged", "passionate", "spearheaded", "robust", "seamless", "utilize").
 - Projects and extras (certifications, awards, …): include the ones that strengthen this application; projects can carry posting skills a job does not show.
-- State any hard requirement the candidate meets (license, clearance, certification, degree) where it belongs.
+- State any hard requirement the candidate meets (license, clearance, certification, degree) where it belongs. Work authorization and clearance go at the end of the summary when the posting screens on them ("Authorized to work in the US without sponsorship."), citing [profile:workAuthorization] or [profile:clearance].
 - section_order: the order of experience, projects, education and extras after the summary and skills. Usually experience first; education first for students and new graduates with little work history; projects before experience when they are clearly more relevant than the jobs.
 - Use the company brief only to decide which of the candidate's experience is closest to the company's product and technology, and lead with that.
 

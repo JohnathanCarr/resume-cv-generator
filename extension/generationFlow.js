@@ -175,12 +175,19 @@ export const RESUME = {
         let height = await timed('measure page', () => measureResumeHeight(result.resumeContent, app.profile));
         let refits = 0;
         while (height > PAGE_PX && refits < 2) {
-            const predicted = result.metadata?.page?.afterPx || layout.usedPx;
-            layout.usedPx += (height - predicted) * (refits + 1);
             app.showStatus('Fitting it to one page…', 'loading');
             app.progress.mark(0.75, 0.9, 4000);
             const step = `refit ${refits + 1}`;
-            result = await timed(step, () => app.requestResume({ profile, jobText, match, baseline: app.baselineResume, layout }));
+            if (result.metadata?.engine === 'compose') {
+                // A composed resume is trimmed again locally, no model call.
+                const { refitComposedResume } = await app.generation();
+                const measuredPx = height;
+                result = await timed(step, () => refitComposedResume(result, { profile, layout, baseline: app.baselineResume, measuredPx }));
+            } else {
+                const predicted = result.metadata?.page?.afterPx || layout.usedPx;
+                layout.usedPx += (height - predicted) * (refits + 1);
+                result = await timed(step, () => app.requestResume({ profile, jobText, match, baseline: app.baselineResume, layout }));
+            }
             detail(step, result.metadata?.timings);
             height = await timed('measure page', () => measureResumeHeight(result.resumeContent, app.profile));
             refits++;

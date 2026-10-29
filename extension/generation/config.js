@@ -27,7 +27,7 @@ export const CONFIG = {
   // Which resume generator the extension uses: 'edit' (the edit list on the
   // uploaded resume, tailor.js) or 'compose' (tailoring v2, compose.js).
   // Compose since 2026-10-29: rubric v2 94% vs 88% for edits (compose-v1).
-  RESUME_ENGINE: 'edit',
+  RESUME_ENGINE: 'compose',
   // Company research via the hosted web-search tool (cover letters; the resume
   // composer makes at most one search).
   // Each search is billed separately and its results count as input tokens,

@@ -1,29 +1,17 @@
-// Page measurement for the one-page limit: lays the resume out off-screen at
-// print width and reads the browser's own layout. Needs the DOM.
+// Page measurement for the one-page limit: lays the resume out in a hidden
+// frame holding the same document print.html prints (pageFrame.js), and
+// reads the browser's own layout. Needs the DOM.
 import { formatResume, escapeResume } from './resumeHtml.js';
+import { withHiddenPage } from './pageFrame.js';
+import { PAGE_PX } from './pageDoc.js';
 
 // One US Letter page at CSS 96dpi; the resume's hard limit.
-export const PAGE_PX = 11 * 96;
+export { PAGE_PX };
 
-// Lays resume data out off-screen at print width (the page box is 7.5in wide
-// either way; min-height dropped so the content height shows) and hands the
-// page element to fn. Fonts must be loaded first or widths come out in the
-// fallback face. The host goes into <body>, so the page's em-based spacing
-// follows body's font size: keep body at 16px (styles.css Section 2).
-export async function withOffscreenResume(resumeContent, profile, fn) {
-    if (document.fonts?.ready) await document.fonts.ready;
-    const host = document.createElement('div');
-    host.setAttribute('aria-hidden', 'true');
-    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:8.5in;visibility:hidden;pointer-events:none;';
-    host.innerHTML = formatResume(escapeResume(resumeContent), profile);
-    document.body.appendChild(host);
-    try {
-        const page = host.querySelector('.resume-page');
-        page.style.minHeight = '0';
-        return fn(page);
-    } finally {
-        host.remove();
-    }
+// Lays resume data out at print size (min-height dropped so the content
+// height shows) and hands the page element to fn.
+export function withOffscreenResume(resumeContent, profile, fn) {
+    return withHiddenPage(formatResume(escapeResume(resumeContent), profile), fn);
 }
 
 export async function measureResumeHeight(resumeContent, profile) {
@@ -39,11 +27,12 @@ export async function measureLayout(resumeContent, profile) {
     const ctx = document.createElement('canvas').getContext('2d');
     const textWidth = (text, font) => { ctx.font = font; return ctx.measureText(text).width; };
     return withOffscreenResume(resumeContent, profile, page => {
+        const view = page.ownerDocument.defaultView;
         const kinds = {};
         for (const kind of ['bullet', 'summary', 'skills', 'coursework', 'extra', 'projectHeader']) {
             const el = page.querySelector(`[data-kind="${kind}"]`);
             if (!el) continue;
-            const cs = getComputedStyle(el);
+            const cs = view.getComputedStyle(el);
             kinds[kind] = {
                 font: `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`,
                 width: el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
@@ -55,7 +44,7 @@ export async function measureLayout(resumeContent, profile) {
         return {
             capacityPx: PAGE_PX,
             usedPx: page.getBoundingClientRect().height,
-            entryGap: entry ? parseFloat(getComputedStyle(entry).marginBottom) : undefined,
+            entryGap: entry ? parseFloat(view.getComputedStyle(entry).marginBottom) : undefined,
             kinds,
             textWidth
         };

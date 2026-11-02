@@ -146,19 +146,15 @@
   }
   const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
-  // Same offscreen render as app.js measureResumeHeight(): the tailored page
-  // at print width with its min-height dropped.
+  // The generated page inside the preview's frame (preview/pageFrame.js).
+  const previewPage = () => $('.resume-content .resume-frame')?.contentDocument?.querySelector('.resume-page');
+  // Its content height, laid out at print size with min-height dropped.
   function measurePage() {
-    const page = $('.resume-content .resume-page');
+    const page = previewPage();
     if (!page) return null;
-    const host = document.createElement('div');
-    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:8.5in;visibility:hidden;pointer-events:none;';
-    host.innerHTML = page.outerHTML;
-    document.body.appendChild(host);
-    const copy = host.querySelector('.resume-page');
-    copy.style.minHeight = '0';
-    const h = copy.getBoundingClientRect().height;
-    host.remove();
+    page.style.minHeight = '0';
+    const h = page.getBoundingClientRect().height;
+    page.style.minHeight = '';
     return Math.round(h * 10) / 10;
   }
 
@@ -237,7 +233,11 @@
     assert(MISSING.every(k => chips.includes(k)), `chips were ${chips.join(', ')}`);
     $('#keywords-continue').click();
     await waitFor('resume to finish', () => progressState() === 'done', 30000);
-    assert($('.resume-content .resume-page'), 'no resume page in the preview');
+    assert(previewPage(), 'no resume page in the preview');
+    const frame = $('.resume-content .resume-frame');
+    assert(frame.offsetWidth === 816 && /scale\(/.test(frame.style.transform), `the preview page is not true size, scaled (${frame.offsetWidth}px, ${frame.style.transform})`);
+    const sheet = frame.parentElement.getBoundingClientRect();
+    assert(Math.abs(sheet.height / sheet.width - 11 / 8.5) < 0.02, `the preview sheet is not Letter-shaped (${Math.round(sheet.width)}×${Math.round(sheet.height)})`);
     assert(!document.getElementById('download-resume-pdf').disabled, 'Resume PDF still disabled');
     assert(!pageInert(), 'page still inert');
     await waitFor('strip to hide after Done', () => progressHidden(), 3000);
@@ -265,7 +265,8 @@
   let printCheck = null;
   await check('resume page is parse-safe (order, headings, no tables, images or ligatures)', async () => {
     const { pageProblems, textProblems } = await import('/extension/preview/parseSafety.js');
-    const page = $('.resume-content .resume-page');
+    const page = previewPage();
+    const { pageLineTops } = await import('/extension/preview/pageFrame.js');
     // What the runner checks in the PDF Chrome prints from the same markup
     // (set first, so the PDF is checked even when the page check fails).
     const holder = document.createElement('div');
@@ -273,6 +274,7 @@
     const header = page.querySelector('.resume-header');
     printCheck = {
       html: session.printJob.html,
+      previewLines: pageLineTops(page),
       headings: [...holder.querySelectorAll('h2')].map(h => h.textContent.trim()),
       mustContain: [header.querySelector('h1').textContent.trim(), ...header.querySelector('div').textContent.split('|').map(t => t.trim()).filter(Boolean)]
     };

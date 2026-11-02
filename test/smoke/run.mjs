@@ -92,6 +92,8 @@ async function checkPrintedPdf(port, base, printCheck) {
   });
   await tab.send('Page.navigate', { url: `${base}/extension/print.html` });
   await waitUntil('the print view', () => tab.evaluate("!!document.querySelector('#page .resume-page') && document.fonts.status === 'loaded'"));
+  // The print view lays the page out exactly as the preview did.
+  const printLines = await tab.evaluate("import('/extension/preview/pageFrame.js').then(m => m.pageLineTops(document.querySelector('#page .resume-page')))");
   const pdf = await tab.send('Page.printToPDF', { preferCSSPageSize: true, printBackground: true });
   if (!pdf.result?.data) throw new Error('Chrome did not print a PDF');
   await tab.send('Page.navigate', { url: `${base}/test/smoke/pdftext.html` });
@@ -103,6 +105,8 @@ async function checkPrintedPdf(port, base, printCheck) {
   const flat = text.replace(/\s+/g, ' ');
   const lower = flat.toLowerCase();
   const check = (name, problem) => results.push({ name, ok: !problem, error: problem || undefined });
+  const same = JSON.stringify(printLines) === JSON.stringify(printCheck.previewLines);
+  check(`print view matches the preview line for line (${printCheck.previewLines.length} lines)`, same ? null : `preview ${printCheck.previewLines.length} lines, print ${(printLines || []).length}; first difference at ${printCheck.previewLines.find((t, i) => t !== (printLines || [])[i])}px`);
   check(`PDF: one page, ${Math.round(bytes / 1024)} KB`, pages !== 1 ? `${pages} pages` : bytes > 2.5 * 1024 * 1024 ? 'over 2.5 MB' : null);
   const missing = printCheck.mustContain.filter(t => !flat.includes(t.replace(/\s+/g, ' ')));
   check('PDF text: name and every contact detail intact', missing.length ? `missing: ${missing.join(' | ')}` : null);

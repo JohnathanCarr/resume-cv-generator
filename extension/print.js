@@ -2,7 +2,13 @@
 // .resume-page markup under chrome.storage.session.printJob and opens this
 // page; it renders the markup and hands it to Chrome's print dialog, where
 // "Save as PDF" produces a text-based (ATS-readable) PDF from the same
-// layout engine the preview uses.
+// layout engine the preview uses. The page's own rules are PAGE_CSS
+// (preview/pageDoc.js), shared with the preview and the page measurement.
+import { PAGE_CSS } from './preview/pageDoc.js';
+
+const pageStyle = document.createElement('style');
+pageStyle.textContent = PAGE_CSS;
+document.head.prepend(pageStyle);
 
 (async () => {
     const page = document.getElementById('page');

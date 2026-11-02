@@ -8,6 +8,7 @@ import { GenerationProgress } from './progress.js';
 import { escapeResume, formatResume } from './preview/resumeHtml.js';
 import { formatCoverLetter } from './preview/coverLetterHtml.js';
 import { formatMatchReport } from './preview/matchHtml.js';
+import { showPage } from './preview/pageFrame.js';
 import { runGeneration, COVER_LETTER, RESUME } from './generationFlow.js';
 import { Dialogs } from './dialogs.js';
 import { ProfileEditor } from './profile/profileEditor.js';
@@ -324,8 +325,11 @@ class ResumeStudioApp {
             const { previewResumes } = await this.generation();
             ({ marked, clean } = previewResumes(entry.tailored, entry.changes || []));
         }
-        previewEl.innerHTML = formatResume(marked, this.profile);
-        this.lastRenderedResumeHTML = previewEl.innerHTML;
+        // The page is shown in the document print.html prints, at true size
+        // scaled to the panel, so the preview is the PDF, line for line.
+        this.lastRenderedResumeHTML = formatResume(marked, this.profile);
+        previewEl.classList.add('has-sheet');
+        await showPage(previewEl, this.lastRenderedResumeHTML);
         this.lastCleanResumeHTML = formatResume(clean, this.profile);
         this.renderCompareBar(entry);
         this.showResumeView('tailored');

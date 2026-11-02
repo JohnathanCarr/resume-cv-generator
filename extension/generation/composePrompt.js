@@ -4,7 +4,7 @@
 // also enforced in code by validateComposition(), so the prompt explains the
 // rules and the validator makes them hold. Pure.
 
-import { renderProfileForCompose, toResumeDoc } from './compose.js';
+import { renderProfileForCompose, toResumeDoc, entryRelevance } from './compose.js';
 import { renderMatchForPrompt } from './matchAnalysis.js';
 import { keywordTerms, normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
 import { estimateDocHeight } from './layout.js';
@@ -14,7 +14,8 @@ const SYSTEM = `You write a candidate's resume for one job posting, using only t
 
 How ATS screening works, and what to do about it:
 - Recruiters search the ATS for the posting's exact terms and AI graders check each required qualification against the resume's text. So every requirement the candidate really meets must be visible in plain words, in the posting's own terms, with a concrete line that proves it.
-- Use each core keyword the candidate genuinely has at least once, in the posting's spelling: in Skills and, where a bullet really shows it, in that bullet. Give an acronym and its full form once each ("Search Engine Optimization (SEO)"). Never use a keyword more than three times.
+- Use each core keyword the candidate genuinely has at least once, in the posting's own wording. The posting's headline requirements (its required skills and main themes) go both in Skills and in a bullet or the summary that shows them; secondary tools may sit in Skills only. Do not force every keyword into a bullet: a bullet crammed with tool names reads worse and scores no better. Never use a keyword more than three times.
+- Spell out an acronym only where the analysis says the posting uses both forms, once, in the summary or a bullet ("Search Engine Optimization (SEO)"); otherwise use the posting's form alone.
 
 Truth (checked in code; anything that fails is removed):
 1. Every summary and bullet line cites the ids of the profile lines it comes from (sources). A bullet under a job or project must cite at least one line of that same job or project; it may also cite skills.
@@ -24,11 +25,12 @@ Truth (checked in code; anything that fails is removed):
 5. Job titles, employers, dates and education are filled in from the profile by code; you only choose which jobs, projects, education and extras appear, by id.
 
 Content:
-- Summary (always; it sits under a "Summary" heading at the top): 2–3 lines that align the candidate with this exact job: what they are in the posting's terms, their strongest evidence for its main requirements, and its top core keywords. Concrete, not generic ("Full-stack engineer who built and shipped a production RAG pipeline…", not "AI engineer passionate about…"). It may use the posting's job title only if the candidate's experience truly matches it. Do not name the hiring company.
-- Skills: only skills from the profile, grouped under short labels ("Languages", "Data", "Cloud & DevOps"), most relevant to the posting first. Each item is a skill's name, never a description. If the posting spells a skill differently, write the posting's spelling with the profile's own name in parentheses ("PostgreSQL (Postgres)"), or use the listed alias; nothing else goes in brackets.
-- Experience: every job from the last five years (code puts them newest first by date). The most recent and most relevant jobs get the most room: 3–6 bullets, the most relevant first; less relevant jobs 1–2. Older jobs that do nothing for this posting may be left out.
-- Bullets: the candidate's own bullets are usually strong; keep a strong bullet nearly word for word, with its specifics (tools, numbers, scope). Reword only to use the posting's term for something the bullet already shows, to put the most relevant part first, or to fix a weak or vague line. Never shorten a bullet by dropping its concrete details, and never merge two strong bullets into a vaguer one. Each starts with a past-tense verb and fits one or two lines. No filler ("responsible for", "results-driven", "leveraged", "passionate", "spearheaded", "robust", "seamless", "utilize").
-- Projects: when the profile has any, include the one or two most relevant, with 2–3 bullets each; they carry posting skills a job may not show. Extras (certifications, awards, …): include the ones that strengthen this application.
+- Summary (always; it sits under a "Summary" heading at the top): 2–3 lines that align the candidate with this exact job: what they are in the posting's terms, their strongest evidence for the posting's main theme and requirements, and its top core keywords. Do not repeat what the page already shows elsewhere (the degree, job titles, a list of employers). Concrete, not generic ("Full-stack engineer who built and shipped a production RAG pipeline…", not "AI engineer passionate about…"). It may use the posting's job title only if the candidate's experience truly matches it. Do not name the hiring company.
+- Skills: only skills from the profile, grouped under short labels ("Languages", "Frontend", "Cloud & DevOps"); groups and the items in each in the order the posting stresses them. Each item is one skill's name in the posting's wording (the listed alias when the posting uses the other form): never a description ("full stack development", "APIs at scale"), never a near-duplicate of another item ("API design" and "API Development"), never an acronym spelled out in brackets. Brackets only for a different name of the same thing, the posting's spelling with the profile's in brackets ("PostgreSQL (Postgres)").
+- Room goes by relevance, job or project alike: the analysis below rates each job and project for this posting. A highly relevant entry gets 3–5 bullets whether it is a job or a project; a weakly relevant one 1 (a short contract or side role usually needs one bullet, merging similar bullets). Every job from the last five years appears (code puts them newest first by date) with at least one bullet, the most recent with at least two; older jobs that do nothing for this posting may be left out. When the profile has projects, include the most relevant one or two.
+- Within each entry, the bullet that best proves the posting's main requirements comes first.
+- Bullets: reword them as needed for this posting, keeping them true to their sources. Lead with what was built or achieved and why it matters to this role; keep the specifics that prove it (numbers, scale, the tools this posting cares about) and drop tool lists the posting does not care about. Use the posting's terms for what the source shows, without overselling (a scheduled ingestion job is not "MLOps"). Similar bullets of one entry may be merged; never merge two strong, different bullets into a vaguer one. Each starts with a past-tense verb and fits one or two lines. No filler ("responsible for", "results-driven", "leveraged", "passionate", "spearheaded", "robust", "seamless", "utilize").
+- Extras (certifications, awards, …): include the ones that strengthen this application.
 - State any hard requirement the candidate meets (license, clearance, certification, degree) where it belongs. Work authorization and clearance go only at the end of the summary, and only when the posting screens on them, as a short plain clause in the candidate's own terms ("U.S. citizen." or "Active Secret clearance."), citing [profile:workAuthorization] or [profile:clearance]. Do not add legal boilerplate ("legally eligible to work … on an ongoing basis") and never list them under Skills.
 - section_order: the order of experience, projects, education and extras after the summary and skills. Usually experience first; education first for students and new graduates with little work history; projects before experience when they are clearly more relevant than the jobs.
 - Use the company brief only to decide which of the candidate's experience is closest to the company's product and technology, and lead with that.
@@ -65,7 +67,14 @@ function renderAnalysis(match, profile) {
   const corpus = profileCorpus(profile);
   const parts = [renderMatchForPrompt(match)];
   const aliases = ((match && match.keywords) || []).filter(k => k && k.alias);
-  if (aliases.length) parts.push('', `Other forms of keywords (acronym ↔ full name): ${aliases.map(k => `${k.term} ↔ ${k.alias}`).join('; ')}`);
+  if (aliases.length) parts.push('', `Other forms of keywords (acronym ↔ full name; "both" = the posting uses both forms): ${aliases.map(k => `${k.term} ↔ ${k.alias}${k.bothForms ? ' (both)' : ''}`).join('; ')}`);
+  // How much room each job and project earns for this posting (entryRelevance).
+  const rel = [...entryRelevance(profile, match)].sort((a, b) => b[1] - a[1]);
+  if (rel.length) {
+    const top = rel[0][1];
+    const tier = (v) => (v >= top * 0.6 ? 'high' : v >= top * 0.3 ? 'medium' : 'low');
+    parts.push('', `Relevance to this posting (room follows it, job or project alike): ${rel.map(([id, v]) => `${id} ${tier(v)}`).join(', ')}`);
+  }
   const hard = (match && match.hard_requirements) || [];
   if (hard.length) {
     parts.push('', 'Hard requirements (recruiters and knockout questions screen on these):');

@@ -216,7 +216,9 @@ function cleanMatch(match, { jobText, profile }) {
     const key = normalizeTerm(term);
     if (seen.has(key)) continue;
     seen.add(key);
-    keywords.push({ ...k, term, alias });
+    // Both forms in the posting: recruiters may search either, so the
+    // resume gives both once. Otherwise the posting's own form is enough.
+    keywords.push({ ...k, term, alias, bothForms: Boolean(alias) && inPosting(alias) });
   }
 
   return {

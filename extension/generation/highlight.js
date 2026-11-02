@@ -2,8 +2,9 @@
 // change records (compose.js composeChanges) this builds two renderable
 // resumes in the shape formatResume() takes:
 //   marked  the words of each summary or bullet line that are new relative
-//           to its profile sources, wrapped in <span class="rs-added">;
-//           hover shows the source lines.
+//           to its profile sources, wrapped in <span class="rs-added">, or,
+//           for a line mostly reworded, the whole line in one
+//           <span class="rs-reworded">; hover shows the source lines.
 //   clean   the same resume with no marks, for the PDF.
 // Every string is HTML-escaped in both, so resume text can never inject
 // markup into the page.
@@ -23,6 +24,11 @@ const mark = (html, title) =>
 // common word sequence with `before` are marked; runs of marked words (and
 // the spaces between them) share one span.
 function diffWords(before, after, title = '') {
+  return diff(before, after, title).html;
+}
+
+// The diff, plus the share of `after`'s words that are new.
+function diff(before, after, title) {
   const a = String(before || '').split(/\s+/).filter(Boolean);
   const b = String(after || '').split(/\s+/).filter(Boolean);
   // Words match ignoring surrounding punctuation, so "Postgres" kept as
@@ -48,8 +54,12 @@ function diffWords(before, after, title = '') {
     while (j < b.length && added[j]) run.push(escapeHtml(b[j++]));
     out.push(mark(run.join(' '), title));
   }
-  return out.join(' ');
+  return { html: out.join(' '), newShare: b.length ? added.filter(Boolean).length / b.length : 0 };
 }
+
+// Past this share of new words a word-by-word diff is just noise: the whole
+// line is tinted instead, with its source on hover.
+const REWORDED = 0.5;
 
 // Hover text: the profile lines a composed line came from (composeChanges);
 // resumes saved by the old edit-list engine carry the line they replaced.
@@ -64,7 +74,9 @@ function markDoc(doc, changes, { withMarks }) {
   const esc = (v) => (typeof v === 'string' ? escapeHtml(v) : v);
   const line = (id, text) => {
     const c = withMarks && byId.get(id);
-    return c ? diffWords(c.before, text, why(c)) : esc(text);
+    if (!c) return esc(text);
+    const d = diff(c.before, text, why(c));
+    return d.newShare > REWORDED ? `<span class="rs-reworded" title="${escapeHtml(why(c))}">${escapeHtml(text)}</span>` : d.html;
   };
 
   out.summary = line('summary', doc.summary);

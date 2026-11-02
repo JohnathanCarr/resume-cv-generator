@@ -12,6 +12,7 @@
 
 import { createRequire } from 'node:module';
 import { normalizeTerm, corpusHas } from '../../extension/generation/keywords.js';
+import { newestFirst } from '../../extension/generation/resumeDoc.js';
 import { formatResume, escapeResume } from '../../extension/preview/resumeHtml.js';
 import { textProblems, STANDARD_HEADINGS } from '../../extension/preview/parseSafety.js';
 
@@ -144,7 +145,10 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   checks.noUnsupportedTools = unsupported.length === 0 ? 1 : unsupported.length === 1 ? 0.5 : 0;
   if (unsupported.length) fails.push(`tools not in the profile: ${unsupported.join(', ')}`);
 
-  const jobs = (r.experience || []).map(e => (profile.experiences || []).findIndex(x => lower(x.company) === lower(e.company) && lower(x.title) === lower(e.title)));
+  // Jobs exactly as in the profile, newest first by date (the profile's own
+  // order need not be chronological).
+  const byDate = newestFirst(profile.experiences);
+  const jobs = (r.experience || []).map(e => byDate.findIndex(x => lower(x.company) === lower(e.company) && lower(x.title) === lower(e.title)));
   const schools = (r.education || []).map(e => (profile.education || []).some(x => lower(x.institution) === lower(e.school || e.institution)));
   const historyOk = jobs.every(i => i >= 0) && jobs.every((v, i) => i === 0 || v > jobs[i - 1]) && schools.every(Boolean);
   checks.historyTruthful = historyOk ? 1 : 0;
@@ -202,7 +206,11 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   }
 
   // ── never ──
-  const counts = core.map(k => ({ term: k.term, n: (textN.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length }));
+  // Counted over what the generator writes (summary, skills with their
+  // labels, bullets, extras, coursework); entry header lines (titles,
+  // employers, project names and stacks) are the profile's own and fixed.
+  const writtenN = norm([parts.summary, parts.skills, ...parts.bullets, ...parts.education, ...parts.extras].join('\n'));
+  const counts = core.map(k => ({ term: k.term, n: (writtenN.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length }));
   const stuffed = counts.filter(c => c.n > 3).map(c => `${c.term}×${c.n}`);
   checks.noStuffing = stuffed.length ? 0 : 1;
   if (stuffed.length) fails.push(`keyword stuffing: ${stuffed.join(', ')}`);

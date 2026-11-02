@@ -101,3 +101,10 @@ test('supported aliases, plain keywords and the posting title in the summary are
   const b = scoreResumeV2({ resume: { ...r, experience: [{ ...good.experience[0], bullets: ['Built ML services'] }, good.experience[1]] }, profile: p, jobText, match: m, page });
   assert.ok(b.info.unsupportedTools.includes('ML'));
 });
+
+test('stuffing counts what was written, not fixed header lines', () => {
+  const r = { ...good, projects: [{ name: 'tidepool | Go, Docker', bullets: ['A Docker job queue'] }], summary: 'Backend engineer building Go and PostgreSQL services in Go.' };
+  // Go: summary ×2, skills, one bullet = 4 written; the project header's Go is not counted.
+  assert.equal(score(r).checks.noStuffing, 0);
+  assert.equal(score({ ...r, summary: 'Backend engineer building Go and PostgreSQL services.' }).checks.noStuffing, 1);
+});

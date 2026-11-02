@@ -31,7 +31,8 @@ summaries to compare against.
   qualification, acronym and full form both present, matched skills used in
   bullets (70% is full marks), met hard requirements stated, a summary. Page:
   fits, and fills ≥ 90% (by the layout estimate). Never: no keyword more than
-  three times, no filler phrases, parse-safe when rendered with the real
+  three times (counted over the written text, skill labels included, not
+  fixed entry header lines), no filler phrases, parse-safe when rendered with the real
   template. Skill group labels ("Cloud & DevOps:") are headings, so the tools
   check reads only the skill items. `judge.mjs` (`--judge`) adds a recruiter judge: relevance,
   tailoring, specificity, readability and credibility, 1–5 each, scored

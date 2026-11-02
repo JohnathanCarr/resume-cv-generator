@@ -61,7 +61,8 @@ function skillItems(resume) {
 const TOOL_RE = /\b(?:[A-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+|[A-Z][a-z]+[A-Z][a-zA-Z0-9]*|[A-Z]{2,}[a-z0-9]*s?|[A-Za-z]+\/[A-Za-z]+|[A-Z][a-z]*[+#]+)/g;
 const COMMON_CAPS = new Set(['API', 'APIs', 'UI', 'UX', 'ID', 'IDs', 'US', 'USA', 'PM', 'PMs', 'KPI', 'KPIs', 'GPA', 'MS', 'BS', 'BA', 'MBA', 'PhD', 'CEO', 'CTO', 'VP', 'HR', 'QA', 'OK', 'ETA', 'ROI', 'B2B', 'B2C', 'SaaS', 'R&D']);
 function toolTokens(text) {
-  return [...new Set([...String(text).matchAll(TOOL_RE)].map(m => m[0]).filter(t => !COMMON_CAPS.has(t)))];
+  // An acronym used as a verb ("QAed", "QA'd") is not a tool name.
+  return [...new Set([...String(text).matchAll(TOOL_RE)].map(m => m[0]).filter(t => !COMMON_CAPS.has(t) && !/^[A-Z]{2,}(ed|ing)$/.test(t)))];
 }
 
 // Does evidence item `id` (from the match analysis) show on the resume?
@@ -137,9 +138,11 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   const unsupported = [...new Set([
     ...toolTokens(strip(parts.summary)).filter(t => !roleTokens.has(t)),
     ...toolTokens(strip([skillItems(r).join(', '), ...parts.headers, ...parts.bullets, ...parts.education, ...parts.extras].join('\n'))),
-    // Tool-like names only (a capital, digit or symbol in it): plain words
-    // and phrases such as "text" or "data analysis" are not tool claims.
-    ...keywordList.filter(k => has(norm(claimText), k.term) && /[A-Z0-9+#./]/.test(k.term)).map(k => k.term)
+    // Tool-like names only: one word with a capital, digit or symbol
+    // ("Kubernetes", "A/B"), or a phrase with one past its first letter
+    // ("Google Analytics"). Plain words and sentence-case phrases such as
+    // "text" or "Clear written communication" are not tool claims.
+    ...keywordList.filter(k => has(norm(claimText), k.term) && (/^\S+$/.test(k.term.trim()) ? /[A-Z0-9+#./]/.test(k.term) : /.[A-Z0-9+#./]/.test(k.term))).map(k => k.term)
   ])].filter(t => !supportedTool(t));
   info.unsupportedTools = unsupported;
   checks.noUnsupportedTools = unsupported.length === 0 ? 1 : unsupported.length === 1 ? 0.5 : 0;
@@ -160,7 +163,10 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   // TypeScript (TypeScript)") are caught by the tools check above.
   const foreign = items.filter(s => {
     const m = s.match(/^(.*?)\s*\((.*)\)$/);
-    return m ? !has(corpus, m[1]) && !has(corpus, m[2]) : !has(corpus, s);
+    // The posting's form of a profile skill (SEO for "Search Engine
+    // Optimization") counts, as it does in the composer's validator.
+    const ok = (t) => has(corpus, t) || supportedViaAlias.has(normalizeTerm(t));
+    return m ? !ok(m[1]) && !ok(m[2]) : !ok(s);
   });
   checks.skillsFromProfile = foreign.length ? 0 : 1;
   if (foreign.length) fails.push(`skills not in the profile: ${foreign.join(', ')}`);
@@ -182,7 +188,8 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   const unproven = required.filter(q => !proven.includes(q)).map(q => q.text);
   if (unproven.length) fails.push(`required qualifications without a line: ${unproven.join(' | ')}`);
 
-  const pairs = supported.filter(k => k.alias);
+  // Only where the posting uses both forms (older matches carry no flag).
+  const pairs = supported.filter(k => k.alias && k.bothForms !== false);
   const bothForms = pairs.filter(k => has(textN, k.term) && has(textN, k.alias));
   checks.acronymPairs = pairs.length ? +(bothForms.length / pairs.length).toFixed(2) : 1;
 

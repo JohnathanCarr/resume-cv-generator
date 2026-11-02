@@ -108,3 +108,10 @@ test('stuffing counts what was written, not fixed header lines', () => {
   assert.equal(score(r).checks.noStuffing, 0);
   assert.equal(score({ ...r, summary: 'Backend engineer building Go and PostgreSQL services.' }).checks.noStuffing, 1);
 });
+
+test('soft-skill phrases and acronym verbs are not tool claims', () => {
+  const m = { ...match, keywords: [...match.keywords, { term: 'Clear written communication', importance: 'supporting', alias: '' }] };
+  const r = { ...good, summary: 'Backend engineer building Go and PostgreSQL services. Clear written communication.', experience: [{ ...good.experience[0], bullets: [...good.experience[0].bullets, 'QAed the store pages'] }, good.experience[1]] };
+  const s = scoreResumeV2({ resume: r, profile, jobText, match: m, page });
+  assert.equal(s.checks.noUnsupportedTools, 1, s.fails.join('; '));
+});

@@ -1,13 +1,16 @@
 // Resume HTML, pure (no DOM): the same markup is shown in the preview,
-// measured off-screen for the one-page limit, and copied into print.html for
-// the PDF, which does not load styles.css, so all styling is inline with
-// hardcoded pt sizes. data-kind marks the line kinds layout.js measures.
+// measured for the one-page limit and printed, always inside the page
+// document of pageDoc.js, so all styling is inline. Sizes come from
+// template.js, which layout.js also reads. data-kind marks the line kinds
+// layout.js measures.
 //
 // Escaping contract: text inside resumeContent must already be HTML-escaped
 // (highlight.js output, or escapeResume() for raw data); the profile's own
 // fields (name, contact line, education fallback) are escaped here. Profile
 // text and model output can hold markup: a pasted posting can steer what the
 // model returns.
+
+import { TEMPLATE } from './template.js';
 
 export function escapeHTML(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -60,199 +63,95 @@ export function formatResume(resumeContent, profile) {
     }
 
 
-    // Single-source rendering with exact measurements for pixel-perfect preview/PDF match
-    const baseFont = "'Times New Roman', serif";
-    const headerFontSize = "18pt";
-    const contactFontSize = "11pt";
-    const sectionHeaderSize = "11pt";
-    const bodyFontSize = "10pt";
-    const lineHeight = "1.25";
-    const sectionSpacing = "0.8em";
-    const entrySpacing = "0.6em";
+    const T = TEMPLATE;
+    const px = (n) => `${n}pt`;
+    // A heading from STANDARD_HEADINGS; uppercase is only how it looks.
+    const heading = (text) => `<h2 style="margin: 0 0 ${px(T.headingGapPt)} 0; font-size: ${px(T.headingPt)}; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3pt; border-bottom: 0.75pt solid #000; padding-bottom: 1pt;">${text}</h2>`;
+    const section = (text, body) => `<div class="resume-section" style="margin-bottom: ${px(T.sectionGapPt)};">${heading(text)}${body}</div>`;
+    // Left text and right text on one line (company and dates, title and place).
+    const row = (left, right, style) => `<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12pt; font-size: ${px(T.entryPt)}; ${style}"><span>${left}</span>${right ? `<span style="white-space: nowrap;">${right}</span>` : ''}</div>`;
+    const bullets = (items, kind = 'bullet') => items.length ? `<ul style="margin: 0; padding-left: ${T.bulletIndentEm}em; font-size: ${px(T.bodyPt)};">${items.map(b => `<li data-kind="${kind}" style="margin-bottom: ${px(T.bulletGapPt)};">${b}</li>`).join('')}</ul>` : '';
+    const entry = (cls, inner) => `<div class="${cls}" style="margin-bottom: ${px(T.entryGapPt)};">${inner}</div>`;
 
-    // Sections after the summary and skills, in the resume's chosen order
-    // (composed resumes choose; everything else keeps education first).
     const sections = {
-        education: `
-            <!-- Education Section -->
-            ${eduList.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-            <h2 style="
-                margin: 0 0 0.4em 0;
-                font-size: ${sectionHeaderSize};
-                font-weight: bold;
-                text-transform: uppercase;
-                border-bottom: 1pt solid #000;
-                padding-bottom: 2pt;
-            ">Education</h2>
-            ${eduList.map(edu => `
-            <div class="education-entry" style="margin-bottom: ${entrySpacing};">
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                    <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                    ${edu.school}${edu.location ? ` – ${edu.location}` : ''}
-                    </span>
-                    <span style="font-size: ${contactFontSize};">
-                    ${edu.dates}
-                    </span>
-                </div>
-                ${edu.degree ? `<div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0;">${edu.degree}</div>` : ''}
-                ${edu.major ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Major: ${edu.major}</div>` : ''}
-                ${edu.minor ? `<div style="font-size: ${contactFontSize}; font-weight: bold;">Minor: ${edu.minor}</div>` : ''}
-                ${edu.gpa ? `<div style="font-size: ${contactFontSize}; margin: 0.2em 0 0 0;">GPA: ${edu.gpa}</div>` : ''}
-                ${(edu.honors || edu.coursework) ? `
-                <div data-kind="coursework" style="font-size: ${bodyFontSize}; margin: 0.3em 0 0 0;">
-                    ${edu.honors ? `• ${edu.honors}<br>` : ''}
-                    ${edu.coursework ? `• Relevant Coursework: ${edu.coursework}` : ''}
-                </div>` : ''}
-            </div>`).join('')}
-            </div>` : ''}
-`,
-        experience: `
-            <!-- Experience Section -->
-            ${resume.experience && resume.experience.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                <h2 style="
-                    margin: 0 0 0.4em 0;
-                    font-size: ${sectionHeaderSize};
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;
-                ">Experience</h2>
-                ${resume.experience.map(exp => `
-                    <div class="experience-entry" style="margin-bottom: ${entrySpacing};">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                            <span style="font-size: ${contactFontSize}; font-weight: bold;">
-                                ${exp.company}${exp.location ? ` – ${exp.location}` : ''}
-                            </span>
-                            <span style="font-size: ${contactFontSize};">
-                                ${formatDates(exp.dates)}
-                            </span>
-                        </div>
-                        <div style="font-size: ${contactFontSize}; font-style: italic; margin: 0.1em 0 0.2em 0;">
-                            ${exp.title}
-                        </div>
-                        <ul style="
-                            margin: 0;
-                            padding-left: 1.2em;
-                            font-size: ${bodyFontSize};
-                            line-height: ${lineHeight};
-                        ">
-                            ${exp.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
-                        </ul>
-                    </div>
-                `).join('')}
-            </div>` : ''}
-`,
-        projects: `
-            <!-- Projects Section -->
-            ${resume.projects && resume.projects.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                <h2 style="
-                    margin: 0 0 0.4em 0;
-                    font-size: ${sectionHeaderSize};
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;
-                ">Projects</h2>
-                ${resume.projects.map(proj => `
-                    <div class="project-entry" style="margin-bottom: ${entrySpacing};">
-                        <div data-kind="projectHeader" style="font-size: ${contactFontSize}; font-weight: bold; margin-bottom: 0.1em;">
-                            ${proj.name}${proj.link ? ` | ${proj.link}` : ''}
-                        </div>
-                        <ul style="
-                            margin: 0;
-                            padding-left: 1.2em;
-                            font-size: ${bodyFontSize};
-                            line-height: ${lineHeight};
-                        ">
-                            ${proj.bullets.map(bullet => `<li data-kind="bullet" style="margin-bottom: 0.1em;">${bullet}</li>`).join('')}
-                        </ul>
-                    </div>
-                `).join('')}
-            </div>` : ''}
-`,
-        extras: `
-                                ${
-                (
-                    (resume.programs && resume.programs.length > 0) ||
-                    (resume.certifications && resume.certifications.length > 0)
-                ) ? `
-                    <!-- Programs/Certifications Section -->
-                    <div class="resume-section">
-                    <h2 style="
-                        margin: 0 0 0.4em 0;
-                        font-size: ${sectionHeaderSize};
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        border-bottom: 1pt solid #000;
-                        padding-bottom: 2pt;
-                    ">${extrasHeading(resume)}</h2>
-                    ${[...(resume.programs || []), ...(resume.certifications || [])].map(line => `
-                    <div data-kind="extra" style="font-size: ${bodyFontSize}; margin-bottom: 0.2em; line-height: 1.3;">${line}</div>`).join('')}
-                    </div>
-                ` : ''
-                }
-`
+        education: eduList.length ? section('Education', eduList.map(edu => {
+            const degree = [edu.degree, edu.major, edu.minor ? `Minor in ${edu.minor}` : ''].filter(Boolean).join(', ');
+            const details = [
+                edu.gpa ? `<strong>GPA:</strong> ${edu.gpa}` : '',
+                edu.honors ? `<strong>Honors:</strong> ${edu.honors}` : ''
+            ].filter(Boolean);
+            return entry('education-entry',
+                row(`<strong>${edu.school}</strong>`, `<strong>${edu.dates}</strong>`, '')
+                + (degree || edu.location ? row(`<em>${degree}</em>`, edu.location ? `<em>${edu.location}</em>` : '', '') : '')
+                + bullets(details, 'extra')
+                + (edu.coursework ? bullets([`<strong>Coursework:</strong> ${edu.coursework}`], 'coursework') : ''));
+        }).join('')) : '',
+
+        experience: (resume.experience || []).length ? section('Experience', resume.experience.map(exp => entry('experience-entry',
+            row(`<strong>${cleanEmpty(exp.company)}</strong>`, `<strong>${formatDates(exp.dates)}</strong>`, '')
+            + row(`<em>${cleanEmpty(exp.title)}</em>`, exp.location ? `<em>${cleanEmpty(exp.location)}</em>` : '', '')
+            + bullets(exp.bullets || [])
+        )).join('')) : '',
+
+        projects: (resume.projects || []).length ? section('Projects', resume.projects.map(proj => {
+            const { title, dates } = projectHeader(proj.name);
+            // A link whose text is just the project's name adds nothing.
+            const plain = (t) => String(t).replace(/<[^>]+>/g, '').toLowerCase().trim();
+            const link = proj.link && !String(proj.name).split(/\s+\|\s+/).map(plain).includes(plain(proj.link)) ? `<div style="font-size: ${px(T.contactPt)};">${proj.link}</div>` : '';
+            return entry('project-entry',
+                `<div data-kind="projectHeader" style="display: flex; justify-content: space-between; align-items: baseline; gap: 12pt; font-size: ${px(T.entryPt)}; font-weight: bold;"><span>${title}</span>${dates ? `<span style="white-space: nowrap;">${formatDates(dates)}</span>` : ''}</div>`
+                + link + bullets(proj.bullets || []));
+        }).join('')) : '',
+
+        extras: ((resume.programs || []).length || (resume.certifications || []).length)
+            ? section(extrasHeading(resume), bullets([...(resume.programs || []), ...(resume.certifications || [])], 'extra'))
+            : ''
     };
     const order = Array.isArray(resume.sectionOrder) && resume.sectionOrder.length
         ? resume.sectionOrder.filter(k => sections[k] !== undefined)
         : ['education', 'experience', 'projects', 'extras'];
 
-    let formatted = `
+    const formatted = `
         <div class="resume-page" style="
-            font-family: ${baseFont};
+            font-family: ${T.font};
             color: #000;
-            line-height: ${lineHeight};
+            line-height: ${T.lineHeight};
             font-variant-ligatures: none;
-            max-width: 7.5in;
+            width: ${T.pageWidthIn}in;
             margin: 0 auto;
-            padding: 0.5in;
+            padding: ${T.marginIn}in;
             background: white;
-            min-height: 10in;
+            min-height: 10.5in;
             box-sizing: border-box;
         ">
-            <!-- Header Section -->
-            <div class="resume-header" style="text-align: center; margin-bottom: ${sectionSpacing};">
-                <h1 style="
-                    margin: 0 0 0.2em 0;
-                    font-size: ${headerFontSize};
-                    font-weight: bold;
-                    letter-spacing: 0.5pt;
-                ">${escapeHTML(profile.name)}</h1>
-                <div style="
-                    margin: 0;
-                    font-size: ${contactFontSize};
-                    line-height: 1.3;
-                ">${formatContactLine(profile)}</div>
-                ${resume.summary ? `<div data-kind="summary" style="
-                    margin: 0.3em 0 0 0;
-                    font-size: ${contactFontSize};
-                    font-weight: bold;
-                ">${resume.summary}</div>` : ''}
+            <div class="resume-header" style="text-align: center; margin-bottom: ${px(T.sectionGapPt)};">
+                <h1 style="margin: 0 0 2pt 0; font-size: ${px(T.namePt)}; font-weight: bold;">${escapeHTML(profile.name)}</h1>
+                <div style="margin: 0; font-size: ${px(T.contactPt)};">${formatContactLine(profile)}</div>
             </div>
-
-            <!-- Skills Section -->
-            ${resume.skills && resume.skills.length > 0 ? `
-            <div class="resume-section" style="margin-bottom: ${sectionSpacing};">
-                <h2 style="
-                    margin: 0 0 0.4em 0;
-                    font-size: ${sectionHeaderSize};
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    border-bottom: 1pt solid #000;
-                    padding-bottom: 2pt;
-                ">Skills</h2>
-                <div style="font-size: ${bodyFontSize};">
-                    ${formatSkills(resume.skills)}
-                </div>
-            </div>` : ''}
+            ${resume.summary ? section('Summary', `<p data-kind="summary" style="margin: 0; font-size: ${px(T.bodyPt)};">${resume.summary}</p>`) : ''}
+            ${(resume.skills || []).length ? section('Skills', `<div style="font-size: ${px(T.bodyPt)};">${formatSkills(resume.skills)}</div>`) : ''}
             ${order.map(k => sections[k]).join('')}
         </div>
     `;
 
     return formatted;
+}
+
+// Empty brackets a profile field can carry ("Outlier.ai ( )") are dropped.
+function cleanEmpty(text) {
+    return String(text || '').replace(/\s*\(\s*\)/g, '').trim();
+}
+
+// A project header from "Name | stack | link text | dates": repeats of the
+// name are dropped and a trailing date range moves to the right edge.
+export function projectHeader(name) {
+    const parts = String(name || '').split(/\s+\|\s+/).map(cleanEmpty).filter(Boolean);
+    const plain = (t) => t.replace(/<[^>]+>/g, '').toLowerCase().trim();
+    const seen = new Set();
+    const kept = parts.filter(p => { const k = plain(p); if (seen.has(k)) return false; seen.add(k); return true; });
+    let dates = '';
+    if (kept.length > 1 && /\b(19|20)\d{2}\b|\bpresent\b/i.test(plain(kept[kept.length - 1])) && plain(kept[kept.length - 1]).length <= 24) dates = kept.pop();
+    return { title: kept.join(' | '), dates };
 }
 
 // "Location | email | phone | linkedin.com/in/… | …", escaped. Links stay
@@ -301,11 +200,11 @@ export function formatSkills(skills) {
         // highlights with a title) that contains colons of its own.
         return skills.map(skillLine => {
             const at = skillLine.indexOf(':');
-            return `<p data-kind="skills" style="margin: 0 0 0.2em 0; line-height: 1.3;"><strong>${skillLine.slice(0, at)}:</strong> ${skillLine.slice(at + 1).trim()}</p>`;
+            return `<p data-kind="skills" style="margin: 0 0 1pt 0;"><strong>${skillLine.slice(0, at)}:</strong> ${skillLine.slice(at + 1).trim()}</p>`;
         }).join('');
     } else {
         // Fallback: group skills manually
-        return `<p style="margin: 0; line-height: 1.3;"><strong>Technical Skills:</strong> ${skills.join(', ')}</p>`;
+        return `<p data-kind="skills" style="margin: 0;"><strong>Technical Skills:</strong> ${skills.join(', ')}</p>`;
     }
 }
 

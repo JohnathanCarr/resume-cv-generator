@@ -11,26 +11,28 @@
 //
 // Pure functions, no DOM.
 
-const PX_PER_PT = 96 / 72;
-const body = 10 * PX_PER_PT;      // bodyFontSize 10pt
-const large = 11 * PX_PER_PT;     // contactFontSize / sectionHeaderSize 11pt
-const CONTENT_WIDTH = 6.5 * 96;   // 7.5in page box minus 0.5in padding each side
+import { TEMPLATE as T, pt, CONTENT_WIDTH_PX as CONTENT_WIDTH } from '../preview/template.js';
 
-// Line kinds and the CSS they come from in formatResume().
+const body = pt(T.bodyPt);
+const entry = pt(T.entryPt);
+const face = (size, bold = false) => `${bold ? 'bold ' : ''}${size}px Arial`;
+const indent = T.bulletIndentEm * body;
+
+// Line kinds and the CSS they come from in formatResume() (template.js).
 const DEFAULT_KINDS = {
-  bullet:        { font: `${body}px Times New Roman`, width: CONTENT_WIDTH - 1.2 * body, lineHeight: body * 1.25, gap: 0.1 * body },
-  summary:       { font: `bold ${large}px Times New Roman`, width: CONTENT_WIDTH, lineHeight: large * 1.25, gap: 0 },
-  skills:        { font: `${body}px Times New Roman`, width: CONTENT_WIDTH, lineHeight: body * 1.3, gap: 0.2 * body },
-  coursework:    { font: `${body}px Times New Roman`, width: CONTENT_WIDTH, lineHeight: body * 1.25, gap: 0, prefix: '• Relevant Coursework: ' },
-  extra:         { font: `${body}px Times New Roman`, width: CONTENT_WIDTH, lineHeight: body * 1.3, gap: 0.2 * body },
-  projectHeader: { font: `bold ${large}px Times New Roman`, width: CONTENT_WIDTH, lineHeight: large * 1.25, gap: 0.1 * large }
+  bullet:        { font: face(body), width: CONTENT_WIDTH - indent, lineHeight: body * T.lineHeight, gap: pt(T.bulletGapPt) },
+  summary:       { font: face(body), width: CONTENT_WIDTH, lineHeight: body * T.lineHeight, gap: 0 },
+  skills:        { font: face(body), width: CONTENT_WIDTH, lineHeight: body * T.lineHeight, gap: pt(1) },
+  coursework:    { font: face(body), width: CONTENT_WIDTH - indent, lineHeight: body * T.lineHeight, gap: pt(T.bulletGapPt), prefix: 'Coursework: ' },
+  extra:         { font: face(body), width: CONTENT_WIDTH - indent, lineHeight: body * T.lineHeight, gap: pt(T.bulletGapPt) },
+  projectHeader: { font: face(entry, true), width: CONTENT_WIDTH, lineHeight: entry * T.lineHeight, gap: 0 }
 };
 
-// Times New Roman averages a little under half an em per character.
+// Arial averages about half an em per character.
 function approxTextWidth(text, font) {
   const size = Number((String(font).match(/([\d.]+)px/) || [])[1]) || body;
   const bold = /bold/.test(font) ? 1.06 : 1;
-  return String(text).length * size * 0.45 * bold;
+  return String(text).length * size * 0.5 * bold;
 }
 
 // measured: { capacityPx, usedPx, kinds: { <kind>: { font, width, lineHeight, gap } },
@@ -41,7 +43,7 @@ function makeLayout(measured = {}) {
   return {
     capacityPx: measured.capacityPx || 11 * 96,   // one US Letter page
     usedPx: Number.isFinite(measured.usedPx) ? measured.usedPx : null,
-    entryGap: Number.isFinite(measured.entryGap) ? measured.entryGap : 0.6 * 16,
+    entryGap: Number.isFinite(measured.entryGap) ? measured.entryGap : pt(T.entryGapPt),
     textWidth: typeof measured.textWidth === 'function' ? measured.textWidth : approxTextWidth,
     kinds,
     measured: Boolean(measured.textWidth)
@@ -78,27 +80,28 @@ function projectHeight(layout, project) {
 }
 
 // Whole-document estimate, used when the extension has not measured a render
-// (evals). Mirrors formatResume(): page padding, header block, section headers
-// and entry headers at their CSS sizes.
+// (evals). Mirrors formatResume() with template.js's sizes: page padding,
+// header block, ruled section headings, two header rows per job and school.
 function estimateDocHeight(layout, doc, extraText) {
-  const L = large * 1.3, S = 0.8 * 16;               // entry header line, section spacing
-  const section = large * 1.25 + 0.4 * large + 4 + S; // heading, its margin and rule, spacing after
-  let h = 96 + 18 * PX_PER_PT * 1.25 + L + S;       // padding, name, contact line
-  if (doc.summary) h += itemHeight(layout, 'summary', doc.summary);
+  const R = entry * T.lineHeight;                                                     // one entry header row
+  const section = pt(T.headingPt) * T.lineHeight + pt(1.75) + pt(T.headingGapPt) + pt(T.sectionGapPt);
+  let h = 2 * T.marginIn * 96 + pt(T.namePt) * T.lineHeight + pt(2) + pt(T.contactPt) * T.lineHeight + pt(T.sectionGapPt);
+  if (doc.summary) h += section + itemHeight(layout, 'summary', doc.summary);
   const groups = doc.skillGroups || [];
   if (groups.length) h += section + groups.reduce((a, g) => a + itemHeight(layout, 'skills', `${g.label ? `${g.label}: ` : 'Skills: '}${g.items.join(', ')}`), 0);
   if ((doc.education || []).length) {
     h += section;
     for (const e of doc.education) {
-      h += L + layout.entryGap;
-      for (const f of ['degreeType', 'major', 'minor', 'gpa']) if (e[f]) h += L;
-      if (e.honors) h += itemHeight(layout, 'extra', e.honors);
+      h += R + layout.entryGap;
+      if (e.degreeType || e.major || e.location) h += R;
+      if (e.gpa) h += itemHeight(layout, 'extra', `GPA: ${e.gpa}`);
+      if (e.honors) h += itemHeight(layout, 'extra', `Honors: ${e.honors}`);
       if (e.coursework) h += itemHeight(layout, 'coursework', e.coursework);
     }
   }
   if ((doc.experiences || []).length) {
     h += section;
-    for (const e of doc.experiences) h += 2 * L + layout.entryGap + (e.bullets || []).reduce((a, b) => a + itemHeight(layout, 'bullet', b), 0);
+    for (const e of doc.experiences) h += 2 * R + layout.entryGap + (e.bullets || []).reduce((a, b) => a + itemHeight(layout, 'bullet', b), 0);
   }
   if ((doc.projects || []).length) h += section + doc.projects.reduce((a, p) => a + projectHeight(layout, p), 0);
   if ((doc.extras || []).length) h += section + doc.extras.reduce((a, x) => a + itemHeight(layout, 'extra', extraText(x)), 0);

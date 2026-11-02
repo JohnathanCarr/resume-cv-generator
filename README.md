@@ -43,6 +43,8 @@ Finally the extension measures the real rendered result. If that still spills ov
 
 `highlight.js` builds two versions of the resume. The preview underlines in green the words that are new compared with the profile, and hovering one shows the profile line it came from. A toggle shows the uploaded PDF for comparison. Above the preview, a collapsible match report lists the posting's screening requirements (work authorization, clearance, licenses, location…), each required and preferred qualification with the profile items that show it, and the key keywords: on the resume, in the profile but not on this page, or not in the profile at all. Gaps are reported, never added, and there is no "ATS score". Work authorization and security clearance are optional profile fields, and License is an extras type, so those screening requirements can be stated when they apply. The clean version, without highlights, is what gets printed. Generated text is HTML-escaped before rendering.
 
+The preview and the PDF are laid out in the same document (`preview/pageDoc.js`): the preview shows the page at its real size, 8.5 × 11 in, in its own frame, scaled down to fit the panel, so it matches the PDF line for line. If the content runs past one page, a dashed line marks where the page ends. The smoke test prints the page and checks every line starts at the same height as in the preview.
+
 The resume PDF comes from a print view (`print.html`) through Chrome's Save as PDF, so it is a text PDF that applicant tracking systems can read. The cover letter PDF is generated with jsPDF.
 
 ## Testing

@@ -3,7 +3,7 @@
 // schema, the validator's rules, and the conversion to a resume document.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges } from '../../extension/generation/compose.js';
+import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges, entryRelevance } from '../../extension/generation/compose.js';
 import { makeLayout } from '../../extension/generation/layout.js';
 import { previewResumes } from '../../extension/generation/highlight.js';
 import { resumeDocToSchema } from '../../extension/generation/baseline.js';
@@ -40,7 +40,7 @@ const match = {
 };
 const good = () => ({
   summary: { text: 'Backend Engineer building Go and PostgreSQL services, with Search Engine Optimization (SEO) work.', sources: ['profile:summary', 'exp:3.b1', 'exp:4.b1', 'exp:3.b2'] },
-  skill_groups: [{ label: 'Languages', items: ['Go', 'PostgreSQL'] }, { label: 'Other', items: ['SEO (Search Engine Optimization)', 'Docker'] }],
+  skill_groups: [{ label: 'Languages', items: ['Go', 'PostgreSQL'] }, { label: 'Other', items: ['SEO', 'Docker'] }],
   experience: [
     { id: 'exp:4', bullets: [{ text: 'Wrote PostgreSQL reports for 40 stores', sources: ['exp:4.b1'] }] },
     { id: 'exp:3', bullets: [
@@ -245,13 +245,19 @@ test('skill brackets hold the profile\'s name only; a misuse keeps the plain ski
   const e = errors.find(x => x.code === 'skill_form');
   assert.ok(e && e.keep === 'Docker', JSON.stringify(errors));
   assert.deepEqual(sanitizeComposition(c, errors, profile).comp.skill_groups[0].items, ['Docker', 'Go', 'PostgreSQL']);
-  c.skill_groups = [{ label: 'Tools', items: ['SEO (Search Engine Optimization)', 'Go', 'PostgreSQL', 'Docker'] }];
+  c.skill_groups = [{ label: 'Tools', items: ['Golang (Go)', 'SEO', 'PostgreSQL', 'Docker'] }];
   assert.ok(!validateComposition(c, profile, match).errors.some(x => x.code === 'skill_form'), 'posting term (profile name) is fine');
+  // An acronym spelled out, or the same name twice, is one skill listed once.
+  for (const [item, keep] of [['SEO (Search Engine Optimization)', 'SEO'], ['Postgresql (PostgreSQL)', 'Postgresql']]) {
+    c.skill_groups = [{ label: 'Tools', items: [item, 'Go', 'Docker'] }];
+    const e = validateComposition(c, profile, match).errors.find(x => x.code === 'skill_form');
+    assert.equal(e && e.keep, keep, item);
+  }
 });
 
 test('keyword uses are counted over written text, labels included, not fixed headers', () => {
   const c = good();
-  c.skill_groups = [{ label: 'Go & Data', items: ['Go', 'PostgreSQL'] }, { label: 'Other', items: ['SEO (Search Engine Optimization)', 'Docker'] }];
+  c.skill_groups = [{ label: 'Go & Data', items: ['Go', 'PostgreSQL'] }, { label: 'Other', items: ['SEO', 'Docker'] }];
   c.experience[1].bullets = [
     { text: 'Built Go services handling 2M requests a day', sources: ['exp:3.b1'] },
     { text: 'Ran Go tooling for Search Engine Optimization (SEO)', sources: ['exp:3.b1', 'exp:3.b2'] }
@@ -288,4 +294,36 @@ test('a profile with projects gets a project, and trimming keeps the first one l
   const newestTo3 = fit.trimmed.filter(t => t.startsWith('exp:3')).length >= 3;
   assert.ok(projectGone < 0 || newestTo3, `a project went before the newest job was down to 3 bullets: ${fit.trimmed.join('; ')}`);
   assert.ok(fit.comp.projects.length >= 1 || fit.comp.experience.find(e => e.id === 'exp:3').bullets.length <= 2, 'the first project outlasts the newest job\'s third bullet');
+});
+
+test('relevance, not entry type, decides who keeps bullets', () => {
+  const p = {
+    ...profile,
+    experiences: [
+      { id: '3', title: 'Engineer', company: 'Harbor', start: '2022', end: 'Present', bullets: ['Built Go services handling 2M requests a day', 'Ran Search Engine Optimization for the store'] },
+      { id: '7', title: 'Rater', company: 'Gig', start: '2020', end: '2021', bullets: ['Rated search results', 'Wrote rating notes'] }
+    ],
+    projects: [{ id: '5', name: 'tidepool', description: 'Go, PostgreSQL, Docker', bullets: ['Built a Go job queue on PostgreSQL', 'Ran it in Docker', 'Shipped Go workers', 'Wrote PostgreSQL migrations'] }]
+  };
+  const m = { ...match, requirements: [{ text: 'Go services', kind: 'required', strength: 'strong', evidence: ['exp:3', 'proj:5'] }] };
+  const rel = entryRelevance(p, m);
+  assert.ok(rel.get('proj:5') > rel.get('exp:7'), JSON.stringify([...rel]));
+  const b = (t, s) => ({ text: t, sources: [s] });
+  const c = { ...good(), extras: [],
+    experience: [{ id: 'exp:3', bullets: [b('Built Go services handling 2M requests a day', 'exp:3.b1'), b('Ran SEO for the store', 'exp:3.b2')] }, { id: 'exp:7', bullets: [b('Rated search results', 'exp:7.b1'), b('Wrote rating notes', 'exp:7.b2')] }],
+    projects: [{ id: 'proj:5', bullets: [1, 2, 3, 4].map(i => b('Built a Go job queue on PostgreSQL', `proj:5.b${i}`)) }] };
+  const fit = fitComposition(c, p, { ...m, requirements: [] }, makeLayout({}), { offsetPx: 700 });
+  assert.ok(fit.trimmed.length, 'something was trimmed');
+  assert.ok(fit.trimmed[0].startsWith('exp:7'), `the low-relevance job goes first: ${fit.trimmed.join('; ')}`);
+  assert.equal(fit.comp.experience.find(e => e.id === 'exp:3').bullets.length >= 1, true);
+});
+
+test('acronym pairs are asked for only when the posting uses both forms', () => {
+  const c = good();
+  c.summary = { text: 'Backend Engineer building Go and PostgreSQL services, with SEO work.', sources: ['profile:summary', 'exp:3.b1', 'exp:4.b1', 'exp:3.b2'] };
+  c.experience[1].bullets[1] = { text: 'Led SEO for the store', sources: ['exp:3.b2'] };
+  const one = { ...match, keywords: match.keywords.map(k => (k.term === 'SEO' ? { ...k, bothForms: false } : k)) };
+  assert.ok(!validateComposition(c, profile, one).warnings.some(w => w.code === 'acronym'));
+  const both = { ...match, keywords: match.keywords.map(k => (k.term === 'SEO' ? { ...k, bothForms: true } : k)) };
+  assert.ok(validateComposition(c, profile, both).warnings.some(w => w.code === 'acronym'));
 });

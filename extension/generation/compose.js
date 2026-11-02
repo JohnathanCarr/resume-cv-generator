@@ -285,6 +285,9 @@ export function validateComposition(comp, profile, match = null) {
       const forms = (paren || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
       if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(skillSource, f) || aliases.has(f))) {
         errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not in the profile.` });
+      } else if (paren && (forms[0] === forms[1] || isExpansion(paren[1], paren[2]))) {
+        // "REST APIs (Representational State Transfer APIs)", "Typescript (TypeScript)": one name is enough.
+        errors.push({ code: 'skill_form', target: `skill_groups[${gi}]`, item, keep: paren[1], message: `"${item}": list a skill by one name, the posting's ("${paren[1]}"); acronyms are not spelled out in Skills.` });
       } else if (paren && !(corpusHas(skillCorpus, forms[1]) || corpusHas(skillSource, forms[1]) || aliases.has(forms[1]))) {
         // "Posting term (profile skill)", never a description in brackets.
         errors.push({ code: 'skill_form', target: `skill_groups[${gi}]`, item, keep: paren[1], message: `"${item}": brackets hold only the profile's own name for the skill ("PostgreSQL (Postgres)"); list "${paren[1]}" on its own.` });
@@ -327,7 +330,7 @@ export function validateComposition(comp, profile, match = null) {
   const supported = core.filter(k => corpusHas(corpus, normalizeTerm(k.term)) || (k.alias && corpusHas(corpus, normalizeTerm(k.alias))));
   for (const k of supported) {
     if (!corpusHas(text, normalizeTerm(k.term))) fail('keyword', 'keywords', `Use the posting's term "${k.term}" where the profile supports it${k.alias ? ` (profile: ${k.alias})` : ''}.`);
-    else if (k.alias && !corpusHas(text, normalizeTerm(k.alias))) warn('acronym', 'keywords', `Give "${k.term}" and "${k.alias}" once each.`);
+    else if (k.alias && k.bothForms !== false && !corpusHas(text, normalizeTerm(k.alias))) warn('acronym', 'keywords', `The posting uses both "${k.term}" and "${k.alias}": give the other form once, in the summary or a bullet.`);
   }
   // Counted over what the model writes, skill labels included; entry header
   // lines (titles, employers, project names and stacks) are fixed profile text.
@@ -503,6 +506,72 @@ export function sanitizeComposition(comp, errors, profile) {
 
 // Lines and entries that prove a supported required qualification: trimming
 // never removes them.
+// How much each job and project shows of what this posting asks for:
+// requirements citing it (required 3, preferred 1.5) plus the posting's
+// keywords in its text (core 1, supporting 0.5). The newest job gets a small
+// recency bonus. Bullets are given and taken by this score, job or project
+// alike. Returns Map id → score (at least 0.5). Pure.
+export function entryRelevance(profile, match) {
+  const p = profile || {};
+  const scores = new Map();
+  const entries = [
+    ...(p.experiences || []).map(x => ({ id: `exp:${x.id}`, x })),
+    ...(p.projects || []).map(x => ({ id: `proj:${x.id}`, x }))
+  ];
+  const keywords = ((match && match.keywords) || []).map(k => (typeof k === 'string' ? { term: k, importance: 'core', alias: '' } : k));
+  for (const { id, x } of entries) {
+    const text = ` ${normalizeTerm([x.title, x.name, x.description, ...(x.bullets || [])].filter(Boolean).join(' '))} `;
+    let score = 0;
+    for (const q of (match && match.requirements) || []) {
+      if (q.strength === 'none') continue;
+      const cites = (q.evidence || []).some(e => String(e).trim().replace(/^\[\s*|\s*\]$/g, '').toLowerCase() === id.toLowerCase());
+      if (cites) score += q.kind === 'required' ? 3 : 1.5;
+    }
+    for (const k of keywords) {
+      if (corpusHas(text, normalizeTerm(k.term)) || (k.alias && corpusHas(text, normalizeTerm(k.alias)))) score += k.importance === 'core' ? 1 : 0.5;
+    }
+    scores.set(id, score);
+  }
+  const newest = newestFirst(p.experiences)[0];
+  if (newest) scores.set(`exp:${newest.id}`, scores.get(`exp:${newest.id}`) * 1.2);
+  for (const [id, v] of scores) scores.set(id, Math.max(0.5, +v.toFixed(2)));
+  return scores;
+}
+
+// Is one of a and b the other's acronym, or a spelled-out form of it? "AI
+// tools" / "Artificial Intelligence tools", "REST APIs" / "Representational
+// State Transfer APIs", "SEO" / "Search Engine Optimization".
+export function isExpansion(a, b) {
+  const words = (t) => String(t).toLowerCase().split(/[\s/-]+/).filter(Boolean);
+  // Can the letters of t be read through all of ws in order, each word giving
+  // its first letter and maybe more of its own letters?
+  const spells = (t, ws) => {
+    const go = (ti, wi) => {
+      if (wi === ws.length) return ti === t.length;
+      const w = ws[wi];
+      if (ti >= t.length || w[0] !== t[ti]) return false;
+      for (let ti2 = ti + 1, pos = 1; ; ) {
+        if (go(ti2, wi + 1)) return true;
+        if (ti2 >= t.length) return false;
+        const at = w.indexOf(t[ti2], pos);
+        if (at < 0) return false;
+        ti2++; pos = at + 1;
+      }
+    };
+    return go(0, 0);
+  };
+  const test = (short, long) => {
+    const shared = new Set(words(short));
+    const rest = words(long).filter(w => !shared.has(w));
+    if (!rest.length) return false;
+    return (String(short).match(/\b[A-Z][A-Z0-9/&]+s?\b/g) || []).some(tok => {
+      const t = tok.replace(/[^A-Za-z0-9]/g, '').replace(/s$/, '').toLowerCase();
+      return t.length >= 2 && spells(t, rest);
+    });
+  };
+  return test(a, b) || test(b, a);
+}
+
 function protectedProof(match) {
   const ids = new Set();
   for (const q of ((match && match.requirements) || []).filter(q => q.kind === 'required' && q.strength !== 'none')) {
@@ -539,41 +608,43 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
     }
     return false;
   };
-  // Jobs by date; the newest job is the strongest evidence and is cut last.
-  const order = newestFirst(profile.experiences).map(x => `exp:${x.id}`);
-  const byAge = () => [...(c.experience || [])].sort((a, b) => order.indexOf(b.id) - order.indexOf(a.id));   // oldest first
-  const older = () => byAge().slice(0, -1);
-  const newest = () => byAge().slice(-1);
-  const lastProjectFirst = () => [...(c.projects || [])].reverse();
-  // Removes the last project that proves no required qualification, keeping at least `min`.
+  // Bullets go by relevance (entryRelevance), job or project alike: the next
+  // bullet cut is the one worth least, a bullet of an entry being worth its
+  // score shared over its bullets, so a long, weakly relevant entry shrinks
+  // first. Floors: every job keeps a bullet and the newest job two; a
+  // project keeps one until whole projects go (least relevant first, the last
+  // project only once the newest job is down to two).
+  const rel = entryRelevance(profile, match);
+  const newestId = (newestFirst((profile.experiences || []).filter(x => (c.experience || []).some(e => e.id === `exp:${x.id}`)))[0] || {}).id;
+  const floor = (e) => (e.id === `exp:${newestId}` ? 2 : 1);
+  const entries = () => [...(c.experience || []), ...(c.projects || [])];
+  const cheapestBullet = (floorOf) => {
+    const can = entries().filter(e => (e.bullets || []).length > floorOf(e) && (e.bullets || []).some(b => !isProof(b)));
+    if (!can.length) return false;
+    const worth = (e) => (rel.get(e.id) || 0.5) / e.bullets.length;
+    const e = can.reduce((a, x) => (worth(x) < worth(a) ? x : a));
+    return dropLastBullet(e, floorOf(e));
+  };
   const dropProject = (min) => {
-    if ((c.projects || []).length <= min) return false;
-    const i = [...c.projects].reverse().findIndex(p => !entryProtected(p));
-    if (i < 0) return false;
-    const at = c.projects.length - 1 - i;
-    trimmed.push(`project ${c.projects[at].id}`);
-    c.projects.splice(at, 1);
+    const open = (c.projects || []).filter(p => !entryProtected(p));
+    if ((c.projects || []).length <= min || !open.length) return false;
+    const p = open.reduce((a, x) => ((rel.get(x.id) || 0) < (rel.get(a.id) || 0) ? x : a));
+    trimmed.push(`project ${p.id}`);
+    c.projects.splice(c.projects.indexOf(p), 1);
     return true;
   };
   const steps = [
     () => { const i = [...(c.extras || [])].reverse().findIndex(e => !keep.has(e.id)); if (i < 0) return false; const at = c.extras.length - 1 - i; trimmed.push(`extra ${c.extras[at].id}`); c.extras.splice(at, 1); return true; },
-    () => lastProjectFirst().some(p => dropLastBullet(p, 2)),
-    () => older().some(e => dropLastBullet(e, 2)),
-    () => newest().some(e => dropLastBullet(e, 4)),
-    () => lastProjectFirst().some(p => dropLastBullet(p, 1)),
-    () => older().some(e => dropLastBullet(e, 1)),
-    () => newest().some(e => dropLastBullet(e, 3)),
-    // Projects go one at a time, but the first (most relevant) one stays
-    // until the newest job is down to two bullets.
+    () => cheapestBullet(floor),
     () => dropProject(1),
-    () => newest().some(e => dropLastBullet(e, 2)),
     () => dropProject(0),
-    () => newest().some(e => dropLastBullet(e, 1))
+    () => cheapestBullet(() => 1)
   ];
 
   while (height() > limitPx) {
     if (!steps.some(step => step())) break;
   }
+
   const afterPx = Math.round(height());
   return { comp: c, trimmed, page: { afterPx, limitPx: Math.round(limitPx), fits: afterPx <= limitPx } };
 }

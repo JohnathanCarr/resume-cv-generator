@@ -155,7 +155,7 @@ export function saveBlob(blob, filename) {
 export function printableResumePage(cleanHtml, renderedHtml) {
     const holder = document.createElement('div');
     holder.innerHTML = cleanHtml || renderedHtml || '';
-    return holder.querySelector('.resume-page') || document.querySelector('.resume-content .resume-page');
+    return holder.querySelector('.resume-page');
 }
 
 // Opens the resume in print.html, where Chrome's print dialog saves it as a

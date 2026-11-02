@@ -4,17 +4,15 @@
     <meta charset="utf-8">
     <title>Resume</title>
     <style>
-        /* Zero page margins: the .resume-page markup carries its own 0.5in
-           padding, and Chrome omits its header/footer text when there is no
-           margin to draw it in. */
-        @page { size: letter; margin: 0; }
-        html, body { margin: 0; padding: 0; background: white; }
-        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        /* The page itself (size, margins, the 8.5in page host) comes from
+           preview/pageDoc.js PAGE_CSS, which print.js puts first in <head>;
+           the preview and the page measurement use the same rules. */
 
         /* On screen: a grey desk with the page floating on it, plus a toolbar. */
         @media screen {
-            body { background: #e5e7eb; padding: 72px 24px 48px; font-family: -apple-system, system-ui, sans-serif; }
-            .resume-page { box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18); }
+            html, body { background: #e5e7eb; }
+            body { padding: 72px 24px 48px; font-family: -apple-system, system-ui, sans-serif; }
+            .page-host { margin: 0 auto; background: white; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18); }
             .toolbar {
                 position: fixed; top: 0; left: 0; right: 0; z-index: 1;
                 display: flex; align-items: center; gap: 12px;
@@ -39,7 +37,7 @@
         <button id="print-again" class="primary">Save as PDF</button>
         <button id="close">Close</button>
     </div>
-    <div id="page"></div>
-    <script src="print.js"></script>
+    <div id="page" class="page-host"></div>
+    <script type="module" src="print.js"></script>
 </body>
 </html>

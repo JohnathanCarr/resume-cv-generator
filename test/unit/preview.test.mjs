@@ -7,6 +7,7 @@ import { textProblems, STANDARD_HEADINGS } from '../../extension/preview/parseSa
 import { resumeDocToSchema } from '../../extension/generation/baseline.js';
 import { formatCoverLetter } from '../../extension/preview/coverLetterHtml.js';
 import { sanitizeFilename, suggestFilename } from '../../extension/preview/export.js';
+import { resumeDocument, PAGE_CSS, PAGE_WIDTH_PX, PAGE_PX } from '../../extension/preview/pageDoc.js';
 
 const EVIL = '<img src=x onerror=alert(1)>';
 const profile = {
@@ -165,4 +166,15 @@ test('licenses get a standard heading, alone or with certifications', () => {
   assert.equal(extrasHeading({ extraTypes: ['license'] }), 'Licenses');
   assert.equal(extrasHeading({ extraTypes: ['license', 'certification'] }), 'Licenses & Certifications');
   assert.ok(STANDARD_HEADINGS.includes('Licenses & Certifications'));
+});
+
+test('one page document for print, preview and measurement', () => {
+  assert.equal(PAGE_WIDTH_PX, 816);
+  assert.equal(PAGE_PX, 1056);
+  assert.match(PAGE_CSS, /@page \{ size: letter; margin: 0; \}/);
+  const printed = resumeDocument('<div class="resume-page">x</div>', { title: 'A <b> "B"' });
+  assert.ok(printed.includes('<div class="page-host"><div class="resume-page">x</div></div>'));
+  assert.ok(printed.includes('<title>A &lt;b&gt; &quot;B&quot;</title>'));
+  assert.ok(!printed.includes('rs-added'), 'no highlight styles outside the preview');
+  assert.ok(resumeDocument('', { preview: true }).includes('.rs-added') && resumeDocument('', { preview: true }).includes('.page-end'));
 });

@@ -259,3 +259,33 @@ test('keyword uses are counted over written text, labels included, not fixed hea
   c.summary = { text: 'Backend Engineer writing Go and PostgreSQL services.', sources: ['profile:summary', 'exp:3.b1', 'exp:4.b1'] };
   assert.ok(codes(validateComposition(c, profile, match)).includes('stuffing'), 'Go in a label, the skills, the summary and two bullets is five');
 });
+
+test('work authorization is never a skill, and its legal boilerplate is filler', () => {
+  const p = { ...profile, workAuthorization: 'U.S. Citizenship; legally eligible to work in the U.S. on an ongoing basis' };
+  const c = good();
+  c.skill_groups = [...c.skill_groups, { label: 'Work Authorization', items: ['U.S. Citizenship'] }];
+  const { errors } = validateComposition(c, p, match);
+  assert.ok(errors.some(e => e.code === 'skill' && e.item === 'U.S. Citizenship'));
+  assert.ok(!sanitizeComposition(c, errors, p).comp.skill_groups.some(g => g.label === 'Work Authorization'), 'the emptied group goes');
+  const s = good();
+  s.summary = { text: `${s.summary.text} Legally eligible to work in the U.S. on an ongoing basis.`, sources: [...s.summary.sources, 'profile:workAuthorization'] };
+  assert.ok(codes(validateComposition(s, p, match)).includes('filler'));
+});
+
+test('a profile with projects gets a project, and trimming keeps the first one longest', () => {
+  const c = good();
+  c.projects = [];
+  assert.ok(codes(validateComposition(c, profile, match)).includes('no_projects'));
+  const p = { ...profile, projects: [...profile.projects, { id: '6', name: 'gull', bullets: ['A Go log shipper', 'Ships 2M lines a day'] }] };
+  const full = good();
+  full.experience[1].bullets = Array.from({ length: 6 }, () => ({ text: 'Built Go services handling 2M requests a day', sources: ['exp:3.b1'] }));
+  full.projects = [
+    { id: 'proj:5', bullets: [{ text: 'Built a Docker job queue', sources: ['proj:5.b1'] }] },
+    { id: 'proj:6', bullets: [{ text: 'Built a Go log shipper', sources: ['proj:6.b1'] }, { text: 'Shipped 2M lines a day', sources: ['proj:6.b2'] }] }
+  ];
+  const fit = fitComposition(full, p, { ...match, requirements: [] }, makeLayout({}), { offsetPx: 600 });
+  const projectGone = fit.trimmed.findIndex(t => t.startsWith('project'));
+  const newestTo3 = fit.trimmed.filter(t => t.startsWith('exp:3')).length >= 3;
+  assert.ok(projectGone < 0 || newestTo3, `a project went before the newest job was down to 3 bullets: ${fit.trimmed.join('; ')}`);
+  assert.ok(fit.comp.projects.length >= 1 || fit.comp.experience.find(e => e.id === 'exp:3').bullets.length <= 2, 'the first project outlasts the newest job\'s third bullet');
+});

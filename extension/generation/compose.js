@@ -220,7 +220,9 @@ const termCorpus = (texts) => ` ${normalizeTerm(texts.join(' '))} `;
 export const FILLER = ['results-driven', 'results driven', 'detail-oriented', 'detail oriented', 'proven track record', 'responsible for',
   'duties included', 'team player', 'self-starter', 'go-getter', 'hard-working', 'passionate', 'synergy', 'leverage', 'leveraged',
   'leveraging', 'spearheaded', 'cutting-edge', 'best-in-class', 'world-class', 'seamless', 'utilize', 'utilized', 'robust',
-  'impactful', 'think outside the box', 'wide range of', 'excellent communication skills'];
+  'impactful', 'think outside the box', 'wide range of', 'excellent communication skills',
+  // Legal boilerplate a work-authorization field can carry; the summary says "U.S. citizen." instead.
+  'legally eligible', 'on an ongoing basis'];
 
 const MAX_SUMMARY_WORDS = 60;
 const MAX_BULLET_WORDS = 40;
@@ -240,6 +242,9 @@ export function validateComposition(comp, profile, match = null) {
   const corpus = profileCorpus(p);
   const aliases = supportedAliases(match, corpus);
   const skillCorpus = termCorpus(p.skills || []);
+  // Skills may come from anywhere in the profile except the screening fields:
+  // work authorization and clearance are stated in the summary, never as skills.
+  const skillSource = profileCorpus({ ...p, workAuthorization: '', clearance: '' });
   const role = termCorpus([match && match.role]);
 
   // Every line: real sources from its own entry (or profile-wide ones),
@@ -278,9 +283,9 @@ export function validateComposition(comp, profile, match = null) {
     for (const item of g.items || []) {
       const paren = item.match(/^(.*?)\s*\((.*)\)$/);
       const forms = (paren || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
-      if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(corpus, f) || aliases.has(f))) {
+      if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(skillSource, f) || aliases.has(f))) {
         errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not in the profile.` });
-      } else if (paren && !(corpusHas(skillCorpus, forms[1]) || corpusHas(corpus, forms[1]) || aliases.has(forms[1]))) {
+      } else if (paren && !(corpusHas(skillCorpus, forms[1]) || corpusHas(skillSource, forms[1]) || aliases.has(forms[1]))) {
         // "Posting term (profile skill)", never a description in brackets.
         errors.push({ code: 'skill_form', target: `skill_groups[${gi}]`, item, keep: paren[1], message: `"${item}": brackets hold only the profile's own name for the skill ("PostgreSQL (Postgres)"); list "${paren[1]}" on its own.` });
       }
@@ -311,6 +316,7 @@ export function validateComposition(comp, profile, match = null) {
   checkEntries(c.education, 'education', { needsBullets: false });
   checkEntries(c.extras, 'extras', { needsBullets: false });
   if ((p.education || []).length && !(c.education || []).length) fail('no_education', 'education', 'Include the education.');
+  if ((p.projects || []).length && !(c.projects || []).length) fail('no_projects', 'projects', 'Include the most relevant project (or two), with 2–3 bullets each.');
 
   // ── Match ──
   const doc = toResumeDoc(c, p);
@@ -539,15 +545,29 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
   const older = () => byAge().slice(0, -1);
   const newest = () => byAge().slice(-1);
   const lastProjectFirst = () => [...(c.projects || [])].reverse();
+  // Removes the last project that proves no required qualification, keeping at least `min`.
+  const dropProject = (min) => {
+    if ((c.projects || []).length <= min) return false;
+    const i = [...c.projects].reverse().findIndex(p => !entryProtected(p));
+    if (i < 0) return false;
+    const at = c.projects.length - 1 - i;
+    trimmed.push(`project ${c.projects[at].id}`);
+    c.projects.splice(at, 1);
+    return true;
+  };
   const steps = [
     () => { const i = [...(c.extras || [])].reverse().findIndex(e => !keep.has(e.id)); if (i < 0) return false; const at = c.extras.length - 1 - i; trimmed.push(`extra ${c.extras[at].id}`); c.extras.splice(at, 1); return true; },
     () => lastProjectFirst().some(p => dropLastBullet(p, 2)),
     () => older().some(e => dropLastBullet(e, 2)),
+    () => newest().some(e => dropLastBullet(e, 4)),
     () => lastProjectFirst().some(p => dropLastBullet(p, 1)),
-    () => { const i = [...(c.projects || [])].reverse().findIndex(p => !entryProtected(p)); if (i < 0) return false; const at = c.projects.length - 1 - i; trimmed.push(`project ${c.projects[at].id}`); c.projects.splice(at, 1); return true; },
     () => older().some(e => dropLastBullet(e, 1)),
     () => newest().some(e => dropLastBullet(e, 3)),
+    // Projects go one at a time, but the first (most relevant) one stays
+    // until the newest job is down to two bullets.
+    () => dropProject(1),
     () => newest().some(e => dropLastBullet(e, 2)),
+    () => dropProject(0),
     () => newest().some(e => dropLastBullet(e, 1))
   ];
 

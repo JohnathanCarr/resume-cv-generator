@@ -20,7 +20,7 @@
 
 import { normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
 import { estimateDocHeight } from './layout.js';
-import { extraText } from './resumeDoc.js';
+import { extraText, newestFirst } from './resumeDoc.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const words = (s) => str(s).split(/\s+/).filter(Boolean);
@@ -71,7 +71,7 @@ export function renderProfileForCompose(profile) {
   const dates = (x) => [str(x.start), str(x.end)].filter(Boolean).join(' – ');
   if ((p.experiences || []).length) {
     lines.push('EXPERIENCE (newest first)');
-    for (const x of p.experiences) {
+    for (const x of newestFirst(p.experiences)) {
       const id = `exp:${x.id}`;
       lines.push(`[${id}] ${str(x.title)} — ${str(x.company)}${x.location ? `, ${str(x.location)}` : ''}${dates(x) ? ` (${dates(x)})` : ''}${x.mustInclude ? ' [MUST INCLUDE]' : ''}`);
       if (str(x.description)) lines.push(`  [${id}.d] ${str(x.description)}`);
@@ -276,9 +276,13 @@ export function validateComposition(comp, profile, match = null) {
   const seenSkills = new Set();
   for (const [gi, g] of (c.skill_groups || []).entries()) {
     for (const item of g.items || []) {
-      const forms = (item.match(/^(.*?)\s*\((.*)\)$/) || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
+      const paren = item.match(/^(.*?)\s*\((.*)\)$/);
+      const forms = (paren || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
       if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(corpus, f) || aliases.has(f))) {
         errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not in the profile.` });
+      } else if (paren && !(corpusHas(skillCorpus, forms[1]) || corpusHas(corpus, forms[1]) || aliases.has(forms[1]))) {
+        // "Posting term (profile skill)", never a description in brackets.
+        errors.push({ code: 'skill_form', target: `skill_groups[${gi}]`, item, keep: paren[1], message: `"${item}": brackets hold only the profile's own name for the skill ("PostgreSQL (Postgres)"); list "${paren[1]}" on its own.` });
       }
       const key = forms[0];
       if (seenSkills.has(key)) errors.push({ code: 'duplicate_skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is listed twice.` });
@@ -319,8 +323,17 @@ export function validateComposition(comp, profile, match = null) {
     if (!corpusHas(text, normalizeTerm(k.term))) fail('keyword', 'keywords', `Use the posting's term "${k.term}" where the profile supports it${k.alias ? ` (profile: ${k.alias})` : ''}.`);
     else if (k.alias && !corpusHas(text, normalizeTerm(k.alias))) warn('acronym', 'keywords', `Give "${k.term}" and "${k.alias}" once each.`);
   }
+  // Counted over what the model writes, skill labels included; entry header
+  // lines (titles, employers, project names and stacks) are fixed profile text.
+  const written = ` ${normalizeTerm([
+    doc.summary,
+    ...doc.skillGroups.flatMap(g => [g.label, ...g.items]),
+    ...[...doc.experiences, ...doc.projects].flatMap(e => e.bullets),
+    ...doc.education.map(e => e.coursework),
+    ...doc.extras.map(extraText)
+  ].filter(Boolean).join(' '))} `;
   for (const k of core) {
-    const n = (text.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length;
+    const n = (written.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length;
     if (n > MAX_KEYWORD_USES) fail('stuffing', 'keywords', `"${k.term}" appears ${n} times; at most ${MAX_KEYWORD_USES}.`);
   }
   const covered = supported.filter(k => corpusHas(text, normalizeTerm(k.term)));
@@ -354,15 +367,19 @@ export function validateComposition(comp, profile, match = null) {
 
 // The composition as a resume document in the baseline shape (baseline.js):
 // what resumeDocToSchema() and the layout code read. Titles, employers,
-// dates, locations and education come from the profile; jobs are kept newest
-// first in profile order whatever order the model chose. Unknown ids are
+// dates, locations and education come from the profile; jobs go newest
+// first by their dates (resumeDoc.js newestFirst) whatever order the profile
+// or the model has. Unknown ids are
 // skipped. Each bullet's sources ride along in `bulletSources`.
 export function toResumeDoc(comp, profile) {
   const c = comp || {};
   const p = profile || {};
   const pick = (list, kind, prefix) => {
     const wanted = new Map((list || []).map(e => [String(e.id), e]));
-    return (p[kind] || []).filter(x => wanted.has(`${prefix}:${x.id}`)).map(x => ({ x, e: wanted.get(`${prefix}:${x.id}`) }));
+    // Jobs go newest first by their dates, whatever order the profile or the
+    // model has; everything else keeps the profile's order.
+    const source = kind === 'experiences' ? newestFirst(p[kind]) : (p[kind] || []);
+    return source.filter(x => wanted.has(`${prefix}:${x.id}`)).map(x => ({ x, e: wanted.get(`${prefix}:${x.id}`) }));
   };
   const withBullets = ({ x, e }, prefix) => ({
     id: `${prefix}:${x.id}`,
@@ -455,10 +472,16 @@ export function sanitizeComposition(comp, errors, profile) {
   }
   // Skills the profile lacks go, and so does every repeat of a skill.
   const notInProfile = new Set((errors || []).filter(e => e.code === 'skill').map(e => e.item));
+  // A misused bracket keeps the skill's own name: "Tableau (BI tool)" → "Tableau".
+  const plainName = new Map((errors || []).filter(e => e.code === 'skill_form').map(e => [e.item, e.keep]));
   const seenSkills = new Set();
   c.skill_groups = (c.skill_groups || []).map(g => ({
     ...g,
-    items: (g.items || []).filter(item => {
+    items: (g.items || []).map(item => {
+      if (!plainName.has(item)) return item;
+      dropped.push(`skill: ${item} → ${plainName.get(item)}`);
+      return plainName.get(item);
+    }).filter(item => {
       const key = normalizeTerm(String(item).replace(/\s*\(.*\)$/, ''));
       const keep = !notInProfile.has(item) && !seenSkills.has(key);
       seenSkills.add(key);
@@ -510,16 +533,23 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
     }
     return false;
   };
+  // Jobs by date; the newest job is the strongest evidence and is cut last.
+  const order = newestFirst(profile.experiences).map(x => `exp:${x.id}`);
+  const byAge = () => [...(c.experience || [])].sort((a, b) => order.indexOf(b.id) - order.indexOf(a.id));   // oldest first
+  const older = () => byAge().slice(0, -1);
+  const newest = () => byAge().slice(-1);
+  const lastProjectFirst = () => [...(c.projects || [])].reverse();
   const steps = [
     () => { const i = [...(c.extras || [])].reverse().findIndex(e => !keep.has(e.id)); if (i < 0) return false; const at = c.extras.length - 1 - i; trimmed.push(`extra ${c.extras[at].id}`); c.extras.splice(at, 1); return true; },
-    () => [...(c.projects || [])].reverse().some(p => dropLastBullet(p, 1)),
+    () => lastProjectFirst().some(p => dropLastBullet(p, 2)),
+    () => older().some(e => dropLastBullet(e, 2)),
+    () => lastProjectFirst().some(p => dropLastBullet(p, 1)),
     () => { const i = [...(c.projects || [])].reverse().findIndex(p => !entryProtected(p)); if (i < 0) return false; const at = c.projects.length - 1 - i; trimmed.push(`project ${c.projects[at].id}`); c.projects.splice(at, 1); return true; },
-    () => oldestFirst().some(e => dropLastBullet(e, 2)),
-    () => oldestFirst().some(e => dropLastBullet(e, 1))
+    () => older().some(e => dropLastBullet(e, 1)),
+    () => newest().some(e => dropLastBullet(e, 3)),
+    () => newest().some(e => dropLastBullet(e, 2)),
+    () => newest().some(e => dropLastBullet(e, 1))
   ];
-  // Jobs in profile order are newest first; trim from the oldest.
-  const order = (profile.experiences || []).map(x => `exp:${x.id}`);
-  const oldestFirst = () => [...(c.experience || [])].sort((a, b) => order.indexOf(b.id) - order.indexOf(a.id));
 
   while (height() > limitPx) {
     if (!steps.some(step => step())) break;

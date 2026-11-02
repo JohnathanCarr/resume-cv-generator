@@ -224,3 +224,38 @@ test('preview: rewritten lines mark their new words and hover shows the source',
   assert.match(harbor, /<span class="rs-added" title="From your profile: Built Go services handling 2M requests a day">on Docker<\/span>/);
   assert.ok(!JSON.stringify(clean).includes('rs-added'));
 });
+
+test('jobs come out newest first by date, and the oldest is trimmed first', () => {
+  const p2 = { ...profile, experiences: [profile.experiences[1], profile.experiences[0]] };   // the intern job listed first
+  assert.deepEqual(toResumeDoc(good(), p2).experiences.map(e => e.id), ['exp:3', 'exp:4']);
+  const c = good();
+  c.experience[1].bullets = [1, 2, 3].map(() => ({ text: 'Built Go services handling 2M requests a day', sources: ['exp:3.b1'] }));
+  c.experience[0].bullets = [1, 2, 3].map(() => ({ text: 'Wrote PostgreSQL reports for 40 stores', sources: ['exp:4.b1'] }));
+  c.extras = []; c.projects = [];
+  const fit = fitComposition(c, p2, { ...match, requirements: [] }, makeLayout({}), { offsetPx: 760 });
+  const jobTrims = fit.trimmed.filter(t => t.startsWith('exp:')).map(t => t.slice(0, 5));
+  assert.deepEqual(jobTrims.slice(0, 2), ['exp:4', 'exp:4'], `the 2021 job loses bullets before the current one: ${fit.trimmed.join('; ')}`);
+  assert.ok(fit.comp.experience.find(e => e.id === 'exp:3').bullets.length >= fit.comp.experience.find(e => e.id === 'exp:4').bullets.length);
+});
+
+test('skill brackets hold the profile\'s name only; a misuse keeps the plain skill', () => {
+  const c = good();
+  c.skill_groups = [{ label: 'Tools', items: ['Docker (container platform tool)', 'Go', 'PostgreSQL'] }];
+  const { errors } = validateComposition(c, profile, match);
+  const e = errors.find(x => x.code === 'skill_form');
+  assert.ok(e && e.keep === 'Docker', JSON.stringify(errors));
+  assert.deepEqual(sanitizeComposition(c, errors, profile).comp.skill_groups[0].items, ['Docker', 'Go', 'PostgreSQL']);
+  c.skill_groups = [{ label: 'Tools', items: ['SEO (Search Engine Optimization)', 'Go', 'PostgreSQL', 'Docker'] }];
+  assert.ok(!validateComposition(c, profile, match).errors.some(x => x.code === 'skill_form'), 'posting term (profile name) is fine');
+});
+
+test('keyword uses are counted over written text, labels included, not fixed headers', () => {
+  const c = good();
+  c.skill_groups = [{ label: 'Go & Data', items: ['Go', 'PostgreSQL'] }, { label: 'Other', items: ['SEO (Search Engine Optimization)', 'Docker'] }];
+  c.experience[1].bullets = [
+    { text: 'Built Go services handling 2M requests a day', sources: ['exp:3.b1'] },
+    { text: 'Ran Go tooling for Search Engine Optimization (SEO)', sources: ['exp:3.b1', 'exp:3.b2'] }
+  ];
+  c.summary = { text: 'Backend Engineer writing Go and PostgreSQL services.', sources: ['profile:summary', 'exp:3.b1', 'exp:4.b1'] };
+  assert.ok(codes(validateComposition(c, profile, match)).includes('stuffing'), 'Go in a label, the skills, the summary and two bullets is five');
+});

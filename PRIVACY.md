@@ -8,7 +8,7 @@ Resume Studio is a Chrome extension that writes a resume tailored to a job posti
 
 Everything below is kept on your own computer, in Chrome's extension storage (`chrome.storage.local`) unless noted. It is not sent to us (there is no server of ours) and the extension does not sync it anywhere.
 
-- **Your profile**: name, contact details, location, work authorization and security clearance (if you add them), summary, education, skills, work experience, projects, certifications and achievements. Keywords you confirm in the keyword check are added to your skills.
+- **Your profile**: name, contact details, location, work authorization and security clearance (if you add them), summary, education, skills, work experience, projects, certifications and achievements. Keywords you confirm in the keyword check are used for that document only and are not saved to your profile.
 - **The resume PDF you upload**, and a snapshot of its text as parsed, which sets the page layout for generated resumes and is shown for comparison. The PDF is parsed entirely inside the browser; no part of it is sent anywhere for parsing.
 - **Your OpenAI API key**, so you do not have to enter it every time. It is shown masked in Settings and can be replaced or removed there. Chrome stores it unencrypted in your browser profile, so anyone with access to your computer account could read it; we recommend a project-scoped key with a spending limit.
 - **Generated documents and working data**: the last generated resume and the job posting it was made for, company research briefs (cached for up to 30 days), and your settings (the research toggle, onboarding progress). The light/dark theme choice is kept in the page's local storage.

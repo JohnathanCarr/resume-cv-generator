@@ -140,10 +140,13 @@ export class Dialogs {
 
     // Lists the posting's missing terms as checkboxes. Resolves to
     // { accepted: [terms] }, or null if the user cancelled.
-    promptForKeywords(keywords) {
+    // label names the document being generated: ticked skills go on it only.
+    promptForKeywords(keywords, label = 'resume') {
         const list = document.getElementById('keywords-list');
         const modal = document.getElementById('keywords-modal');
         if (!list || !modal) return Promise.resolve({ accepted: [] });
+        const intro = document.getElementById('keywords-intro');
+        if (intro) intro.textContent = `These are key requirements in the posting that your profile doesn't mention. Check the ones you actually have and they'll be added to this ${label} only. To use them on future ${label}s, add them to your profile.`;
         list.innerHTML = '';
         keywords.forEach((kw, i) => {
             const label = document.createElement('label');

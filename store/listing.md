@@ -27,7 +27,7 @@ WHAT YOU GET
 • Your resume, tailored, not replaced: a handful of targeted edits to the resume you uploaded. The posting's exact terms where your lines already show the skill, a more relevant bullet, project or certification from your profile swapped in, confirmed skills added. Everything else stays word for word; jobs and education never change; nothing is invented.
 • Every change highlighted: edits are green in the preview (hover for the original wording), one click shows your original PDF, and the key-keyword score shows the gain (e.g. 3/5 → 5/5). The downloaded PDF has no highlights.
 • Always one page: the page is measured before any edit is made; if space runs out, the least relevant items go, never half a sentence.
-• A keyword check before writing: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm. Tick the ones you have and they are added to your profile.
+• A keyword check before writing: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm. Tick the ones you have and they are added to that document only; your profile doesn't change.
 • Cover letters that sound like a person: 250–350 words, specific, every claim traceable to your profile or the posting. Optionally researches the employer with a few web searches and cites each fact.
 • Real PDFs, not images, so ATS software can read them.
 

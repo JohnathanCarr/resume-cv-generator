@@ -52,7 +52,7 @@
   // ── Stubbed OpenAI: answers by the requested schema ─────────────────────
   // Two posting keywords the profile does not have, so the keyword dialog appears.
   const MISSING = ['Quokka DB', 'Zebra Orchestrator'];
-  const stub = { failNext: false, requests: [] };
+  const stub = { failNext: false, requests: [], bodies: [] };
   const answers = {
     match_analysis: () => ({
       company: 'Northwind Labs', role: 'Backend Engineer', seniority: 'mid', location: 'Remote',
@@ -85,6 +85,7 @@
     const body = JSON.parse(init.body);
     const name = body.response_format?.json_schema?.name;
     stub.requests.push(name || String(url));
+    stub.bodies.push(body);
     await new Promise(r => setTimeout(r, 300));   // a model call takes time
     if (stub.failNext) { stub.failNext = false; return new Response(JSON.stringify({ error: { message: 'Stubbed server error' } }), { status: 500 }); }
     if (!name && body.messages?.[0]?.content === 'Reply with the single word OK.') {
@@ -231,6 +232,7 @@
     assert(progressState() === 'running' && !progressHidden(), 'progress strip not running');
     const chips = [...document.querySelectorAll('#keywords-list .keyword-chip')].map(c => c.textContent.trim());
     assert(MISSING.every(k => chips.includes(k)), `chips were ${chips.join(', ')}`);
+    assert($('#keywords-intro').textContent.includes('added to this resume only. To use them on future resumes, add them to your profile.'), 'dialog wording');
     $('#keywords-continue').click();
     await waitFor('resume to finish', () => progressState() === 'done', 30000);
     assert(previewPage(), 'no resume page in the preview');
@@ -309,8 +311,13 @@
     await waitFor('letter to finish', () => progressState() === 'done', 30000);
     await waitFor('letter text', () => /Northwind Labs/.test($('.letter-content')?.textContent || ''));
     assert(!document.getElementById('download-pdf').disabled, 'Cover letter PDF still disabled');
+    // Ticked skills go on this document only; the profile stays as it was.
+    const sent = JSON.stringify(stub.bodies.at(-1));
+    assert(MISSING.every(k => sent.includes(k)), 'ticked keywords not sent with the letter');
     const skills = [...document.querySelectorAll('#skills-list .skill-tag')].map(t => t.firstChild.textContent);
-    assert(MISSING.every(k => skills.includes(k)), 'ticked keywords not added to skills');
+    assert(!MISSING.some(k => skills.includes(k) || store.profile.skills.includes(k)), 'ticked keywords reached the profile');
+    assert(/this cover letter only/.test($('#keywords-intro').textContent), 'dialog does not name the cover letter');
+    assert(/this cover letter only/.test(status()), `status was: ${status()}`);
     const line = infos.find(l => l.startsWith('[timing] cover letter done'));
     assert(line && /cover letter \d.*\(letter \d/.test(line), `timing line missing: ${line}`);
   });
@@ -345,6 +352,9 @@
     assert(retryShown(), 'no Retry button');
     expectErrors = false;
     $('#retry-btn').click();
+    // Ticked skills are not saved, so the retry asks about them again.
+    await waitFor('keyword dialog on retry', () => visible('keywords-modal'), 30000);
+    $('#keywords-continue').click();
     await waitFor('retry to finish', () => progressState() === 'done', 30000);
     assert(!visible('error-modal'), 'error dialog still open');
   });

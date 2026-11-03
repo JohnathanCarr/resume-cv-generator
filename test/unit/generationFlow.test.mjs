@@ -39,7 +39,7 @@ function fakeApp({ choice = { accepted: [] }, letter = null, keyOk = true, uploa
     saveData: async () => { log.push(['saveData']); },
     recordFirstGeneration: say('recordFirstGeneration'),
     requireApiKeyForGeneration: () => keyOk,
-    promptForKeywords: async (terms) => { log.push(['promptForKeywords', terms]); return choice; },
+    promptForKeywords: async (terms, label) => { log.push(['promptForKeywords', terms, label]); return choice; },
     ensureBaseline: async () => baselineOk,
     generation: async () => ({
       createTimer, formatTimings, missingKeywords, applyKeywords,
@@ -95,7 +95,11 @@ test('cover letter: keywords, generate, then status, Done, first-run tick, downl
   // The dialog unlocks the page and freezes the bar, then both come back.
   const i = seq.indexOf('promptForKeywords');
   assert.deepEqual(seq.slice(i - 2, i + 3), ['progress.pause', 'setPageInert', 'promptForKeywords', 'setPageInert', 'progress.resume']);
-  assert.ok(app.profile.skills.includes('Quokka DB'), 'accepted keyword not added');
+  // On this document only: sent with the request, not saved to the profile.
+  assert.ok(app.lastApiCall.request.profile.skills.includes('Quokka DB'), 'accepted keyword not used');
+  assert.ok(!app.profile.skills.includes('Quokka DB'), 'accepted keyword reached the profile');
+  assert.ok(!seq.includes('renderSkills'), 'the Skills tab should not change');
+  assert.deepEqual(app.log.find(e => e[0] === 'promptForKeywords')[2], 'cover letter');
   const tail = seq.slice(seq.indexOf('displayCoverLetter'));
   assert.deepEqual(tail, ['displayCoverLetter', 'switchToCoverLetterView', 'saveData', 'showStatus', 'progress.done', 'recordFirstGeneration', 'hideLoading']);
   assert.deepEqual(app.log.at(-3), ['progress.done']);

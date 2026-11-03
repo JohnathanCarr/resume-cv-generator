@@ -36,7 +36,7 @@ export async function runGeneration(app, kind) {
         const { createTimer } = await app.generation();
         timer = createTimer();
         await kind.prepare?.(run);
-        const checked = await checkKeywords(run);
+        const checked = await checkKeywords(run, kind.label);
         if (!checked) { outcome = 'cancelled'; app.progress.hide(); app.showStatus('Cancelled.', 'error'); return; }
 
         const { message, type } = await kind.generate(run, checked);
@@ -59,8 +59,10 @@ export async function runGeneration(app, kind) {
 
 // Reads the posting, then asks about any ATS terms the profile does not
 // mention. Returns { match, profile, added } to generate with, or null if
-// the user cancelled. Accepted terms are saved to the profile's skills.
-export async function checkKeywords({ app, jobText, timed }) {
+// the user cancelled. Accepted terms are in the returned profile only, for
+// this document; the saved profile does not change. label names the document
+// in the dialog ('resume', 'cover letter').
+export async function checkKeywords({ app, jobText, timed }, label) {
     app.showStatus('Reading the posting…', 'loading');
     app.progress.mark(0, 0.25, 2500);
     const { analyzeJob, missingKeywords, applyKeywords } = await app.generation();
@@ -71,18 +73,15 @@ export async function checkKeywords({ app, jobText, timed }) {
     // The bar freezes, rather than disappearing, while the dialog is open.
     app.progress.pause();
     app.setPageInert(false);
-    const choice = await timed('keyword check (you)', () => app.promptForKeywords(missing));
+    const choice = await timed('keyword check (you)', () => app.promptForKeywords(missing, label));
     app.setPageInert(true);
     app.progress.resume();
     if (!choice) return null;
 
+    // Ticked skills apply to this document only: the run gets a copy of the
+    // profile with them, and the saved profile stays as the user wrote it.
     const applied = applyKeywords(match, app.profile, choice.accepted);
-    if (applied.added.length) {
-        app.profile = applied.profile;
-        app.renderSkills();
-        await app.saveData();
-    }
-    return { match: applied.match, profile: app.profile, added: applied.added };
+    return { match: applied.match, profile: applied.profile, added: applied.added };
 }
 
 // One console line per run, also kept on lastApiCall for Save logs.
@@ -132,7 +131,7 @@ export const COVER_LETTER = {
         app.switchToCoverLetterView();
         await app.saveData();
 
-        return { message: app.describeCoverLetterResult(result), type: 'success' };
+        return { message: app.describeCoverLetterResult(result, { added: checked.added }), type: 'success' };
     }
 };
 

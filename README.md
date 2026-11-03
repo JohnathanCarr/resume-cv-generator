@@ -21,7 +21,7 @@ The pipeline is in `extension/generation/`, orchestrated by `pipeline.js`. Every
 
 1. **Match analysis** (`matchAnalysis.js`). The posting is read against the profile, which is given to the model with stable ids (`exp:3`, `proj:5`, `skill:Go`). The result lists the company, the role, every requirement with the profile items that support it (strong, partial or none) and the posting's ATS keywords, each marked core or supporting.
 
-2. **Keyword check** (`keywords.js`). Core keywords that appear nowhere in the profile, at most 8, are shown to the user as checkboxes. The ones they tick are added to their profile skills before anything is written, so the profile stays the only source of material.
+2. **Keyword check** (`keywords.js`). Core keywords that appear nowhere in the profile, at most 8, are shown to the user as checkboxes. The ones they tick are used for that one document only. The saved profile doesn't change, and the dialog tells them to add a skill to their profile to keep it, so the same keyword is asked about again on the next posting.
 
    ![The keyword check dialog listing posting keywords missing from the profile](store/screenshot-keywords.jpg)
 

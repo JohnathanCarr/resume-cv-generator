@@ -137,7 +137,7 @@ export function formatResume(resumeContent, profile) {
     return formatted;
 }
 
-// Empty brackets a profile field can carry ("Outlier.ai ( )") are dropped.
+// Empty brackets a profile field can carry ("Acme Corp ( )") are dropped.
 function cleanEmpty(text) {
     return String(text || '').replace(/\s*\(\s*\)/g, '').trim();
 }

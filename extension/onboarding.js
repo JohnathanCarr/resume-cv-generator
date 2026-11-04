@@ -179,12 +179,12 @@ export const OnboardingTour = { start, stop: () => finish(true), isActive: () =>
 export const TOUR_STEPS = [
     {
         target: null,
-        title: 'Welcome to Resume Studio',
+        title: 'Welcome to Resume Studio!',
         body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
                <ol>
-                 <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
-                 <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
-                 <li><strong>Paste a job description</strong> and generate.</li>
+                 <li><strong>Upload your current resume</strong> — fills in your profile automatically.</li>
+                 <li><strong>Review and complete</strong> — treat your profile like a library: list every skill, project and experience you have, not just the ones on one resume.</li>
+                 <li><strong>Paste a job description</strong> — happy generating!</li>
                </ol>
                <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
     },
@@ -206,7 +206,7 @@ export const TOUR_STEPS = [
         tab: 'profile',
         title: 'List every skill you have',
         placement: 'bottom',
-        body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
+        body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match. Bigger is better.</p>'
     },
     {
         target: '#add-experience',

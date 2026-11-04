@@ -510,7 +510,7 @@
       await sleep(100);
     }
     assert(titles.length === 8, `${titles.length} steps`);
-    assert(titles[0] === 'Welcome to Resume Studio' && titles[4] === 'Add and edit anything' && titles[5] === 'Choose Must include carefully' && titles[7] === 'Generate and download', `titles ${titles.join(' | ')}`);
+    assert(titles[0] === 'Welcome to Resume Studio!' && titles[4] === 'Add and edit anything' && titles[5] === 'Choose Must include carefully' && titles[7] === 'Generate and download', `titles ${titles.join(' | ')}`);
     assert($('#tab-profile').getAttribute('aria-selected') === 'true', 'did not return to the Profile tab');
     assert(store.onboarding.seen === true && store.onboarding.skipped === false, 'tour completion not saved');
   });

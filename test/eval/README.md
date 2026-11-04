@@ -4,7 +4,7 @@ Runs the generation endpoints over a small set of profiles × job postings and
 scores each output against a fixed rubric, so prompt changes can be compared.
 
 ```bash
-node test/eval/run.js --label my-change            # everything (≈30 docs, ~$1)
+node test/eval/run.js --label my-change            # everything (30 docs, about $3)
 node test/eval/run.js --profiles david --jobs 02   # one pair, quick check
 node test/eval/run.js --only cover --label x       # one document type
 node test/eval/run.js --label x --baseline         # also copy the summary to baselines/

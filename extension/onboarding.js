@@ -216,10 +216,10 @@ export const TOUR_STEPS = [
         body: '<p>Every section has an Add button and every entry is editable.</p>'
     },
     {
-        target: '#add-project',
+        target: '.must-include-label',
         tab: 'profile',
         title: 'Choose Must include carefully',
-        placement: 'bottom',
+        placement: 'left',
         body: '<p>Tick <strong>Must include</strong> on the jobs and projects you most want on your resume. They always appear, with at least two bullets, whatever the posting asks for.</p><p>Resumes stay to one ATS-friendly page, so every tick takes room from something else. Pick only your strongest one or two, such as your best project. Tick too many and they crowd out what fits the job, or push the resume past one page.</p><p>Leave the rest unticked and the generator chooses what fits each posting.</p>'
     },
     {

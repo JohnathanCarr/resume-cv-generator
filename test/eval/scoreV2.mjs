@@ -13,6 +13,7 @@
 import { createRequire } from 'node:module';
 import { normalizeTerm, corpusHas } from '../../extension/generation/keywords.js';
 import { newestFirst } from '../../extension/generation/resumeDoc.js';
+import { minSkillItems } from '../../extension/generation/compose.js';
 import { formatResume, escapeResume } from '../../extension/preview/resumeHtml.js';
 import { textProblems, STANDARD_HEADINGS } from '../../extension/preview/parseSafety.js';
 
@@ -170,6 +171,12 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   });
   checks.skillsFromProfile = foreign.length ? 0 : 1;
   if (foreign.length) fails.push(`skills not in the profile: ${foreign.join(', ')}`);
+
+  // Enough of the profile's real skills on the page to be found by search.
+  const minItems = minSkillItems(profile);
+  checks.skillBreadth = minItems ? +Math.min(1, items.length / minItems).toFixed(2) : 1;
+  info.skillItems = items.length;
+  if (items.length < minItems) fails.push(`thin Skills section: ${items.length} items, at least ${minItems} expected`);
 
   // ── match ──
   const keywords = ((match && match.keywords) || []).map(k => (typeof k === 'string' ? { term: k, importance: 'core', alias: '' } : k));

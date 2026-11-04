@@ -115,3 +115,11 @@ test('soft-skill phrases and acronym verbs are not tool claims', () => {
   const s = scoreResumeV2({ resume: r, profile, jobText, match: m, page });
   assert.equal(s.checks.noUnsupportedTools, 1, s.fails.join('; '));
 });
+
+test('skill breadth: scaled to what the profile has', () => {
+  const many = { ...profile, skills: [...profile.skills, ...Array.from({ length: 36 }, (_, i) => `Tool${i}`)] };
+  const s = scoreResumeV2({ resume: { ...good, skills: ['Tools: Go, Tool1, Tool2'] }, profile: many, jobText, match, page });
+  assert.equal(s.checks.skillBreadth, 0.25);
+  assert.ok(s.fails.some(f => f.startsWith('thin Skills section')));
+  assert.equal(score(good).checks.skillBreadth, 1, 'a four-skill profile is not thin');
+});

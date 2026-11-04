@@ -58,7 +58,7 @@ export async function showPage(container, pageHtml, { title = 'Resume preview' }
     if (contentPx > PAGE_PX + 0.5) {
         const end = doc.createElement('div');
         end.className = 'page-end';
-        end.textContent = 'Page 1 ends here. The PDF is one page, so anything below is cut.';
+        end.textContent = 'Page 1 ends here. Anything below goes onto a second page in the PDF.';
         doc.body.appendChild(end);
     }
     const heightPx = Math.max(PAGE_PX, Math.ceil(doc.documentElement.scrollHeight));

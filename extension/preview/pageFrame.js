@@ -71,9 +71,18 @@ export async function showPage(container, pageHtml, { title = 'Resume preview' }
         sheet.style.height = `${heightPx * scale}px`;
     };
     fit();
-    sheet._resize?.disconnect();
-    sheet._resize = new ResizeObserver(fit);
-    sheet._resize.observe(sheet);
+    // fit() changes the sheet's height, which reports back here: only a new
+    // width matters, and the next frame applies it, or Chrome logs a
+    // ResizeObserver loop. The watcher lives on the container, so the next
+    // preview replaces it.
+    let width = sheet.clientWidth;
+    container._resize?.disconnect();
+    container._resize = new ResizeObserver(() => {
+        if (sheet.clientWidth === width) return;
+        width = sheet.clientWidth;
+        requestAnimationFrame(fit);
+    });
+    container._resize.observe(sheet);
     return doc;
 }
 

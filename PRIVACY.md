@@ -1,6 +1,6 @@
 # Resume Studio — Privacy Policy
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-11-03_
 
 Resume Studio is a Chrome extension that writes a resume tailored to a job posting and a matching cover letter, from a profile you build and a job posting you paste. It is designed so that your data stays in your browser and the only outside service it ever contacts is OpenAI, using an API key you provide.
 
@@ -11,7 +11,7 @@ Everything below is kept on your own computer, in Chrome's extension storage (`c
 - **Your profile**: name, contact details, location, work authorization and security clearance (if you add them), summary, education, skills, work experience, projects, certifications and achievements. Keywords you confirm in the keyword check are used for that document only and are not saved to your profile.
 - **The resume PDF you upload**, and a snapshot of its text as parsed, which sets the page layout for generated resumes and is shown for comparison. The PDF is parsed entirely inside the browser; no part of it is sent anywhere for parsing.
 - **Your OpenAI API key**, so you do not have to enter it every time. It is shown masked in Settings and can be replaced or removed there. Chrome stores it unencrypted in your browser profile, so anyone with access to your computer account could read it; we recommend a project-scoped key with a spending limit.
-- **Generated documents and working data**: the last generated resume and the job posting it was made for, company research briefs (cached for up to 30 days), and your settings (the research toggle, onboarding progress). The light/dark theme choice is kept in the page's local storage.
+- **Generated documents and working data**: the last generated resume and the job posting it was made for, company research briefs (cached for up to 30 days), and your settings (onboarding progress). The light/dark theme choice is kept in the page's local storage.
 - **While printing**: the resume being saved as PDF is held briefly in Chrome's session storage (`chrome.storage.session`) and removed as soon as the print view opens.
 
 ## Where your data goes
@@ -20,7 +20,7 @@ When you generate a document, the extension sends the following **directly to Op
 
 - the job posting you pasted,
 - your profile,
-- with **Research the company** enabled, the company name, role and an excerpt of the posting, which OpenAI's hosted web-search tool uses to look up public information about the employer.
+- for every document, unless a recent brief for that company is already saved, the company name, role and an excerpt of the posting, which OpenAI's hosted web-search tool uses to look up public information about the employer.
 
 OpenAI is the only party your data is shared with. Its handling of that data is governed by [OpenAI's API data usage policies](https://openai.com/policies/api-data-usage-policies) and your agreement with them. You pay OpenAI directly for usage; Resume Studio has no account, subscription or payment of its own.
 

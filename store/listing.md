@@ -28,14 +28,14 @@ WHAT YOU GET
 • Every change highlighted: edits are green in the preview (hover for the original wording), one click shows your original PDF, and the key-keyword score shows the gain (e.g. 3/5 → 5/5). The downloaded PDF has no highlights.
 • Always one page: the page is measured before any edit is made; if space runs out, the least relevant items go, never half a sentence.
 • A keyword check before writing: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm. Tick the ones you have and they are added to that document only; your profile doesn't change.
-• Cover letters that sound like a person: 250–350 words, specific, every claim traceable to your profile or the posting. Optionally researches the employer with a few web searches and cites each fact.
+• Cover letters that sound like a person: 250–350 words, specific, every claim traceable to your profile or the posting. Researches the employer with a few web searches and cites each fact.
 • Real PDFs, not images, so ATS software can read them.
 
 YOUR DATA
 Your profile, uploaded resume and documents live in this browser's extension storage. The extension talks to exactly one outside service: OpenAI's API, with your key, when you click Generate. There are no accounts, no servers of ours, no analytics.
 
 YOU NEED
-• An OpenAI API key (platform.openai.com). You pay OpenAI directly for usage — typically a few cents per resume and $0.05–0.20 per cover letter with research on — and OpenAI's usage policies apply. Resume Studio itself is free and open source: github.com/JohnathanCarr/resume-cv-generator
+• An OpenAI API key (platform.openai.com). You pay OpenAI directly for usage — typically a few cents up to about $0.20 per document, including the company research — and OpenAI's usage policies apply. Resume Studio itself is free and open source: github.com/JohnathanCarr/resume-cv-generator
 • A few minutes to read what it writes. AI can get things wrong: check every resume and cover letter before you send it.
 
 ## Privacy

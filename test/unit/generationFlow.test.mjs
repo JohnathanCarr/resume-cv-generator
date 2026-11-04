@@ -25,7 +25,6 @@ function fakeApp({ choice = { accepted: [] }, letter = null, keyOk = true, uploa
     log,
     profile: { name: 'Dana', skills: ['Go'], experiences: [], projects: [], education: [], extras: [] },
     apiKey: { value: 'sk-test' },
-    researchEnabled: false,
     companyBriefs: {},
     uploadedResume: uploaded ? { name: 'r.pdf' } : null,
     lastApiCall: null,

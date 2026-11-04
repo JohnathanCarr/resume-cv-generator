@@ -107,7 +107,7 @@ export const COVER_LETTER = {
         const requestData = {
             profile: checked.profile,
             jobText: jobText,
-            research: app.researchEnabled,
+            research: true,
             briefCache: app.companyBriefs,
             match: checked.match
         };
@@ -118,7 +118,7 @@ export const COVER_LETTER = {
         };
 
         const { generateCoverLetter } = await app.generation();
-        app.progress.mark(0.3, 0.85, app.researchEnabled ? 12000 : 7000);
+        app.progress.mark(0.3, 0.85, 12000);
         const result = await timed('cover letter', () => generateCoverLetter(app.apiKey.value, requestData));
         detail('cover letter', result.metadata?.timings);
         app.lastApiCall.response = result;

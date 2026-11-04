@@ -70,6 +70,10 @@ export function isScreeningSkill(skill, profile) {
   return [p.workAuthorization, p.clearance].some(f => corpusHas(` ${normalizeTerm(f || '')} `, s));
 }
 
+// Past this many items a Skills section is padding, however long the profile's
+// list is. The prompt aims lower (20–35); this catches the clear overshoot.
+const MAX_SKILL_ITEMS = 40;
+
 // Below this many items a Skills section is clearly thin for this profile.
 // Past about 12 the choice is the model's; a short skills list is not padded.
 export function minSkillItems(profile) {
@@ -321,6 +325,7 @@ export function validateComposition(comp, profile, match = null) {
   }
   const itemCount = (c.skill_groups || []).reduce((n, g) => n + (g.items || []).length, 0);
   const minItems = minSkillItems(p);
+  if (itemCount > MAX_SKILL_ITEMS) fail('too_many_skills', 'skill_groups', `Skills lists ${itemCount} items; keep it to about 30 by leaving out tools unrelated to this job and merging near-duplicates.`);
   if (itemCount < minItems) fail('thin_skills', 'skill_groups', `Skills lists only ${itemCount} items. List every skill the posting asks for plus the profile's real tools from the same stack (at least ${minItems}), merging duplicates and leaving out tools unrelated to this job.`);
 
   // Entries: real ids, each once; jobs and projects carry bullets.

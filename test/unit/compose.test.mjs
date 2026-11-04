@@ -351,3 +351,13 @@ test('a thin Skills section goes back for repair, scaled to the profile', () => 
   c.skill_groups = [{ label: 'Tools', items: Array.from({ length: 12 }, (_, i) => `Tool${i}`) }];
   assert.ok(!codes(validateComposition(c, many, { ...match, keywords: [], requirements: [] })).includes('thin_skills'));
 });
+
+test('a Skills section far past the target goes back for repair', () => {
+  const many = { ...profile, skills: Array.from({ length: 70 }, (_, i) => `Tool${i}`) };
+  const m = { ...match, keywords: [], requirements: [] };
+  const c = good();
+  c.skill_groups = [{ label: 'Tools', items: Array.from({ length: 41 }, (_, i) => `Tool${i}`) }];
+  assert.ok(codes(validateComposition(c, many, m)).includes('too_many_skills'));
+  c.skill_groups = [{ label: 'Tools', items: Array.from({ length: 40 }, (_, i) => `Tool${i}`) }];
+  assert.ok(!codes(validateComposition(c, many, m)).includes('too_many_skills'));
+});

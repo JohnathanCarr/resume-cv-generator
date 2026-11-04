@@ -1301,6 +1301,12 @@ input[type="checkbox"]:checked::after { opacity: 1; }
 
 /* The legend's sample sits on the themed surface, not the white page, so it
    sets its own dark text for both themes. */
+.resume-legend .rs-reworded {
+    padding: 0 4px;
+    color: #1E2A16;
+    background: #EEF4E9;
+}
+
 .resume-legend .rs-added {
     padding: 0 4px;
     color: #1E2A16;

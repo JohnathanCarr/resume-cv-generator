@@ -26,12 +26,14 @@ summaries to compare against.
   keywords copied onto the page are checked by name; a keyword's alias
   counts as support), jobs and schools exactly as in the profile and newest
   first, skills only from the profile ("posting wording (profile wording)"
-  passes if either is in the profile). Match: coverage of the core keywords
+  passes if either is in the profile), and enough of them (`skillBreadth`,
+  scaled to the profile's list). Match: coverage of the core keywords
   the profile supports, a resume line backing each supported required
   qualification, acronym and full form both present, matched skills used in
   bullets (70% is full marks), met hard requirements stated, a summary. Page:
   fits, and fills ≥ 90% (by the layout estimate). Never: no keyword more than
-  three times, no filler phrases, parse-safe when rendered with the real
+  three times (counted over the written text, skill labels included, not
+  fixed entry header lines), no filler phrases, parse-safe when rendered with the real
   template. Skill group labels ("Cloud & DevOps:") are headings, so the tools
   check reads only the skill items. `judge.mjs` (`--judge`) adds a recruiter judge: relevance,
   tailoring, specificity, readability and credibility, 1–5 each, scored

@@ -345,7 +345,7 @@ class ResumeStudioApp {
         if (chip) {
             chip.classList.toggle('hidden', !(cov && cov.after.total));
             if (cov && cov.after.total) {
-                chip.textContent = `Key ATS keywords ${cov.before.found}/${cov.after.total} → ${cov.after.found}/${cov.after.total}`;
+                chip.textContent = `ATS Keywords ${cov.before.found}/${cov.after.total} → ${cov.after.found}/${cov.after.total}`;
                 chip.title = cov.after.missing?.length ? `Still missing (not in your profile): ${cov.after.missing.join(', ')}` : 'Every key keyword from the posting is on your resume.';
             }
         }
@@ -435,7 +435,7 @@ class ResumeStudioApp {
     showError(message, retry = false) { this.dialogs.showError(message, retry); }
     hideError() { this.dialogs.hideError(); }
     setPageInert(on) { this.dialogs.lockPage(on); }
-    promptForKeywords(keywords) { return this.dialogs.promptForKeywords(keywords); }
+    promptForKeywords(keywords, label) { return this.dialogs.promptForKeywords(keywords, label); }
     promptForFilename(kind) { return this.dialogs.promptForFilename(kind, this.defaultFilename(kind)); }
 
     // Repeats a status message in the screen-reader live region.
@@ -534,7 +534,7 @@ class ResumeStudioApp {
         }
     }
 
-    describeCoverLetterResult(result) {
+    describeCoverLetterResult(result, { added = [] } = {}) {
         const meta = result.metadata || {};
         const parts = ['Cover letter generated'];
         if (meta.briefSource === 'research') {
@@ -548,7 +548,8 @@ class ResumeStudioApp {
             const note = meta.repairFailed ? ' (the automatic fix did not finish)' : '';
             parts.push(`· ${result.unsourcedClaims.length} sentence(s) could not be traced to your profile${note} — check them before sending`);
         }
-        return parts.join(' ') + '.';
+        const kept = added.length ? ` Added to this cover letter only: ${added.join(', ')}. Add them to your profile to keep them.` : '';
+        return parts.join(' ') + '.' + kept;
     }
 
     // Resume Upload
@@ -814,17 +815,14 @@ class ResumeStudioApp {
         parts.push('Resume written for this posting from your profile.');
         const cov = meta.coverage;
         if (cov && cov.after.total) {
-            parts.push(`Key ATS keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
+            parts.push(`ATS Keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
         }
         if (added.length) {
-            parts.push(`Added to your skills: ${added.join(', ')}.`);
-        }
-        const removed = meta.page?.trimmed?.length || 0;
-        if (removed) {
-            parts.push(`Removed ${removed} less relevant item${removed === 1 ? '' : 's'} to fit one page.`);
+            parts.push(`Added to this resume only: ${added.join(', ')}. Add them to your profile to keep them.`);
         }
         if (overflow > 1) {
-            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Shorten a few bullets in your profile and try again.`);
+            const ticked = [...(this.profile.experiences || []), ...(this.profile.projects || [])].some(x => x.mustInclude);
+            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Shorten a few bullets in your profile${ticked ? ' or untick a Must include' : ''} and try again.`);
         }
         if (meta.rejected?.length) {
             console.warn('Lines removed by the validator:', meta.rejected);

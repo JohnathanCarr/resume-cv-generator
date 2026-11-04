@@ -51,10 +51,11 @@ test('formatResume never lets markup through, from the profile or the content', 
 
 test('formatResume keeps the page geometry the one-page measurement relies on', () => {
   const html = formatResume(escapeResume(resume), profile);
-  for (const rule of ['max-width: 7.5in', 'padding: 0.5in', 'line-height: 1.25', 'min-height: 10in', "font-family: 'Times New Roman', serif"]) {
+  // The template's sizes (template.js), which layout.js estimates from.
+  for (const rule of ['width: 8.5in', 'padding: 0.5in', 'line-height: 1.2', 'min-height: 10.5in', 'font-family: Arial, Helvetica, sans-serif']) {
     assert.ok(html.includes(rule), `missing ${rule}`);
   }
-  for (const size of ['18pt', '11pt', '10pt']) assert.ok(html.includes(`font-size: ${size}`), `missing ${size}`);
+  for (const size of ['18pt', '11pt', '10.5pt', '9.5pt']) assert.ok(html.includes(`font-size: ${size}`), `missing ${size}`);
   // layout.js measures these line kinds by their data-kind tags.
   for (const kind of ['summary', 'skills', 'coursework', 'bullet', 'projectHeader', 'extra']) {
     assert.ok(html.includes(`data-kind="${kind}"`), `missing data-kind ${kind}`);
@@ -177,4 +178,19 @@ test('one page document for print, preview and measurement', () => {
   assert.ok(printed.includes('<title>A &lt;b&gt; &quot;B&quot;</title>'));
   assert.ok(!printed.includes('rs-added'), 'no highlight styles outside the preview');
   assert.ok(resumeDocument('', { preview: true }).includes('.rs-added') && resumeDocument('', { preview: true }).includes('.page-end'));
+});
+
+test('compact entries: summary heading, one-line degree, no empty brackets, project header once', () => {
+  const html = formatResume(escapeResume({
+    ...resume,
+    experience: [{ ...resume.experience[0], company: 'Outlier.ai ( )' }],
+    projects: [{ name: 'Studio | JS, MV3 | Studio | 2026 - Present', link: 'Studio', bullets: ['Built it'] }],
+    education: [{ school: 'State University', degree: 'B.S.', major: 'CS', minor: 'Math', dates: 'May 2020', gpa: '3.8' }]
+  }), profile);
+  const heads = [...html.matchAll(/>([^<>]+)<\/h2>/g)].map(m => m[1]);
+  assert.equal(heads[0], 'Summary');
+  assert.ok(html.includes('<em>B.S., CS, Minor in Math</em>'));
+  assert.ok(!html.includes('( )'));
+  assert.equal((html.match(/Studio/g) || []).length, 1, 'name shown once; a link equal to it is not repeated');
+  assert.match(html, /<span>Studio \| JS, MV3<\/span><span style="white-space: nowrap;">2026 – Present<\/span>/);
 });

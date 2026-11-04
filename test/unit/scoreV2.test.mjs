@@ -101,3 +101,25 @@ test('supported aliases, plain keywords and the posting title in the summary are
   const b = scoreResumeV2({ resume: { ...r, experience: [{ ...good.experience[0], bullets: ['Built ML services'] }, good.experience[1]] }, profile: p, jobText, match: m, page });
   assert.ok(b.info.unsupportedTools.includes('ML'));
 });
+
+test('stuffing counts what was written, not fixed header lines', () => {
+  const r = { ...good, projects: [{ name: 'tidepool | Go, Docker', bullets: ['A Docker job queue'] }], summary: 'Backend engineer building Go and PostgreSQL services in Go.' };
+  // Go: summary ×2, skills, one bullet = 4 written; the project header's Go is not counted.
+  assert.equal(score(r).checks.noStuffing, 0);
+  assert.equal(score({ ...r, summary: 'Backend engineer building Go and PostgreSQL services.' }).checks.noStuffing, 1);
+});
+
+test('soft-skill phrases and acronym verbs are not tool claims', () => {
+  const m = { ...match, keywords: [...match.keywords, { term: 'Clear written communication', importance: 'supporting', alias: '' }] };
+  const r = { ...good, summary: 'Backend engineer building Go and PostgreSQL services. Clear written communication.', experience: [{ ...good.experience[0], bullets: [...good.experience[0].bullets, 'QAed the store pages'] }, good.experience[1]] };
+  const s = scoreResumeV2({ resume: r, profile, jobText, match: m, page });
+  assert.equal(s.checks.noUnsupportedTools, 1, s.fails.join('; '));
+});
+
+test('skill breadth: scaled to what the profile has', () => {
+  const many = { ...profile, skills: [...profile.skills, ...Array.from({ length: 36 }, (_, i) => `Tool${i}`)] };
+  const s = scoreResumeV2({ resume: { ...good, skills: ['Tools: Go, Tool1, Tool2'] }, profile: many, jobText, match, page });
+  assert.equal(s.checks.skillBreadth, 0.25);
+  assert.ok(s.fails.some(f => f.startsWith('thin Skills section')));
+  assert.equal(score(good).checks.skillBreadth, 1, 'a four-skill profile is not thin');
+});

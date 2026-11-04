@@ -12,6 +12,8 @@
 
 import { createRequire } from 'node:module';
 import { normalizeTerm, corpusHas } from '../../extension/generation/keywords.js';
+import { newestFirst } from '../../extension/generation/resumeDoc.js';
+import { minSkillItems } from '../../extension/generation/compose.js';
 import { formatResume, escapeResume } from '../../extension/preview/resumeHtml.js';
 import { textProblems, STANDARD_HEADINGS } from '../../extension/preview/parseSafety.js';
 
@@ -60,7 +62,8 @@ function skillItems(resume) {
 const TOOL_RE = /\b(?:[A-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+|[A-Z][a-z]+[A-Z][a-zA-Z0-9]*|[A-Z]{2,}[a-z0-9]*s?|[A-Za-z]+\/[A-Za-z]+|[A-Z][a-z]*[+#]+)/g;
 const COMMON_CAPS = new Set(['API', 'APIs', 'UI', 'UX', 'ID', 'IDs', 'US', 'USA', 'PM', 'PMs', 'KPI', 'KPIs', 'GPA', 'MS', 'BS', 'BA', 'MBA', 'PhD', 'CEO', 'CTO', 'VP', 'HR', 'QA', 'OK', 'ETA', 'ROI', 'B2B', 'B2C', 'SaaS', 'R&D']);
 function toolTokens(text) {
-  return [...new Set([...String(text).matchAll(TOOL_RE)].map(m => m[0]).filter(t => !COMMON_CAPS.has(t)))];
+  // An acronym used as a verb ("QAed", "QA'd") is not a tool name.
+  return [...new Set([...String(text).matchAll(TOOL_RE)].map(m => m[0]).filter(t => !COMMON_CAPS.has(t) && !/^[A-Z]{2,}(ed|ing)$/.test(t)))];
 }
 
 // Does evidence item `id` (from the match analysis) show on the resume?
@@ -136,15 +139,20 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   const unsupported = [...new Set([
     ...toolTokens(strip(parts.summary)).filter(t => !roleTokens.has(t)),
     ...toolTokens(strip([skillItems(r).join(', '), ...parts.headers, ...parts.bullets, ...parts.education, ...parts.extras].join('\n'))),
-    // Tool-like names only (a capital, digit or symbol in it): plain words
-    // and phrases such as "text" or "data analysis" are not tool claims.
-    ...keywordList.filter(k => has(norm(claimText), k.term) && /[A-Z0-9+#./]/.test(k.term)).map(k => k.term)
+    // Tool-like names only: one word with a capital, digit or symbol
+    // ("Kubernetes", "A/B"), or a phrase with one past its first letter
+    // ("Google Analytics"). Plain words and sentence-case phrases such as
+    // "text" or "Clear written communication" are not tool claims.
+    ...keywordList.filter(k => has(norm(claimText), k.term) && (/^\S+$/.test(k.term.trim()) ? /[A-Z0-9+#./]/.test(k.term) : /.[A-Z0-9+#./]/.test(k.term))).map(k => k.term)
   ])].filter(t => !supportedTool(t));
   info.unsupportedTools = unsupported;
   checks.noUnsupportedTools = unsupported.length === 0 ? 1 : unsupported.length === 1 ? 0.5 : 0;
   if (unsupported.length) fails.push(`tools not in the profile: ${unsupported.join(', ')}`);
 
-  const jobs = (r.experience || []).map(e => (profile.experiences || []).findIndex(x => lower(x.company) === lower(e.company) && lower(x.title) === lower(e.title)));
+  // Jobs exactly as in the profile, newest first by date (the profile's own
+  // order need not be chronological).
+  const byDate = newestFirst(profile.experiences);
+  const jobs = (r.experience || []).map(e => byDate.findIndex(x => lower(x.company) === lower(e.company) && lower(x.title) === lower(e.title)));
   const schools = (r.education || []).map(e => (profile.education || []).some(x => lower(x.institution) === lower(e.school || e.institution)));
   const historyOk = jobs.every(i => i >= 0) && jobs.every((v, i) => i === 0 || v > jobs[i - 1]) && schools.every(Boolean);
   checks.historyTruthful = historyOk ? 1 : 0;
@@ -156,10 +164,19 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   // TypeScript (TypeScript)") are caught by the tools check above.
   const foreign = items.filter(s => {
     const m = s.match(/^(.*?)\s*\((.*)\)$/);
-    return m ? !has(corpus, m[1]) && !has(corpus, m[2]) : !has(corpus, s);
+    // The posting's form of a profile skill (SEO for "Search Engine
+    // Optimization") counts, as it does in the composer's validator.
+    const ok = (t) => has(corpus, t) || supportedViaAlias.has(normalizeTerm(t));
+    return m ? !ok(m[1]) && !ok(m[2]) : !ok(s);
   });
   checks.skillsFromProfile = foreign.length ? 0 : 1;
   if (foreign.length) fails.push(`skills not in the profile: ${foreign.join(', ')}`);
+
+  // Enough of the profile's real skills on the page to be found by search.
+  const minItems = minSkillItems(profile);
+  checks.skillBreadth = minItems ? +Math.min(1, items.length / minItems).toFixed(2) : 1;
+  info.skillItems = items.length;
+  if (items.length < minItems) fails.push(`thin Skills section: ${items.length} items, at least ${minItems} expected`);
 
   // ── match ──
   const keywords = ((match && match.keywords) || []).map(k => (typeof k === 'string' ? { term: k, importance: 'core', alias: '' } : k));
@@ -178,7 +195,8 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   const unproven = required.filter(q => !proven.includes(q)).map(q => q.text);
   if (unproven.length) fails.push(`required qualifications without a line: ${unproven.join(' | ')}`);
 
-  const pairs = supported.filter(k => k.alias);
+  // Only where the posting uses both forms (older matches carry no flag).
+  const pairs = supported.filter(k => k.alias && k.bothForms !== false);
   const bothForms = pairs.filter(k => has(textN, k.term) && has(textN, k.alias));
   checks.acronymPairs = pairs.length ? +(bothForms.length / pairs.length).toFixed(2) : 1;
 
@@ -202,7 +220,11 @@ export function scoreResumeV2({ resume, profile, jobText, match, page }) {
   }
 
   // ── never ──
-  const counts = core.map(k => ({ term: k.term, n: (textN.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length }));
+  // Counted over what the generator writes (summary, skills with their
+  // labels, bullets, extras, coursework); entry header lines (titles,
+  // employers, project names and stacks) are the profile's own and fixed.
+  const writtenN = norm([parts.summary, parts.skills, ...parts.bullets, ...parts.education, ...parts.extras].join('\n'));
+  const counts = core.map(k => ({ term: k.term, n: (writtenN.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length }));
   const stuffed = counts.filter(c => c.n > 3).map(c => `${c.term}×${c.n}`);
   checks.noStuffing = stuffed.length ? 0 : 1;
   if (stuffed.length) fails.push(`keyword stuffing: ${stuffed.join(', ')}`);

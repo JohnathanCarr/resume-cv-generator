@@ -411,8 +411,8 @@ function extractDates(text) {
 }
 
 // Pulls "City, ST" and/or a Remote/Hybrid marker (bare or in parentheses)
-// out of the text: "Bear Creek AI, (Remote) – Birmingham, AL" →
-// location "Birmingham, AL (Remote)", rest "Bear Creek AI".
+// out of the text: "Acme Corp, (Remote) – Austin, TX" →
+// location "Austin, TX (Remote)", rest "Acme Corp".
 function extractLocation(text) {
     let rest = text;
     let location = '';

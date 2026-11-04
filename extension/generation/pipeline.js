@@ -96,7 +96,7 @@ export async function composeResume(apiKey, { profile, jobText, match = null, la
     repairs++;
   }
 
-  const { comp: clean, dropped } = sanitizeComposition(data, check.errors, profile);
+  const { comp: clean, dropped, restored } = sanitizeComposition(data, check.errors, profile);
   const result = composedResult({ comp: clean, profile, match, layout: L, baseline });
   const endTime = Date.now();
   Object.assign(result.metadata, {
@@ -104,6 +104,7 @@ export async function composeResume(apiKey, { profile, jobText, match = null, la
     processingTime: endTime - startTime,
     repairs,
     rejected: dropped,
+    restored,
     briefSource,
     searches: briefSource === 'research' ? brief.searches : 0,
     timings: timer.steps

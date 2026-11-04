@@ -32,6 +32,11 @@ body { position: relative; }
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
 }
+.rs-reworded {
+    background: #EEF4E9;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
 .page-end {
     position: absolute; left: 0; right: 0; top: 11in;
     border-top: 2px dashed #B3261E;

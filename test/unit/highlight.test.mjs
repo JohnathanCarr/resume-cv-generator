@@ -34,7 +34,8 @@ const changes = [
 test('marked shows the new words with their source; clean has no marks', () => {
   const { marked, clean } = previewResumes(doc, changes);
   assert.equal(marked.experience[0].bullets[0], 'Built billing API in Go <span class="rs-added" title="From your profile: Built billing API in Go">on Kubernetes</span>');
-  assert.match(marked.summary, /Backend engineer <span class="rs-added" title="From your profile: Backend engineer.">building Go services<\/span>/);
+  // Three of its five words are new: past half, so the line is tinted whole.
+  assert.equal(marked.summary, '<span class="rs-reworded" title="From your profile: Backend engineer.">Backend engineer building Go services</span>');
   assert.equal(marked.experience[0].bullets[1], 'Wrote &lt;script&gt; docs', 'unchanged lines are escaped, not marked');
   assert.ok(!JSON.stringify(clean).includes('rs-added'));
   assert.equal(clean.experience[0].bullets[0], 'Built billing API in Go on Kubernetes');
@@ -49,4 +50,10 @@ test('resumes saved by the old edit-list engine still render', () => {
   const { marked } = previewResumes(doc, old);
   assert.match(marked.experience[0].bullets[0], /title="Was: Built billing API in Go">on Kubernetes/);
   assert.equal(marked.projects[0].bullets[0], 'Parsed units', 'other kinds of old change are shown unmarked');
+});
+
+test('a mostly reworded line is tinted whole, with its source on hover', () => {
+  const d = { ...doc, experiences: [{ ...doc.experiences[0], bullets: ['Shipped retrieval search for regulatory teams', 'Wrote <script> docs'] }] };
+  const { marked } = previewResumes(d, [{ id: 'exp:1.c1', op: 'rewrite', before: 'Built billing API in Go', after: d.experiences[0].bullets[0], from: true }]);
+  assert.equal(marked.experience[0].bullets[0], '<span class="rs-reworded" title="From your profile: Built billing API in Go">Shipped retrieval search for regulatory teams</span>');
 });

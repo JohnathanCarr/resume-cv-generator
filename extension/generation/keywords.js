@@ -85,7 +85,8 @@ function missingKeywords(match, profile, { limit = MAX_ASKED } = {}) {
   return out;
 }
 
-// Adds the accepted keywords to the profile's skills and patches the match so
+// A copy of the profile with the accepted keywords in its skills, for one
+// generation (the caller does not save it), and the match patched so
 // downstream prompts see the new evidence: any requirement that names an
 // accepted term gains `skill:<term>` and, if it had nothing before, becomes a
 // partial match (the user vouched for the skill, not for meeting the bar).

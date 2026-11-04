@@ -19,8 +19,8 @@
 // profile:workAuthorization and profile:clearance.
 
 import { normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
-import { estimateDocHeight } from './layout.js';
-import { extraText } from './resumeDoc.js';
+import { estimateDocHeight, lineCount } from './layout.js';
+import { extraText, newestFirst } from './resumeDoc.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const words = (s) => str(s).split(/\s+/).filter(Boolean);
@@ -59,6 +59,39 @@ export function sourceIndex(profile) {
   return index;
 }
 
+// Work authorization or clearance sitting in the skills list ("U.S.
+// Citizenship", often from an older keyword check). Stated in the summary,
+// never as a skill. Pure.
+export function isScreeningSkill(skill, profile) {
+  const s = normalizeTerm(skill);
+  if (!s) return false;
+  if (/\b(citizen|citizenship|work authorization|work authorisation|visa|sponsorship|security clearance|clearance)\b/.test(s)) return true;
+  const p = profile || {};
+  return [p.workAuthorization, p.clearance].some(f => corpusHas(` ${normalizeTerm(f || '')} `, s));
+}
+
+// Jobs and projects the user ticked Must include, with their composition ids.
+// Each always appears, with this many bullets when the profile has them
+// (the validator asks, sanitizeComposition() restores, the trimmer spares).
+const MUST_INCLUDE_BULLETS = 2;
+function mustIncludeEntries(profile) {
+  const p = profile || {};
+  const ticked = (list, prefix, kind) => (list || []).filter(x => x.mustInclude).map(x => ({ id: `${prefix}:${x.id}`, kind, x }));
+  return [...ticked(p.experiences, 'exp', 'experience'), ...ticked(p.projects, 'proj', 'projects')];
+}
+
+// Past this many items a Skills section is padding, however long the profile's
+// list is. The prompt aims lower (20–35); this catches the clear overshoot.
+const MAX_SKILL_ITEMS = 40;
+
+// Below this many items a Skills section is clearly thin for this profile.
+// Past about 12 the choice is the model's; a short skills list is not padded.
+export function minSkillItems(profile) {
+  const p = profile || {};
+  const usable = (p.skills || []).filter(s => !isScreeningSkill(s, p)).length;
+  return Math.min(12, Math.floor(usable * 0.6));
+}
+
 // The profile with every citable line tagged, for the compose prompt.
 export function renderProfileForCompose(profile) {
   const p = profile || {};
@@ -67,11 +100,12 @@ export function renderProfileForCompose(profile) {
   if (str(p.location)) lines.push(`[profile:location] Location: ${str(p.location)}`, '');
   if (str(p.workAuthorization)) lines.push(`[profile:workAuthorization] Work authorization: ${str(p.workAuthorization)}`, '');
   if (str(p.clearance)) lines.push(`[profile:clearance] Security clearance: ${str(p.clearance)}`, '');
-  if ((p.skills || []).length) lines.push('SKILLS', (p.skills || []).map(s => `[skill:${str(s)}]`).join(' '), '');
+  const skills = (p.skills || []).filter(s => !isScreeningSkill(s, p));
+  if (skills.length) lines.push('SKILLS', skills.map(s => `[skill:${str(s)}]`).join(' '), '');
   const dates = (x) => [str(x.start), str(x.end)].filter(Boolean).join(' – ');
   if ((p.experiences || []).length) {
     lines.push('EXPERIENCE (newest first)');
-    for (const x of p.experiences) {
+    for (const x of newestFirst(p.experiences)) {
       const id = `exp:${x.id}`;
       lines.push(`[${id}] ${str(x.title)} — ${str(x.company)}${x.location ? `, ${str(x.location)}` : ''}${dates(x) ? ` (${dates(x)})` : ''}${x.mustInclude ? ' [MUST INCLUDE]' : ''}`);
       if (str(x.description)) lines.push(`  [${id}.d] ${str(x.description)}`);
@@ -112,11 +146,21 @@ const LINE = {
   },
   required: ['text', 'sources']
 };
+// A bullet also names the posting requirements it proves, so the page can be
+// fitted by what each bullet adds (fitComposition).
+const BULLET = {
+  ...LINE,
+  properties: {
+    ...LINE.properties,
+    proves: { type: 'array', items: { type: 'string' }, description: 'Numbers of the posting requirements this bullet really proves ("R2"); empty when none.' }
+  },
+  required: ['text', 'sources', 'proves']
+};
 const PICK = (desc) => ({ type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: desc } }, required: ['id'] });
 const ENTRY = (desc) => ({
   type: 'object',
   additionalProperties: false,
-  properties: { id: { type: 'string', description: desc }, bullets: { type: 'array', items: LINE } },
+  properties: { id: { type: 'string', description: desc }, bullets: { type: 'array', items: BULLET } },
   required: ['id', 'bullets']
 });
 
@@ -220,7 +264,9 @@ const termCorpus = (texts) => ` ${normalizeTerm(texts.join(' '))} `;
 export const FILLER = ['results-driven', 'results driven', 'detail-oriented', 'detail oriented', 'proven track record', 'responsible for',
   'duties included', 'team player', 'self-starter', 'go-getter', 'hard-working', 'passionate', 'synergy', 'leverage', 'leveraged',
   'leveraging', 'spearheaded', 'cutting-edge', 'best-in-class', 'world-class', 'seamless', 'utilize', 'utilized', 'robust',
-  'impactful', 'think outside the box', 'wide range of', 'excellent communication skills'];
+  'impactful', 'think outside the box', 'wide range of', 'excellent communication skills',
+  // Legal boilerplate a work-authorization field can carry; the summary says "U.S. citizen." instead.
+  'legally eligible', 'on an ongoing basis'];
 
 const MAX_SUMMARY_WORDS = 60;
 const MAX_BULLET_WORDS = 40;
@@ -240,6 +286,9 @@ export function validateComposition(comp, profile, match = null) {
   const corpus = profileCorpus(p);
   const aliases = supportedAliases(match, corpus);
   const skillCorpus = termCorpus(p.skills || []);
+  // Skills may come from anywhere in the profile except the screening fields:
+  // work authorization and clearance are stated in the summary, never as skills.
+  const skillSource = profileCorpus({ ...p, workAuthorization: '', clearance: '' });
   const role = termCorpus([match && match.role]);
 
   // Every line: real sources from its own entry (or profile-wide ones),
@@ -276,15 +325,28 @@ export function validateComposition(comp, profile, match = null) {
   const seenSkills = new Set();
   for (const [gi, g] of (c.skill_groups || []).entries()) {
     for (const item of g.items || []) {
-      const forms = (item.match(/^(.*?)\s*\((.*)\)$/) || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
-      if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(corpus, f) || aliases.has(f))) {
+      const paren = item.match(/^(.*?)\s*\((.*)\)$/);
+      const forms = (paren || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
+      if (forms.some(f => isScreeningSkill(f, p))) {
+        errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not a skill: work authorization and clearance go in the summary.` });
+      } else if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(skillSource, f) || aliases.has(f))) {
         errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not in the profile.` });
+      } else if (paren && (forms[0] === forms[1] || isExpansion(paren[1], paren[2]))) {
+        // "REST APIs (Representational State Transfer APIs)", "Typescript (TypeScript)": one name is enough.
+        errors.push({ code: 'skill_form', target: `skill_groups[${gi}]`, item, keep: paren[1], message: `"${item}": list a skill by one name, the posting's ("${paren[1]}"); acronyms are not spelled out in Skills.` });
+      } else if (paren && !(corpusHas(skillCorpus, forms[1]) || corpusHas(skillSource, forms[1]) || aliases.has(forms[1]))) {
+        // "Posting term (profile skill)", never a description in brackets.
+        errors.push({ code: 'skill_form', target: `skill_groups[${gi}]`, item, keep: paren[1], message: `"${item}": brackets hold only the profile's own name for the skill ("PostgreSQL (Postgres)"); list "${paren[1]}" on its own.` });
       }
       const key = forms[0];
       if (seenSkills.has(key)) errors.push({ code: 'duplicate_skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is listed twice.` });
       seenSkills.add(key);
     }
   }
+  const itemCount = (c.skill_groups || []).reduce((n, g) => n + (g.items || []).length, 0);
+  const minItems = minSkillItems(p);
+  if (itemCount > MAX_SKILL_ITEMS) fail('too_many_skills', 'skill_groups', `Skills lists ${itemCount} items; keep it to about 30 by leaving out tools unrelated to this job and merging near-duplicates.`);
+  if (itemCount < minItems) fail('thin_skills', 'skill_groups', `Skills lists only ${itemCount} items. List every skill the posting asks for plus the profile's real tools from the same stack (at least ${minItems}), merging duplicates and leaving out tools unrelated to this job.`);
 
   // Entries: real ids, each once; jobs and projects carry bullets.
   const checkEntries = (list, kind, { needsBullets }) => {
@@ -307,6 +369,14 @@ export function validateComposition(comp, profile, match = null) {
   checkEntries(c.education, 'education', { needsBullets: false });
   checkEntries(c.extras, 'extras', { needsBullets: false });
   if ((p.education || []).length && !(c.education || []).length) fail('no_education', 'education', 'Include the education.');
+  for (const { id, kind, x } of mustIncludeEntries(p)) {
+    const has = (x.bullets || []).filter(b => str(b)).length;
+    const entry = (c[kind] || []).find(e => e.id === id);
+    const name = str(x.name) || str(x.company) || id;
+    if (!entry && (has || str(x.description))) fail('must_include', kind, `${id} (${name}) is marked must include: it has to appear.`);
+    else if (entry && (entry.bullets || []).length < Math.min(MUST_INCLUDE_BULLETS, has)) fail('must_include', kind, `${id} (${name}) is marked must include: give it at least ${Math.min(MUST_INCLUDE_BULLETS, has)} bullets.`);
+  }
+  if ((p.projects || []).length && !(c.projects || []).length) fail('no_projects', 'projects', 'Include the most relevant project (or two), with 2–3 bullets each.');
 
   // ── Match ──
   const doc = toResumeDoc(c, p);
@@ -317,10 +387,19 @@ export function validateComposition(comp, profile, match = null) {
   const supported = core.filter(k => corpusHas(corpus, normalizeTerm(k.term)) || (k.alias && corpusHas(corpus, normalizeTerm(k.alias))));
   for (const k of supported) {
     if (!corpusHas(text, normalizeTerm(k.term))) fail('keyword', 'keywords', `Use the posting's term "${k.term}" where the profile supports it${k.alias ? ` (profile: ${k.alias})` : ''}.`);
-    else if (k.alias && !corpusHas(text, normalizeTerm(k.alias))) warn('acronym', 'keywords', `Give "${k.term}" and "${k.alias}" once each.`);
+    else if (k.alias && k.bothForms !== false && !corpusHas(text, normalizeTerm(k.alias))) warn('acronym', 'keywords', `The posting uses both "${k.term}" and "${k.alias}": give the other form once, in the summary or a bullet.`);
   }
+  // Counted over what the model writes, skill labels included; entry header
+  // lines (titles, employers, project names and stacks) are fixed profile text.
+  const written = ` ${normalizeTerm([
+    doc.summary,
+    ...doc.skillGroups.flatMap(g => [g.label, ...g.items]),
+    ...[...doc.experiences, ...doc.projects].flatMap(e => e.bullets),
+    ...doc.education.map(e => e.coursework),
+    ...doc.extras.map(extraText)
+  ].filter(Boolean).join(' '))} `;
   for (const k of core) {
-    const n = (text.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length;
+    const n = (written.match(new RegExp(`(?<![a-z0-9+#])${normalizeTerm(k.term).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![a-z0-9+#])`, 'g')) || []).length;
     if (n > MAX_KEYWORD_USES) fail('stuffing', 'keywords', `"${k.term}" appears ${n} times; at most ${MAX_KEYWORD_USES}.`);
   }
   const covered = supported.filter(k => corpusHas(text, normalizeTerm(k.term)));
@@ -354,15 +433,19 @@ export function validateComposition(comp, profile, match = null) {
 
 // The composition as a resume document in the baseline shape (baseline.js):
 // what resumeDocToSchema() and the layout code read. Titles, employers,
-// dates, locations and education come from the profile; jobs are kept newest
-// first in profile order whatever order the model chose. Unknown ids are
+// dates, locations and education come from the profile; jobs go newest
+// first by their dates (resumeDoc.js newestFirst) whatever order the profile
+// or the model has. Unknown ids are
 // skipped. Each bullet's sources ride along in `bulletSources`.
 export function toResumeDoc(comp, profile) {
   const c = comp || {};
   const p = profile || {};
   const pick = (list, kind, prefix) => {
     const wanted = new Map((list || []).map(e => [String(e.id), e]));
-    return (p[kind] || []).filter(x => wanted.has(`${prefix}:${x.id}`)).map(x => ({ x, e: wanted.get(`${prefix}:${x.id}`) }));
+    // Jobs go newest first by their dates, whatever order the profile or the
+    // model has; everything else keeps the profile's order.
+    const source = kind === 'experiences' ? newestFirst(p[kind]) : (p[kind] || []);
+    return source.filter(x => wanted.has(`${prefix}:${x.id}`)).map(x => ({ x, e: wanted.get(`${prefix}:${x.id}`) }));
   };
   const withBullets = ({ x, e }, prefix) => ({
     id: `${prefix}:${x.id}`,
@@ -455,10 +538,16 @@ export function sanitizeComposition(comp, errors, profile) {
   }
   // Skills the profile lacks go, and so does every repeat of a skill.
   const notInProfile = new Set((errors || []).filter(e => e.code === 'skill').map(e => e.item));
+  // A misused bracket keeps the skill's own name: "Tableau (BI tool)" → "Tableau".
+  const plainName = new Map((errors || []).filter(e => e.code === 'skill_form').map(e => [e.item, e.keep]));
   const seenSkills = new Set();
   c.skill_groups = (c.skill_groups || []).map(g => ({
     ...g,
-    items: (g.items || []).filter(item => {
+    items: (g.items || []).map(item => {
+      if (!plainName.has(item)) return item;
+      dropped.push(`skill: ${item} → ${plainName.get(item)}`);
+      return plainName.get(item);
+    }).filter(item => {
       const key = normalizeTerm(String(item).replace(/\s*\(.*\)$/, ''));
       const keep = !notInProfile.has(item) && !seenSkills.has(key);
       seenSkills.add(key);
@@ -467,13 +556,107 @@ export function sanitizeComposition(comp, errors, profile) {
     })
   })).filter(g => g.items.length);
   if ((profile.education || []).length && !(c.education || []).length) c.education = profile.education.map(e => ({ id: `edu:${e.id}` }));
-  return { comp: c, dropped };
+  // A ticked entry the model still left out or left short gets the profile's
+  // own lines as written: true by definition, and no model call.
+  const restored = [];
+  for (const { id, kind, x } of mustIncludeEntries(profile)) {
+    const lines = (x.bullets || []).map((text, i) => ({ text: str(text), sources: [`${id}.b${i + 1}`], proves: [] })).filter(b => b.text);
+    if (!lines.length && str(x.description)) lines.push({ text: str(x.description), sources: [`${id}.d`], proves: [] });
+    if (!lines.length) continue;
+    c[kind] = c[kind] || [];
+    let entry = c[kind].find(e => e.id === id);
+    if (!entry) { entry = { id, bullets: [] }; c[kind].push(entry); }
+    const want = Math.max(1, Math.min(MUST_INCLUDE_BULLETS, lines.length));
+    for (const line of lines) {
+      if (entry.bullets.length >= want) break;
+      if (entry.bullets.some(b => (b.sources || []).includes(line.sources[0]))) continue;
+      entry.bullets.push(line);
+      restored.push(`${id}: ${line.text}`);
+    }
+  }
+  return { comp: c, dropped, restored };
 }
 
 // ── One page ──────────────────────────────────────────────────────────────────
 
 // Lines and entries that prove a supported required qualification: trimming
 // never removes them.
+// How much each job and project shows of what this posting asks for:
+// requirements citing it (required 3, preferred 1.5) plus the posting's
+// keywords in its text (core 1, supporting 0.5). The newest job gets a small
+// recency bonus. Bullets are given and taken by this score, job or project
+// alike. Returns Map id → score (at least 0.5). Pure.
+export function entryRelevance(profile, match) {
+  const p = profile || {};
+  const scores = new Map();
+  const entries = [
+    ...(p.experiences || []).map(x => ({ id: `exp:${x.id}`, x })),
+    ...(p.projects || []).map(x => ({ id: `proj:${x.id}`, x }))
+  ];
+  const keywords = ((match && match.keywords) || []).map(k => (typeof k === 'string' ? { term: k, importance: 'core', alias: '' } : k));
+  for (const { id, x } of entries) {
+    const text = ` ${normalizeTerm([x.title, x.name, x.description, ...(x.bullets || [])].filter(Boolean).join(' '))} `;
+    let score = 0;
+    for (const q of (match && match.requirements) || []) {
+      if (q.strength === 'none') continue;
+      const cites = (q.evidence || []).some(e => String(e).trim().replace(/^\[\s*|\s*\]$/g, '').toLowerCase() === id.toLowerCase());
+      if (cites) score += q.kind === 'required' ? 3 : 1.5;
+    }
+    for (const k of keywords) {
+      if (corpusHas(text, normalizeTerm(k.term)) || (k.alias && corpusHas(text, normalizeTerm(k.alias)))) score += k.importance === 'core' ? 1 : 0.5;
+    }
+    scores.set(id, score);
+  }
+  const newest = newestFirst(p.experiences)[0];
+  if (newest) scores.set(`exp:${newest.id}`, scores.get(`exp:${newest.id}`) * 1.2);
+  for (const [id, v] of scores) scores.set(id, Math.max(0.5, +v.toFixed(2)));
+  return scores;
+}
+
+// Is one of a and b the other's acronym, or a spelled-out form of it? "AI
+// tools" / "Artificial Intelligence tools", "REST APIs" / "Representational
+// State Transfer APIs", "SEO" / "Search Engine Optimization".
+export function isExpansion(a, b) {
+  const words = (t) => String(t).toLowerCase().split(/[\s/-]+/).filter(Boolean);
+  // Can the letters of t be read through all of ws in order, each word giving
+  // its first letter and maybe more of its own letters?
+  const spells = (t, ws) => {
+    const go = (ti, wi) => {
+      if (wi === ws.length) return ti === t.length;
+      const w = ws[wi];
+      if (ti >= t.length || w[0] !== t[ti]) return false;
+      for (let ti2 = ti + 1, pos = 1; ; ) {
+        if (go(ti2, wi + 1)) return true;
+        if (ti2 >= t.length) return false;
+        const at = w.indexOf(t[ti2], pos);
+        if (at < 0) return false;
+        ti2++; pos = at + 1;
+      }
+    };
+    return go(0, 0);
+  };
+  const test = (short, long) => {
+    const shared = new Set(words(short));
+    const rest = words(long).filter(w => !shared.has(w));
+    if (!rest.length) return false;
+    return (String(short).match(/\b[A-Z][A-Z0-9/&]+s?\b/g) || []).some(tok => {
+      const t = tok.replace(/[^A-Za-z0-9]/g, '').replace(/s$/, '').toLowerCase();
+      return t.length >= 2 && spells(t, rest);
+    });
+  };
+  return test(a, b) || test(b, a);
+}
+
+// The posting's requirements the candidate can show, numbered as the prompt
+// lists them: [{ id: 'R1', kind, text }]. The number is the requirement's place
+// in the match, so it stays the same through repairs. Pure.
+export function numberedRequirements(match) {
+  return ((match && match.requirements) || [])
+    .map((q, i) => ({ id: `R${i + 1}`, q }))
+    .filter(({ q }) => q && q.strength !== 'none')
+    .map(({ id, q }) => ({ id, kind: q.kind, text: q.text }));
+}
+
 function protectedProof(match) {
   const ids = new Set();
   for (const q of ((match && match.requirements) || []).filter(q => q.kind === 'required' && q.strength !== 'none')) {
@@ -495,35 +678,76 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
   const keep = protectedProof(match);
   const limitPx = layout.capacityPx - layout.kinds.bullet.lineHeight * 0.5;
   const height = () => estimateDocHeight(layout, toResumeDoc(c, profile), extraText) + offsetPx;
-  const isProof = (b) => (b.sources || []).some(id => keep.has(id));
-  const entryProtected = (e) => keep.has(e.id) || (e.bullets || []).some(isProof);
   const trimmed = [];
 
-  const dropLastBullet = (entry, min) => {
-    const bullets = entry.bullets || [];
-    if (bullets.length <= min) return false;
-    for (let j = bullets.length - 1; j >= 0; j--) {
-      if (isProof(bullets[j])) continue;
-      trimmed.push(`${entry.id} bullet: ${bullets[j].text}`);
-      bullets.splice(j, 1);
-      return true;
-    }
-    return false;
+  // What a bullet adds to the page: each requirement it proves that no other
+  // bullet proves (required 3, preferred 1.5; a repeat 0.3), each core keyword
+  // no other bullet shows (0.5), per line of the page it takes. The model
+  // writes more than fits (the prompt's budget runs over), so this decides what
+  // stays. Ties: the less relevant entry, then the longer bullet, then the later.
+  const reqs = new Map(numberedRequirements(match).map(q => [q.id, q]));
+  const core = ((match && match.keywords) || []).filter(k => k && (typeof k === 'string' || k.importance === 'core')).map(k => normalizeTerm(typeof k === 'string' ? k : k.term));
+  const allBullets = () => [...(c.experience || []), ...(c.projects || [])].flatMap(e => (e.bullets || []).map((b, j) => ({ e, b, j })));
+  const provedBy = (b) => (b.proves || []).filter(id => reqs.has(id));
+  const provesAlone = (b, id) => !allBullets().some(o => o.b !== b && provedBy(o.b).includes(id));
+  const linesOf = (b) => Math.max(1, lineCount(layout, 'bullet', b.text));
+  const worth = (b) => {
+    let v = 0;
+    for (const id of provedBy(b)) v += provesAlone(b, id) ? (reqs.get(id).kind === 'required' ? 3 : 1.5) : 0.3;
+    const text = ` ${normalizeTerm(b.text)} `;
+    const others = ` ${allBullets().filter(o => o.b !== b).map(o => normalizeTerm(o.b.text)).join(' ')} `;
+    for (const t of core) if (t && corpusHas(text, t) && !corpusHas(others, t)) v += 0.5;
+    return v / linesOf(b);
+  };
+  const lastProofOfRequired = (b) => provedBy(b).some(id => reqs.get(id).kind === 'required' && provesAlone(b, id));
+
+  // Floors: every job keeps a bullet and the newest job two; the most relevant
+  // project keeps two when it matters to this posting, any other project one
+  // until whole projects go.
+  const rel = entryRelevance(profile, match);
+  const top = Math.max(0.5, ...rel.values());
+  const newestId = (newestFirst((profile.experiences || []).filter(x => (c.experience || []).some(e => e.id === `exp:${x.id}`)))[0] || {}).id;
+  const topProject = () => (c.projects || []).reduce((a, x) => (!a || (rel.get(x.id) || 0) > (rel.get(a.id) || 0) ? x : a), null);
+  const ticked = new Set(mustIncludeEntries(profile).map(t => t.id));
+  const floor = (e) => {
+    if (ticked.has(e.id) || e.id === `exp:${newestId}`) return MUST_INCLUDE_BULLETS;
+    const tp = topProject();
+    return tp && e.id === tp.id && (rel.get(e.id) || 0) >= top * 0.3 ? 2 : 1;
+  };
+  const cheapestBullet = (floorOf, { sparing = false } = {}) => {
+    const can = allBullets().filter(({ e, b }) => e.bullets.length > floorOf(e) && !(sparing && lastProofOfRequired(b)));
+    if (!can.length) return false;
+    const rank = can.map(x => ({ ...x, w: worth(x.b), r: rel.get(x.e.id) || 0.5, n: linesOf(x.b) }));
+    rank.sort((p, q) => p.w - q.w || p.r - q.r || q.n - p.n || q.j - p.j);
+    const { e, b } = rank[0];
+    trimmed.push(`${e.id} bullet: ${b.text}`);
+    e.bullets.splice(e.bullets.indexOf(b), 1);
+    return true;
+  };
+  const entryProtected = (e) => keep.has(e.id) || (e.bullets || []).some(lastProofOfRequired);
+  const dropProject = (min) => {
+    const open = (c.projects || []).filter(p => !entryProtected(p) && !ticked.has(p.id));
+    if ((c.projects || []).length <= min || !open.length) return false;
+    const p = open.reduce((a, x) => ((rel.get(x.id) || 0) < (rel.get(a.id) || 0) ? x : a));
+    trimmed.push(`project ${p.id}`);
+    c.projects.splice(c.projects.indexOf(p), 1);
+    return true;
   };
   const steps = [
     () => { const i = [...(c.extras || [])].reverse().findIndex(e => !keep.has(e.id)); if (i < 0) return false; const at = c.extras.length - 1 - i; trimmed.push(`extra ${c.extras[at].id}`); c.extras.splice(at, 1); return true; },
-    () => [...(c.projects || [])].reverse().some(p => dropLastBullet(p, 1)),
-    () => { const i = [...(c.projects || [])].reverse().findIndex(p => !entryProtected(p)); if (i < 0) return false; const at = c.projects.length - 1 - i; trimmed.push(`project ${c.projects[at].id}`); c.projects.splice(at, 1); return true; },
-    () => oldestFirst().some(e => dropLastBullet(e, 2)),
-    () => oldestFirst().some(e => dropLastBullet(e, 1))
+    () => cheapestBullet(floor, { sparing: true }),
+    () => dropProject(1),
+    () => cheapestBullet(floor),
+    () => dropProject(0),
+    // Last resort, below the floors: everything else first, ticked entries last.
+    () => cheapestBullet(e => (ticked.has(e.id) ? MUST_INCLUDE_BULLETS : 1)),
+    () => cheapestBullet(() => 1)
   ];
-  // Jobs in profile order are newest first; trim from the oldest.
-  const order = (profile.experiences || []).map(x => `exp:${x.id}`);
-  const oldestFirst = () => [...(c.experience || [])].sort((a, b) => order.indexOf(b.id) - order.indexOf(a.id));
 
   while (height() > limitPx) {
     if (!steps.some(step => step())) break;
   }
+
   const afterPx = Math.round(height());
   return { comp: c, trimmed, page: { afterPx, limitPx: Math.round(limitPx), fits: afterPx <= limitPx } };
 }

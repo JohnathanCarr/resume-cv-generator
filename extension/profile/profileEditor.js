@@ -171,7 +171,7 @@ export class ProfileEditor {
                     <textarea placeholder="Role description (what you did in this role)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${esc(exp.description)}</textarea>
                 </div>
                 <div class="card-actions">
-                    <label class="must-include-label">
+                    <label class="must-include-label" title="Always appears on the resume, with at least two bullets. The resume is one page, so tick only your strongest.">
                         <input type="checkbox" class="must-include-exp" data-index="${index}" ${exp.mustInclude ? 'checked' : ''}>
                         Must include
                     </label>
@@ -380,7 +380,7 @@ export class ProfileEditor {
                     <textarea placeholder="Project description (what it does, technologies used)..." style="margin-top: 0.5rem; min-height: 60px;" data-field="description" data-index="${index}">${esc(project.description)}</textarea>
                 </div>
                 <div class="card-actions">
-                    <label class="must-include-label">
+                    <label class="must-include-label" title="Always appears on the resume, with at least two bullets. The resume is one page, so tick only your strongest.">
                         <input type="checkbox" class="must-include-proj" data-index="${index}" ${project.mustInclude ? 'checked' : ''}>
                         Must include
                     </label>

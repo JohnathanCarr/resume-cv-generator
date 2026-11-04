@@ -821,7 +821,8 @@ class ResumeStudioApp {
             parts.push(`Added to this resume only: ${added.join(', ')}. Add them to your profile to keep them.`);
         }
         if (overflow > 1) {
-            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Shorten a few bullets in your profile and try again.`);
+            const ticked = [...(this.profile.experiences || []), ...(this.profile.projects || [])].some(x => x.mustInclude);
+            parts.push(`It still runs to ${overflow.toFixed(2)} pages. Shorten a few bullets in your profile${ticked ? ' or untick a Must include' : ''} and try again.`);
         }
         if (meta.rejected?.length) {
             console.warn('Lines removed by the validator:', meta.rejected);

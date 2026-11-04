@@ -436,3 +436,44 @@ test('the prompt numbers the requirements and asks for more than fits', async ()
   assert.match(sys.content, /list in proves/);
   assert.equal(user.content.match(/write about (\d+) lines/) !== null, true);
 });
+
+// Must include: the tick is a guarantee, in the validator, the clean-up and the trimmer.
+const tickedProfile = { ...pickerProfile, projects: [{ ...pickerProfile.projects[1], mustInclude: true }, pickerProfile.projects[0]] };
+
+test('must include: a missing or short ticked entry goes back for repair', () => {
+  const c = pickerComp();
+  assert.ok(validateComposition(c, tickedProfile, pickerMatch).errors.some(e => e.code === 'must_include' && e.message.includes('proj:6')));
+  c.projects.push({ id: 'proj:6', bullets: [bl('Shipped k', 'proj:6.b1')] });
+  assert.ok(validateComposition(c, tickedProfile, pickerMatch).errors.some(e => e.code === 'must_include' && e.message.includes('at least 2')));
+  c.projects[1].bullets.push(bl('Shipped l', 'proj:6.b2'));
+  assert.ok(!validateComposition(c, tickedProfile, pickerMatch).errors.some(e => e.code === 'must_include'));
+});
+
+test('must include: after the repairs, the profile\'s own lines fill the gap', () => {
+  const c = pickerComp();
+  const { errors } = validateComposition(c, tickedProfile, pickerMatch);
+  const { comp, restored } = sanitizeComposition(c, errors, tickedProfile);
+  const entry = comp.projects.find(p => p.id === 'proj:6');
+  assert.deepEqual(entry.bullets.map(b => b.text), ['k', 'l']);
+  assert.deepEqual(entry.bullets[0].sources, ['proj:6.b1']);
+  assert.equal(restored.length, 2);
+  // Nothing to do when the model complied, and no repeats when it half complied.
+  const half = pickerComp();
+  half.projects.push({ id: 'proj:6', bullets: [bl('Reworded k', 'proj:6.b1')] });
+  const r = sanitizeComposition(half, [], tickedProfile);
+  assert.deepEqual(r.comp.projects.find(p => p.id === 'proj:6').bullets.map(b => b.text), ['Reworded k', 'l']);
+  assert.deepEqual(sanitizeComposition(pickerComp(), [], pickerProfile).restored, []);
+});
+
+test('must include: the trimmer keeps a ticked project and two of its bullets', () => {
+  const c = pickerComp();
+  c.projects.push({ id: 'proj:6', bullets: [bl('Shipped k', 'proj:6.b1'), bl('Shipped l', 'proj:6.b2'), bl('Shipped more', 'proj:6.b2')] });
+  const L = makeLayout({});
+  const offset = L.capacityPx - estimateDocHeight(L, toResumeDoc(c, tickedProfile), extraText) + 5 * L.kinds.bullet.lineHeight;
+  const fit = fitComposition(c, tickedProfile, pickerMatch, L, { offsetPx: offset });
+  assert.ok(fit.trimmed.length);
+  assert.equal(fit.comp.projects.find(p => p.id === 'proj:6').bullets.length, 2, fit.trimmed.join('; '));
+  // Untick it and the same page can drop it: the tick is what protects it.
+  const free = fitComposition(c, pickerProfile, pickerMatch, L, { offsetPx: offset + 6 * L.kinds.bullet.lineHeight });
+  assert.ok(!free.comp.projects.some(p => p.id === 'proj:6'), free.trimmed.join('; '));
+});

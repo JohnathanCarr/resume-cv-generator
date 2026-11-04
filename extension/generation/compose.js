@@ -70,6 +70,16 @@ export function isScreeningSkill(skill, profile) {
   return [p.workAuthorization, p.clearance].some(f => corpusHas(` ${normalizeTerm(f || '')} `, s));
 }
 
+// Jobs and projects the user ticked Must include, with their composition ids.
+// Each always appears, with this many bullets when the profile has them
+// (the validator asks, sanitizeComposition() restores, the trimmer spares).
+const MUST_INCLUDE_BULLETS = 2;
+function mustIncludeEntries(profile) {
+  const p = profile || {};
+  const ticked = (list, prefix, kind) => (list || []).filter(x => x.mustInclude).map(x => ({ id: `${prefix}:${x.id}`, kind, x }));
+  return [...ticked(p.experiences, 'exp', 'experience'), ...ticked(p.projects, 'proj', 'projects')];
+}
+
 // Past this many items a Skills section is padding, however long the profile's
 // list is. The prompt aims lower (20–35); this catches the clear overshoot.
 const MAX_SKILL_ITEMS = 40;
@@ -359,6 +369,13 @@ export function validateComposition(comp, profile, match = null) {
   checkEntries(c.education, 'education', { needsBullets: false });
   checkEntries(c.extras, 'extras', { needsBullets: false });
   if ((p.education || []).length && !(c.education || []).length) fail('no_education', 'education', 'Include the education.');
+  for (const { id, kind, x } of mustIncludeEntries(p)) {
+    const has = (x.bullets || []).filter(b => str(b)).length;
+    const entry = (c[kind] || []).find(e => e.id === id);
+    const name = str(x.name) || str(x.company) || id;
+    if (!entry && (has || str(x.description))) fail('must_include', kind, `${id} (${name}) is marked must include: it has to appear.`);
+    else if (entry && (entry.bullets || []).length < Math.min(MUST_INCLUDE_BULLETS, has)) fail('must_include', kind, `${id} (${name}) is marked must include: give it at least ${Math.min(MUST_INCLUDE_BULLETS, has)} bullets.`);
+  }
   if ((p.projects || []).length && !(c.projects || []).length) fail('no_projects', 'projects', 'Include the most relevant project (or two), with 2–3 bullets each.');
 
   // ── Match ──
@@ -539,7 +556,25 @@ export function sanitizeComposition(comp, errors, profile) {
     })
   })).filter(g => g.items.length);
   if ((profile.education || []).length && !(c.education || []).length) c.education = profile.education.map(e => ({ id: `edu:${e.id}` }));
-  return { comp: c, dropped };
+  // A ticked entry the model still left out or left short gets the profile's
+  // own lines as written: true by definition, and no model call.
+  const restored = [];
+  for (const { id, kind, x } of mustIncludeEntries(profile)) {
+    const lines = (x.bullets || []).map((text, i) => ({ text: str(text), sources: [`${id}.b${i + 1}`], proves: [] })).filter(b => b.text);
+    if (!lines.length && str(x.description)) lines.push({ text: str(x.description), sources: [`${id}.d`], proves: [] });
+    if (!lines.length) continue;
+    c[kind] = c[kind] || [];
+    let entry = c[kind].find(e => e.id === id);
+    if (!entry) { entry = { id, bullets: [] }; c[kind].push(entry); }
+    const want = Math.max(1, Math.min(MUST_INCLUDE_BULLETS, lines.length));
+    for (const line of lines) {
+      if (entry.bullets.length >= want) break;
+      if (entry.bullets.some(b => (b.sources || []).includes(line.sources[0]))) continue;
+      entry.bullets.push(line);
+      restored.push(`${id}: ${line.text}`);
+    }
+  }
+  return { comp: c, dropped, restored };
 }
 
 // ── One page ──────────────────────────────────────────────────────────────────
@@ -673,8 +708,9 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
   const top = Math.max(0.5, ...rel.values());
   const newestId = (newestFirst((profile.experiences || []).filter(x => (c.experience || []).some(e => e.id === `exp:${x.id}`)))[0] || {}).id;
   const topProject = () => (c.projects || []).reduce((a, x) => (!a || (rel.get(x.id) || 0) > (rel.get(a.id) || 0) ? x : a), null);
+  const ticked = new Set(mustIncludeEntries(profile).map(t => t.id));
   const floor = (e) => {
-    if (e.id === `exp:${newestId}`) return 2;
+    if (ticked.has(e.id) || e.id === `exp:${newestId}`) return MUST_INCLUDE_BULLETS;
     const tp = topProject();
     return tp && e.id === tp.id && (rel.get(e.id) || 0) >= top * 0.3 ? 2 : 1;
   };
@@ -690,7 +726,7 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
   };
   const entryProtected = (e) => keep.has(e.id) || (e.bullets || []).some(lastProofOfRequired);
   const dropProject = (min) => {
-    const open = (c.projects || []).filter(p => !entryProtected(p));
+    const open = (c.projects || []).filter(p => !entryProtected(p) && !ticked.has(p.id));
     if ((c.projects || []).length <= min || !open.length) return false;
     const p = open.reduce((a, x) => ((rel.get(x.id) || 0) < (rel.get(a.id) || 0) ? x : a));
     trimmed.push(`project ${p.id}`);
@@ -703,6 +739,8 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
     () => dropProject(1),
     () => cheapestBullet(floor),
     () => dropProject(0),
+    // Last resort, below the floors: everything else first, ticked entries last.
+    () => cheapestBullet(e => (ticked.has(e.id) ? MUST_INCLUDE_BULLETS : 1)),
     () => cheapestBullet(() => 1)
   ];
 

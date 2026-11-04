@@ -505,12 +505,12 @@
     const titles = [];
     for (let i = 0; i < 10 && $('.tour-tooltip'); i++) {
       titles.push($('.tour-title').textContent);
-      assert($('.tour-progress').textContent === `${i + 1} / 7`, `progress ${$('.tour-progress').textContent}`);
+      assert($('.tour-progress').textContent === `${i + 1} / 8`, `progress ${$('.tour-progress').textContent}`);
       $('.tour-next').click();
       await sleep(100);
     }
-    assert(titles.length === 7, `${titles.length} steps`);
-    assert(titles[0] === 'Welcome to Resume Studio' && titles[6] === 'Generate and download', `titles ${titles.join(' | ')}`);
+    assert(titles.length === 8, `${titles.length} steps`);
+    assert(titles[0] === 'Welcome to Resume Studio!' && titles[4] === 'Add and edit anything' && titles[5] === 'Choose Must include carefully' && titles[7] === 'Generate and download', `titles ${titles.join(' | ')}`);
     assert($('#tab-profile').getAttribute('aria-selected') === 'true', 'did not return to the Profile tab');
     assert(store.onboarding.seen === true && store.onboarding.skipped === false, 'tour completion not saved');
   });

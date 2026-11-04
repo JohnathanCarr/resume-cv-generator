@@ -51,8 +51,8 @@ test('API key status text: verified, rejected, unverified note, or just saved', 
   assert.match(settings.describeApiKeyStatus().text, /· not verified yet$/);
 });
 
-test('the tour has seven steps; each targeted step names an element', () => {
-  assert.equal(TOUR_STEPS.length, 7);
+test('the tour has eight steps; each targeted step names an element', () => {
+  assert.equal(TOUR_STEPS.length, 8);
   assert.equal(TOUR_STEPS[0].target, null);
   for (const step of TOUR_STEPS.slice(1)) {
     assert.ok(typeof step.target === 'string' && step.target.length, `step "${step.title}" has no target`);

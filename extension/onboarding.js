@@ -179,12 +179,12 @@ export const OnboardingTour = { start, stop: () => finish(true), isActive: () =>
 export const TOUR_STEPS = [
     {
         target: null,
-        title: 'Welcome to Resume Studio',
+        title: 'Welcome to Resume Studio!',
         body: `<p>Generate a tailored resume and cover letter for every job you apply to. It takes three steps:</p>
                <ol>
-                 <li><strong>Upload your current resume</strong> to fill in your profile automatically.</li>
-                 <li><strong>Review and complete</strong> your profile — list every skill and experience you have, not just the ones on one resume.</li>
-                 <li><strong>Paste a job description</strong> and generate.</li>
+                 <li><strong>Upload your current resume</strong> — fills in your profile automatically.</li>
+                 <li><strong>Review and complete</strong> — treat your profile like a library: list every skill, project and experience you have, not just the ones on one resume.</li>
+                 <li><strong>Paste a job description</strong> — happy generating!</li>
                </ol>
                <p>Generating needs an OpenAI API key (added in Settings); your profile and documents never leave this browser except to OpenAI when you generate.</p>`
     },
@@ -206,14 +206,21 @@ export const TOUR_STEPS = [
         tab: 'profile',
         title: 'List every skill you have',
         placement: 'bottom',
-        body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match.</p>'
+        body: '<p>Your profile is the complete picture. Each generated resume picks the skills and experiences that fit the job, so the more you list here, the better the match. Bigger is better.</p>'
     },
     {
         target: '#add-experience',
         tab: 'profile',
         title: 'Add and edit anything',
         placement: 'bottom',
-        body: '<p>Every section has an Add button and every entry is editable. Tick <strong>Must include</strong> on an experience or project to tell the generator it matters most; it is a strong hint, not a guarantee.</p>'
+        body: '<p>Every section has an Add button and every entry is editable.</p>'
+    },
+    {
+        target: '.must-include-label',
+        tab: 'profile',
+        title: 'Choose Must include carefully',
+        placement: 'left',
+        body: '<p>Tick <strong>Must include</strong> on the jobs and projects you most want on your resume. They always appear, with at least two bullets, whatever the posting asks for.</p><p>Resumes stay to one ATS-friendly page, so every tick takes room from something else. Pick only your strongest one or two, such as your best project. Tick too many and they crowd out what fits the job, or push the resume past one page.</p><p>Leave the rest unticked and the generator chooses what fits each posting.</p>'
     },
     {
         target: '#job-text',

@@ -1,14 +1,14 @@
 # Chrome Web Store listing
 
 Everything the Developer Dashboard asks for, in the order it asks. Paste from here.
-Screenshots (`screenshot-*.jpg`, 1280×800, no alpha as the store requires) are rendered by `scripts/screenshots.sh`; the icon comes from `store/icon.svg`.
+Screenshots (`screenshot-*.jpg`: profile, generate, match report, keyword check; 1280×800, no alpha as the store requires) are rendered by `scripts/screenshots.sh`; the icon comes from `store/icon.svg`.
 
 ## Store listing
 
 **Name:** Resume Studio
 
 **Summary** (132 characters max):
-Tailors your own resume to each job posting for ATS, shows every change, and writes the cover letter. Bring your own OpenAI key.
+Writes a one-page, ATS-friendly resume and cover letter for each job from your own profile. Bring your own OpenAI key.
 
 **Category:** Productivity → Workflow & Planning
 
@@ -16,26 +16,28 @@ Tailors your own resume to each job posting for ATS, shows every change, and wri
 
 **Description:**
 
-Resume Studio tailors your own resume to a specific job for applicant tracking systems (ATS), and writes a matching cover letter, using your own OpenAI API key.
+Resume Studio writes a one-page resume and a matching cover letter for each job you apply to, from your own profile, built for applicant tracking systems (ATS). It uses your own OpenAI API key.
 
 HOW IT WORKS
-1. Upload your current resume (PDF). It is parsed in the browser — no upload anywhere — to fill in your profile: education, skills, experience, projects, certifications. Review and add anything missing.
+1. Upload your current resume (PDF). It is parsed in the browser, with no upload anywhere, to fill in your profile: education, skills, experience, projects, certifications. Then treat your profile like a library: add every skill, project and experience you have, not just the ones on one resume.
 2. Paste a job posting.
-3. Generate. The posting is read against your profile first: every requirement is matched to the evidence you actually have, and the posting's key ATS keywords are collected.
+3. Generate. The posting is read against your profile, the company is researched, and the resume is written from whatever fits this job best.
 
 WHAT YOU GET
-• Your resume, tailored, not replaced: a handful of targeted edits to the resume you uploaded. The posting's exact terms where your lines already show the skill, a more relevant bullet, project or certification from your profile swapped in, confirmed skills added. Everything else stays word for word; jobs and education never change; nothing is invented.
-• Every change highlighted: edits are green in the preview (hover for the original wording), one click shows your original PDF, and the key-keyword score shows the gain (e.g. 3/5 → 5/5). The downloaded PDF has no highlights.
-• Always one page: the page is measured before any edit is made; if space runs out, the least relevant items go, never half a sentence.
-• A keyword check before writing: the posting's key skills and tools (at most 8) that your profile never mentions are listed for you to confirm. Tick the ones you have and they are added to that document only; your profile doesn't change.
-• Cover letters that sound like a person: 250–350 words, specific, every claim traceable to your profile or the posting. Researches the employer with a few web searches and cites each fact.
-• Real PDFs, not images, so ATS software can read them.
+• A resume written for this job: a summary aimed at the role, skills in the posting's wording, and the jobs and projects that matter most for it, with bullets reworded to lead with what the posting cares about.
+• True to your profile: every line cites the profile lines it came from, and the code checks that it adds no number, tool or credential they don't have. Your job titles, employers, dates and education are copied from your profile, never rewritten.
+• You stay in control: tick Must include on your strongest job or project and it always appears. Hover any highlighted words in the preview to see your original wording, or switch to your original PDF with one click. The downloaded PDF has no highlights.
+• A match report: each requirement in the posting and where your profile shows it, plus the key keywords you have and the ones you don't. Gaps are reported, never filled in for you.
+• Built for one page: the page is measured and the least useful bullets go first. The preview matches the PDF line for line, and if a resume still runs over, it tells you.
+• A keyword check before writing: the posting's key skills and tools that your profile never mentions (at most 8) are listed for you to confirm. Tick the ones you have and they are added to that document only; your profile doesn't change.
+• Cover letters that sound like a person: 250–350 words, specific, every claim traceable to your profile, the posting or the company research.
+• Real PDFs, not images, in a clean single-column layout that ATS software can read.
 
 YOUR DATA
-Your profile, uploaded resume and documents live in this browser's extension storage. The extension talks to exactly one outside service: OpenAI's API, with your key, when you click Generate. There are no accounts, no servers of ours, no analytics.
+Your profile, uploaded resume and documents live in this browser's extension storage. The extension talks to exactly one outside service: OpenAI's API, with your key, when you click Generate. That includes OpenAI's web search, which looks up the employer using the company name, role and part of the posting. There are no accounts, no servers of ours, no analytics.
 
 YOU NEED
-• An OpenAI API key (platform.openai.com). You pay OpenAI directly for usage — typically a few cents up to about $0.20 per document, including the company research — and OpenAI's usage policies apply. Resume Studio itself is free and open source: github.com/JohnathanCarr/resume-cv-generator
+• An OpenAI API key (platform.openai.com). You pay OpenAI directly for usage, typically 5–15 cents per document, and OpenAI's usage policies apply. Resume Studio itself is free and open source: github.com/JohnathanCarr/resume-cv-generator
 • A few minutes to read what it writes. AI can get things wrong: check every resume and cover letter before you send it.
 
 ## Privacy

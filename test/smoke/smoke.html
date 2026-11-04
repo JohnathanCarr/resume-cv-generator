@@ -33,8 +33,7 @@
     profile,
     uploadedResume: { name: 'resume_sans_title_first.pdf', size: bytes.length, uploadedAt: '2026-09-01T00:00:00.000Z', dataBase64: btoa(binary) },
     onboarding: { seen: true, installedAt: '2026-09-01T00:00:00.000Z', completedAt: '2026-09-01T00:00:00.000Z' },
-    apiKey: { value: 'sk-smoke-test', last4: 'test', savedAt: '2026-09-01T00:00:00.000Z', verifiedAt: '2026-09-01T00:00:00.000Z' },
-    researchEnabled: false
+    apiKey: { value: 'sk-smoke-test', last4: 'test', savedAt: '2026-09-01T00:00:00.000Z', verifiedAt: '2026-09-01T00:00:00.000Z' }
   };
   const session = {};
   const calls = { downloads: [], tabs: [] };
@@ -61,6 +60,8 @@
       keywords: [{ term: 'Go', importance: 'core' }, ...MISSING.map(term => ({ term, importance: 'core' }))]
     }),
     // The composer: the profile's own lines, each citing itself.
+    // Company research (Responses API): the brief is cached after the first run.
+    company_brief: () => ({ found: true, what_they_build: 'Scheduling software for clinics.', what_they_care_about: [], current_priorities: [], challenges_or_context: [], notes: '' }),
     resume_composition: () => {
       const p = store.profile;
       const entry = (kind) => (x) => ({ id: `${kind}:${x.id}`, bullets: (x.bullets || []).map((text, i) => ({ text, sources: [`${kind}:${x.id}.b${i + 1}`], proves: [] })) });
@@ -83,7 +84,7 @@
   window.fetch = async (url, init) => {
     if (!String(url).startsWith('https://api.openai.com/')) return realFetch(url, init);
     const body = JSON.parse(init.body);
-    const name = body.response_format?.json_schema?.name;
+    const name = body.response_format?.json_schema?.name || body.text?.format?.name;
     stub.requests.push(name || String(url));
     stub.bodies.push(body);
     await new Promise(r => setTimeout(r, 300));   // a model call takes time
@@ -93,7 +94,11 @@
     }
     const answer = answers[name];
     if (!answer) return new Response(JSON.stringify({ error: { message: `No stub for ${name || url}` } }), { status: 400 });
-    return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(answer()) } }], usage: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const text = JSON.stringify(answer());
+    const reply = body.text?.format
+      ? { output_text: text, output: [{ type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text }] }], usage: { input_tokens: 1, output_tokens: 1 } }
+      : { choices: [{ finish_reason: 'stop', message: { content: text } }], usage: {} };
+    return new Response(JSON.stringify(reply), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
 
   // ── Console capture ─────────────────────────────────────────────────────
@@ -246,6 +251,10 @@
     const line = infos.find(l => l.startsWith('[timing] resume done'));
     assert(line && /compose \d/.test(line) && /read posting \d/.test(line), `timing line missing: ${line}`);
     assert(stub.requests.includes('resume_composition'), `the composer was not called: ${stub.requests.join(', ')}`);
+    // Research always runs, and there is no way to turn it off.
+    assert(stub.requests.includes('company_brief'), `the company was not researched: ${stub.requests.join(', ')}`);
+    assert(!document.getElementById('research-company'), 'the research toggle is still there');
+    assert(Object.keys(store.companyBriefs || {}).includes('northwind labs'), 'the brief was not cached');
     const report = $('#resume-match .match-report');
     assert(report && !$('#resume-match').classList.contains('hidden'), 'no match report');
     assert(report.textContent.includes('Backend services in Go') && report.textContent.includes('Quokka DB'), `match report incomplete: ${report.textContent.slice(0, 200)}`);
@@ -331,6 +340,8 @@
     await waitFor('letter to finish', () => progressState() === 'done', 30000);
     await waitFor('letter text', () => /Northwind Labs/.test($('.letter-content')?.textContent || ''));
     assert(!document.getElementById('download-pdf').disabled, 'Cover letter PDF still disabled');
+    // The resume's brief is reused for the same company: no second search.
+    assert(stub.requests.filter(n => n === 'company_brief').length === 1, `searched again: ${stub.requests.join(', ')}`);
     // Ticked skills go on this document only; the profile stays as it was.
     const sent = JSON.stringify(stub.bodies.at(-1));
     assert(MISSING.every(k => sent.includes(k)), 'ticked keywords not sent with the letter');

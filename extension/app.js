@@ -39,7 +39,6 @@ class ResumeStudioApp {
         this.onboarding = null;     // { seen, installedAt, completedAt?, checklistDismissed?, firstGeneratedAt? }
         this.apiKey = null;         // { value, last4, savedAt, verifiedAt?, verifyError? } — value is never rendered
         this.companyBriefs = {};    // { [companyLower]: brief } — cached research, expires after 30 days
-        this.researchEnabled = true;
         this.lastApiCall = null;
         this.lastResume = null;      // { resumeContent, jobText, company, role, generatedAt } — restored into the preview on load
         this.baselineResume = null;  // frozen snapshot of the uploaded resume: page layout, Original view, "before" coverage (generation/baseline.js)
@@ -98,14 +97,13 @@ class ResumeStudioApp {
     // Data Management
     async loadData() {
         try {
-        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'researchEnabled', 'lastResume', 'baselineResume']);
+        const result = await chrome.storage.local.get(['profile', 'uploadedResume', 'onboarding', 'apiKey', 'companyBriefs', 'lastResume', 'baselineResume']);
         this.onboarding = result.onboarding || null;
         this.apiKey = result.apiKey || null;
         this.companyBriefs = this.pruneBriefs(result.companyBriefs || {});
-        this.researchEnabled = result.researchEnabled !== false;
         this.lastResume = result.lastResume && result.lastResume.resumeContent ? result.lastResume : null;
         this.baselineResume = result.baselineResume || null;
-        chrome.storage.local.remove(['reuseResume', 'ignoredKeywords']).catch?.(() => {}); // retired settings
+        chrome.storage.local.remove(['reuseResume', 'ignoredKeywords', 'researchEnabled']).catch?.(() => {}); // retired settings
         if (result.uploadedResume) {
             this.uploadedResume = result.uploadedResume;
         }
@@ -181,16 +179,6 @@ class ResumeStudioApp {
                 next.focus();
             });
         });
-
-        // Company research toggle
-        const researchToggle = document.getElementById('research-company');
-        if (researchToggle) {
-            researchToggle.checked = this.researchEnabled;
-            researchToggle.addEventListener('change', (e) => {
-                this.researchEnabled = e.target.checked;
-                chrome.storage.local.set({ researchEnabled: this.researchEnabled }).catch?.(() => {});
-            });
-        }
 
         // Resume upload
         document.getElementById('upload-resume')?.addEventListener('click', () => {
@@ -803,8 +791,8 @@ class ResumeStudioApp {
         this.lastApiCall = { request: body, timestamp: new Date().toISOString() };
         const { composeResume } = await this.generation();
         // Written from the whole profile, with the company brief (cached, or
-        // one search when research is on) deciding emphasis.
-        const result = await composeResume(this.apiKey.value, { ...body, research: this.researchEnabled, briefCache: this.companyBriefs });
+        // one search) deciding emphasis.
+        const result = await composeResume(this.apiKey.value, { ...body, research: true, briefCache: this.companyBriefs });
         if (result.metadata?.briefSource === 'research' && result.companyBrief?.company) await this.cacheBrief(result.companyBrief);
         return result;
     }

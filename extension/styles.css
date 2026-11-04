@@ -382,7 +382,7 @@ select {
     background-repeat: no-repeat;
 }
 
-/* Square checkboxes (research toggle, Must include, keyword chips) */
+/* Square checkboxes (Must include, keyword chips) */
 input[type="checkbox"] {
     appearance: none;
     width: 18px;
@@ -655,19 +655,6 @@ input[type="checkbox"]:checked::after { opacity: 1; }
     padding: 12px 16px;
     font-size: 0.9375rem;
 }
-
-.research-toggle {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    margin-top: var(--space-md);
-    font-size: 0.875rem;
-    cursor: pointer;
-}
-
-.research-toggle input { margin-top: 2px; }
-
-.research-hint { color: var(--text-label); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SECTION 12: GENERATION PROGRESS STRIP (progress.js)

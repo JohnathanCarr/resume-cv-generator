@@ -181,6 +181,9 @@ async function main() {
   // console, which is noise here.
   const { composeResume, generateCoverLetter, createBaseline } = await import(pathToFileURL(PIPELINE).href);
   const { scoreResumeV2 } = await import(pathToFileURL(path.join(ROOT, 'scoreV2.mjs')).href);
+  const { watch, documentCost, summariseCosts } = await import(pathToFileURL(path.join(ROOT, 'cost.mjs')).href);
+  const meter = watch();
+  const costs = { resume: [], cover: [] };
   const judge = arg('judge', false) ? (await import(pathToFileURL(path.join(ROOT, 'judge.mjs')).href)).judgeResume : null;
   const quiet = (fn) => async (...args) => {
     const { log, warn } = console;
@@ -204,6 +207,8 @@ async function main() {
       if (!only || only === 'resume') {
         const resumeBody = { ...body, baseline };
         const r = await call(quiet(composeResume), key, resumeBody);
+        const cost = documentCost(meter.take());
+        if (r.ok) costs.resume.push(cost);
         const scored = r.ok ? scoreResumeWith(scoreResumeV2, { result: r.data, profile: p.profile, jobText: j.text }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
         if (r.ok && judge) {
           try { addJudge(scored, await judge(key, { resume: r.data.resumeContent, profile: p.profile, jobText: j.text })); }
@@ -211,23 +216,33 @@ async function main() {
         }
         const reuse = !r.ok ? ''
           : `  core ${scored.info.coverage}  req ${scored.info.requirements}  fill ${scored.info.pageFill || '-'}  repairs ${r.data.metadata.repairs} dropped ${r.data.metadata.rejected.length} trimmed ${r.data.metadata.page.trimmed.length}${scored.info.judge ? `  judge ${['relevance', 'tailoring', 'specificity', 'readability', 'credibility'].map(d => scored.info.judge[d]).join('/')}` : ''}`;
-        results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, ...scored });
-        fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored }, null, 2));
-        console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
+        results.push({ kind: 'resume', profile: p.id, job: j.id, ms: r.ms, usd: cost.usd, ...scored });
+        fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__resume.json`), JSON.stringify({ request: resumeBody, response: r.data, scored, cost }, null, 2));
+        console.log(`resume  ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  $${cost.usd.toFixed(3)}  ${tag}${reuse}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
       }
 
       if (!only || only === 'cover') {
         const r = await call(quiet(generateCoverLetter), key, body);
+        const cost = documentCost(meter.take());
+        if (r.ok) costs.cover.push(cost);
         const scored = r.ok ? scoreCoverLetter({ coverLetter: r.data.coverLetter, profile: p.profile, jobText: j.text, company: j.company, unsourcedClaims: r.data.unsourcedClaims }) : { score: 0, checks: {}, fails: [r.data.error || `HTTP ${r.status}`], info: {} };
         if (r.ok && r.data.metadata) scored.info.searches = r.data.metadata.searches;
-        results.push({ kind: 'cover', profile: p.id, job: j.id, ms: r.ms, ...scored });
-        fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__cover.json`), JSON.stringify({ request: body, response: r.data, scored }, null, 2));
-        console.log(`cover   ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  ${tag}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
+        results.push({ kind: 'cover', profile: p.id, job: j.id, ms: r.ms, usd: cost.usd, ...scored });
+        fs.writeFileSync(path.join(outDir, `${p.id}__${j.id}__cover.json`), JSON.stringify({ request: body, response: r.data, scored, cost }, null, 2));
+        console.log(`cover   ${fmt(scored.score)}  ${String(r.ms).padStart(6)}ms  $${cost.usd.toFixed(3)}  ${tag}${scored.fails.length ? '  ✗ ' + scored.fails.join('; ') : ''}`);
       }
     }
   }
 
-  const summary = { ...summarise(results, label), stamp, rubric: 'v2', judge: !!judge, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
+  // What each document costs the user (the judge's calls are not counted).
+  const costSummary = {};
+  for (const [kind, list] of Object.entries(costs)) if (list.length) costSummary[kind] = summariseCosts(list);
+  console.log('\n── Cost per document ──');
+  for (const [kind, c] of Object.entries(costSummary)) {
+    console.log(`${kind.padEnd(7)} n=${c.n}  first for a company: median $${c.medianUsd.toFixed(3)}, max $${c.maxUsd.toFixed(3)}  |  saved brief: median $${c.medianNoSearchUsd.toFixed(3)}, max $${c.maxNoSearchUsd.toFixed(3)}`);
+    console.log(`        by step: ${Object.entries(c.medianByStep).map(([k, v]) => `${k} $${v.toFixed(3)}`).join('  ')}`);
+  }
+  const summary = { ...summarise(results, label), cost: costSummary, stamp, rubric: 'v2', judge: !!judge, profiles: profiles.map(p => p.id), jobs: jobs.map(j => j.id) };
 
   fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify({ summary, results }, null, 2));
   if (arg('baseline', false)) {

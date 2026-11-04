@@ -17,6 +17,7 @@ The key comes from `OPENAI_API_KEY` or `test/eval/.env`. Full outputs land in
 `runs/<timestamp>-<label>/` (gitignored); `baselines/` holds committed
 summaries to compare against.
 
+- `cost.mjs` — what each document costs the user, from the usage OpenAI reports on every response and the prices in that file (update them with the model). The judge's calls are left out. Printed after each run and saved in the summary: typical and worst case, with and without a saved company brief, and by step.
 - `profiles/` — synthetic profiles (committed) and `profiles/local/` for real ones (gitignored)
 - `jobs/` — postings; line 2 is `Company · Location`, which `run.js` uses to know the company
 - `scoreV2.mjs` — **resume rubric v2** (default; `design/tailoring-v2.md`).

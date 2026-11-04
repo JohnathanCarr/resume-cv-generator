@@ -66,7 +66,7 @@
       const entry = (kind) => (x) => ({ id: `${kind}:${x.id}`, bullets: (x.bullets || []).map((text, i) => ({ text, sources: [`${kind}:${x.id}.b${i + 1}`] })) });
       return {
         summary: { text: p.summary || '', sources: ['profile:summary'] },
-        skill_groups: [{ label: 'Skills', items: (p.skills || []).slice(0, 8) }],
+        skill_groups: [{ label: 'Skills', items: p.skills || [] }],
         experience: (p.experiences || []).map(entry('exp')),
         projects: (p.projects || []).filter(x => (x.bullets || []).length).map(entry('proj')),
         education: (p.education || []).map(e => ({ id: `edu:${e.id}` })),

@@ -3,7 +3,7 @@
 // schema, the validator's rules, and the conversion to a resume document.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges, entryRelevance } from '../../extension/generation/compose.js';
+import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges, entryRelevance, isScreeningSkill, minSkillItems } from '../../extension/generation/compose.js';
 import { makeLayout } from '../../extension/generation/layout.js';
 import { previewResumes } from '../../extension/generation/highlight.js';
 import { resumeDocToSchema } from '../../extension/generation/baseline.js';
@@ -326,4 +326,28 @@ test('acronym pairs are asked for only when the posting uses both forms', () => 
   assert.ok(!validateComposition(c, profile, one).warnings.some(w => w.code === 'acronym'));
   const both = { ...match, keywords: match.keywords.map(k => (k.term === 'SEO' ? { ...k, bothForms: true } : k)) };
   assert.ok(validateComposition(c, profile, both).warnings.some(w => w.code === 'acronym'));
+});
+
+test('work authorization listed as a skill is hidden and rejected', () => {
+  const p = { ...profile, skills: [...profile.skills, 'U.S. Citizenship'], clearance: 'Active Secret' };
+  assert.ok(isScreeningSkill('U.S. Citizenship', p) && isScreeningSkill('Active Secret', p));
+  assert.ok(!isScreeningSkill('Docker', p) && !isScreeningSkill('Security', { skills: [] }));
+  assert.ok(!renderProfileForCompose(p).includes('U.S. Citizenship'), 'the model does not see it as a skill');
+  const c = good();
+  c.skill_groups.push({ label: 'Work Authorization', items: ['U.S. Citizenship'] });
+  const { errors } = validateComposition(c, p, match);
+  assert.ok(errors.some(e => e.code === 'skill' && e.item === 'U.S. Citizenship'), 'rejected even though it is in the skills list');
+  assert.ok(!sanitizeComposition(c, errors, p).comp.skill_groups.some(g => g.label === 'Work Authorization'));
+});
+
+test('a thin Skills section goes back for repair, scaled to the profile', () => {
+  const many = { ...profile, skills: Array.from({ length: 40 }, (_, i) => `Tool${i}`) };
+  assert.equal(minSkillItems(many), 12, 'capped');
+  assert.equal(minSkillItems(profile), 2, 'a short list is not padded');
+  assert.equal(minSkillItems({ skills: ['U.S. Citizenship'] }), 0);
+  const c = good();
+  c.skill_groups = [{ label: 'Tools', items: ['Tool1', 'Tool2', 'Tool3'] }];
+  assert.ok(codes(validateComposition(c, many, { ...match, keywords: [], requirements: [] })).includes('thin_skills'));
+  c.skill_groups = [{ label: 'Tools', items: Array.from({ length: 12 }, (_, i) => `Tool${i}`) }];
+  assert.ok(!codes(validateComposition(c, many, { ...match, keywords: [], requirements: [] })).includes('thin_skills'));
 });

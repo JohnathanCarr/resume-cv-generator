@@ -59,6 +59,25 @@ export function sourceIndex(profile) {
   return index;
 }
 
+// Work authorization or clearance sitting in the skills list ("U.S.
+// Citizenship", often from an older keyword check). Stated in the summary,
+// never as a skill. Pure.
+export function isScreeningSkill(skill, profile) {
+  const s = normalizeTerm(skill);
+  if (!s) return false;
+  if (/\b(citizen|citizenship|work authorization|work authorisation|visa|sponsorship|security clearance|clearance)\b/.test(s)) return true;
+  const p = profile || {};
+  return [p.workAuthorization, p.clearance].some(f => corpusHas(` ${normalizeTerm(f || '')} `, s));
+}
+
+// Below this many items a Skills section is clearly thin for this profile.
+// Past about 12 the choice is the model's; a short skills list is not padded.
+export function minSkillItems(profile) {
+  const p = profile || {};
+  const usable = (p.skills || []).filter(s => !isScreeningSkill(s, p)).length;
+  return Math.min(12, Math.floor(usable * 0.6));
+}
+
 // The profile with every citable line tagged, for the compose prompt.
 export function renderProfileForCompose(profile) {
   const p = profile || {};
@@ -67,7 +86,8 @@ export function renderProfileForCompose(profile) {
   if (str(p.location)) lines.push(`[profile:location] Location: ${str(p.location)}`, '');
   if (str(p.workAuthorization)) lines.push(`[profile:workAuthorization] Work authorization: ${str(p.workAuthorization)}`, '');
   if (str(p.clearance)) lines.push(`[profile:clearance] Security clearance: ${str(p.clearance)}`, '');
-  if ((p.skills || []).length) lines.push('SKILLS', (p.skills || []).map(s => `[skill:${str(s)}]`).join(' '), '');
+  const skills = (p.skills || []).filter(s => !isScreeningSkill(s, p));
+  if (skills.length) lines.push('SKILLS', skills.map(s => `[skill:${str(s)}]`).join(' '), '');
   const dates = (x) => [str(x.start), str(x.end)].filter(Boolean).join(' – ');
   if ((p.experiences || []).length) {
     lines.push('EXPERIENCE (newest first)');
@@ -283,7 +303,9 @@ export function validateComposition(comp, profile, match = null) {
     for (const item of g.items || []) {
       const paren = item.match(/^(.*?)\s*\((.*)\)$/);
       const forms = (paren || [null, item]).slice(1).filter(Boolean).map(normalizeTerm);
-      if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(skillSource, f) || aliases.has(f))) {
+      if (forms.some(f => isScreeningSkill(f, p))) {
+        errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not a skill: work authorization and clearance go in the summary.` });
+      } else if (!forms.some(f => corpusHas(skillCorpus, f) || corpusHas(skillSource, f) || aliases.has(f))) {
         errors.push({ code: 'skill', target: `skill_groups[${gi}]`, item, message: `"${item}" is not in the profile.` });
       } else if (paren && (forms[0] === forms[1] || isExpansion(paren[1], paren[2]))) {
         // "REST APIs (Representational State Transfer APIs)", "Typescript (TypeScript)": one name is enough.
@@ -297,6 +319,9 @@ export function validateComposition(comp, profile, match = null) {
       seenSkills.add(key);
     }
   }
+  const itemCount = (c.skill_groups || []).reduce((n, g) => n + (g.items || []).length, 0);
+  const minItems = minSkillItems(p);
+  if (itemCount < minItems) fail('thin_skills', 'skill_groups', `Skills lists only ${itemCount} items. List every skill the posting asks for plus the profile's real tools from the same stack (at least ${minItems}), merging duplicates and leaving out tools unrelated to this job.`);
 
   // Entries: real ids, each once; jobs and projects carry bullets.
   const checkEntries = (list, kind, { needsBullets }) => {

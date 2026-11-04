@@ -10,6 +10,7 @@
     open http://localhost:8790/store/screenshots.html#profile
     open http://localhost:8790/store/screenshots.html#generate
     open http://localhost:8790/store/screenshots.html#keywords
+    open http://localhost:8790/store/screenshots.html#match
 
   Capture at 1280×800 (the store's screenshot size). See scripts/screenshots.sh.
 -->
@@ -57,7 +58,7 @@
     document.getElementById('job-text').value = lastResume.jobText;
     if (scene === 'keywords') {
       const list = document.getElementById('keywords-list');
-      ['Kubernetes', 'Terraform', 'incident response', 'GraphQL', 'Datadog', 'Feature flags'].forEach((kw, i) => {
+      ['Kafka', 'Prometheus', 'incident response', 'GraphQL', 'Envoy', 'Feature flags'].forEach((kw, i) => {
         const label = document.createElement('label');
         label.className = 'keyword-chip';
         const input = document.createElement('input');
@@ -69,7 +70,9 @@
       document.getElementById('keywords-modal').classList.remove('hidden');
     } else {
       const status = document.getElementById('generation-status');
-      status.textContent = 'Resume tailored with 3 edits. Key ATS keywords: 3 of 5 → 4 of 5.';
+      const cov = lastResume.coverage;
+      status.textContent = `Resume written for this posting from your profile. ATS Keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`;
+      if (scene === 'match') document.querySelector('#resume-match details')?.setAttribute('open', '');
       status.className = 'status-message status-success';
     }
   }, 400);

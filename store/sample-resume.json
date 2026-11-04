@@ -1,9 +1,12 @@
 {
   "resumeContent": {
-    "summary": "Full-stack software engineer with 3+ years building high-throughput distributed systems in Go and TypeScript.",
+    "summary": "Backend engineer with 3+ years building distributed systems in Go and TypeScript; shipped a reliable payments API component serving 40M daily requests. Kubernetes migration experience and observability work through an open-source tracing dashboard backed by ClickHouse.",
     "skills": [
-      "Languages: Go, TypeScript, Python, Rust, SQL",
-      "Infrastructure & Tools: Kubernetes, Terraform, gRPC, Docker, Observability, CI/CD, PostgreSQL, ClickHouse, Node.js, React, TDD"
+      "Backend: Go, TypeScript, Node.js, gRPC, SQL",
+      "Infrastructure: Kubernetes, Terraform, Docker, CI/CD",
+      "Observability & Data: Observability, ClickHouse, PostgreSQL",
+      "Engineering: TDD",
+      "Frontend: React"
     ],
     "education": [
       {
@@ -37,8 +40,7 @@
         "location": "San Francisco, CA",
         "bullets": [
           "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
-          "Led migration and Kubernetes upgrade of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
-          "Mentored two interns who converted to full-time offers."
+          "Led zero-downtime migration of 12 microservices from Kubernetes 1.21 to 1.28."
         ]
       },
       {
@@ -56,72 +58,166 @@
         "name": "Latticework | Open-source tracing dashboard",
         "link": null,
         "bullets": [
-          "React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars."
-        ]
-      },
-      {
-        "name": "Pantry | Rust CLI for recipe scaling",
-        "link": null,
-        "bullets": [
-          "Parses 30+ unit formats and handles fractional conversions with property-based tests."
+          "Built an open-source tracing dashboard.",
+          "Implemented a React and TypeScript front end over a ClickHouse backend; the project earned 1.2K GitHub stars."
         ]
       }
     ],
     "programs": [
-      "AWS Certified Solutions Architect – Associate – Amazon Web Services (Mar 2024)",
-      "President – Women in Computing at UT Austin (Sep 2024 - Present)"
+      "AWS Certified Solutions Architect – Associate – Amazon Web Services (Mar 2024)"
+    ],
+    "extraTypes": [
+      "certification"
+    ],
+    "sectionOrder": [
+      "experience",
+      "projects",
+      "education",
+      "extras"
     ]
   },
   "tailored": {
     "name": "Maria Lopez-Garcia",
     "contact": "Email: maria.lopez@example.com\nPhone: (512) 555-0199",
     "location": "Austin, TX",
-    "summary": "Full-stack software engineer with 3+ years building high-throughput distributed systems in Go and TypeScript.",
+    "summary": "Backend engineer with 3+ years building distributed systems in Go and TypeScript; shipped a reliable payments API component serving 40M daily requests. Kubernetes migration experience and observability work through an open-source tracing dashboard backed by ClickHouse.",
+    "summarySources": [
+      "profile:summary",
+      "exp:3.b1",
+      "exp:3.b2",
+      "proj:5.d",
+      "proj:5.b1",
+      "skill:ClickHouse",
+      "skill:Observability"
+    ],
     "skills": [
       "Go",
       "TypeScript",
-      "Python",
-      "Rust",
+      "Node.js",
+      "gRPC",
       "SQL",
       "Kubernetes",
       "Terraform",
-      "gRPC",
       "Docker",
-      "Observability",
       "CI/CD",
-      "PostgreSQL",
+      "Observability",
       "ClickHouse",
-      "Node.js",
-      "React",
-      "TDD"
+      "PostgreSQL",
+      "TDD",
+      "React"
     ],
     "skillGroups": [
       {
         "id": "skills:1",
-        "label": "Languages",
+        "label": "Backend",
         "items": [
           "Go",
           "TypeScript",
-          "Python",
-          "Rust",
+          "Node.js",
+          "gRPC",
           "SQL"
         ]
       },
       {
         "id": "skills:2",
-        "label": "Infrastructure & Tools",
+        "label": "Infrastructure",
         "items": [
           "Kubernetes",
           "Terraform",
-          "gRPC",
           "Docker",
+          "CI/CD"
+        ]
+      },
+      {
+        "id": "skills:3",
+        "label": "Observability & Data",
+        "items": [
           "Observability",
-          "CI/CD",
-          "PostgreSQL",
           "ClickHouse",
-          "Node.js",
-          "React",
+          "PostgreSQL"
+        ]
+      },
+      {
+        "id": "skills:4",
+        "label": "Engineering",
+        "items": [
           "TDD"
+        ]
+      },
+      {
+        "id": "skills:5",
+        "label": "Frontend",
+        "items": [
+          "React"
+        ]
+      }
+    ],
+    "experiences": [
+      {
+        "title": "Software Engineer II",
+        "company": "Stripe",
+        "start": "Jun 2023",
+        "end": "Present",
+        "location": "San Francisco, CA",
+        "id": "exp:3",
+        "bullets": [
+          "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
+          "Led zero-downtime migration of 12 microservices from Kubernetes 1.21 to 1.28."
+        ],
+        "bulletIds": [
+          "exp:3.c1",
+          "exp:3.c2"
+        ],
+        "bulletSources": [
+          [
+            "exp:3.b1"
+          ],
+          [
+            "exp:3.b2"
+          ]
+        ]
+      },
+      {
+        "title": "Software Engineering Intern",
+        "company": "Datadog",
+        "start": "May 2022",
+        "end": "Aug 2022",
+        "location": "New York, NY",
+        "id": "exp:4",
+        "bullets": [
+          "Built a Go service to deduplicate log ingestion streams, reducing storage costs by $180K annually."
+        ],
+        "bulletIds": [
+          "exp:4.c1"
+        ],
+        "bulletSources": [
+          [
+            "exp:4.b1"
+          ]
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "Latticework",
+        "description": "Open-source tracing dashboard",
+        "link": "",
+        "id": "proj:5",
+        "bullets": [
+          "Built an open-source tracing dashboard.",
+          "Implemented a React and TypeScript front end over a ClickHouse backend; the project earned 1.2K GitHub stars."
+        ],
+        "bulletIds": [
+          "proj:5.c1",
+          "proj:5.c2"
+        ],
+        "bulletSources": [
+          [
+            "proj:5.d"
+          ],
+          [
+            "proj:5.b1"
+          ]
         ]
       }
     ],
@@ -153,138 +249,52 @@
         "coursework": ""
       }
     ],
-    "experiences": [
-      {
-        "id": "exp:1",
-        "title": "Software Engineer II",
-        "company": "Stripe",
-        "start": "Jun 2023",
-        "end": "Present",
-        "location": "San Francisco, CA",
-        "description": "",
-        "bullets": [
-          "Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests.",
-          "Led migration and Kubernetes upgrade of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
-          "Mentored two interns who converted to full-time offers."
-        ],
-        "mustInclude": true,
-        "bulletIds": [
-          "exp:1.b1",
-          "exp:1.b2",
-          "exp:1.b3"
-        ]
-      },
-      {
-        "id": "exp:2",
-        "title": "Software Engineering Intern",
-        "company": "Datadog",
-        "start": "May 2022",
-        "end": "Aug 2022",
-        "location": "New York, NY",
-        "description": "",
-        "bullets": [
-          "Built a Go service to deduplicate log ingestion streams, reducing storage costs by $180K annually."
-        ],
-        "mustInclude": false,
-        "bulletIds": [
-          "exp:2.b1"
-        ]
-      }
-    ],
-    "projects": [
-      {
-        "id": "proj:1",
-        "name": "Latticework",
-        "description": "Open-source tracing dashboard",
-        "bullets": [
-          "React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars."
-        ],
-        "mustInclude": false,
-        "bulletIds": [
-          "proj:1.b1"
-        ]
-      },
-      {
-        "id": "proj:2",
-        "name": "Pantry",
-        "description": "Rust CLI for recipe scaling",
-        "bullets": [
-          "Parses 30+ unit formats and handles fractional conversions with property-based tests."
-        ],
-        "mustInclude": false,
-        "bulletIds": [
-          "proj:2.b1"
-        ]
-      }
-    ],
     "extras": [
       {
-        "id": "extra:1",
+        "id": "extra:6",
         "title": "AWS Certified Solutions Architect – Associate",
         "organization": "Amazon Web Services",
         "type": "certification",
         "start": "",
         "end": "Mar 2024",
         "description": ""
-      },
-      {
-        "id": "extra:2",
-        "title": "President",
-        "organization": "Women in Computing at UT Austin",
-        "type": "leadership",
-        "start": "Sep 2024",
-        "end": "Present",
-        "description": ""
       }
+    ],
+    "sectionOrder": [
+      "experience",
+      "projects",
+      "education",
+      "extras"
     ]
   },
   "changes": [
     {
       "id": "summary",
       "op": "rewrite",
-      "before": "Full-stack software engineer with 3+ years building distributed systems in Go and TypeScript.",
-      "after": "Full-stack software engineer with 3+ years building high-throughput distributed systems in Go and TypeScript.",
-      "reason": "High-throughput backend services"
+      "before": "Full-stack software engineer with 3+ years building distributed systems in Go and TypeScript. / Designed and shipped an idempotency layer for the payments API, cutting duplicate charges by 94% across 40M daily requests. / Led migration of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime. / Open-source tracing dashboard / React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars.",
+      "after": "Backend engineer with 3+ years building distributed systems in Go and TypeScript; shipped a reliable payments API component serving 40M daily requests. Kubernetes migration experience and observability work through an open-source tracing dashboard backed by ClickHouse.",
+      "from": true
     },
     {
-      "id": "exp:1.b2",
+      "id": "exp:3.c2",
       "op": "rewrite",
       "before": "Led migration of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
-      "after": "Led migration and Kubernetes upgrade of 12 microservices from Kubernetes 1.21 to 1.28 with zero downtime.",
-      "reason": "Kubernetes upgrades"
+      "after": "Led zero-downtime migration of 12 microservices from Kubernetes 1.21 to 1.28.",
+      "from": true
     },
     {
-      "id": "skills:2",
-      "op": "skills",
-      "before": [
-        "React",
-        "Node.js",
-        "gRPC",
-        "Kubernetes",
-        "Docker",
-        "PostgreSQL",
-        "ClickHouse",
-        "CI/CD",
-        "Observability",
-        "TDD"
-      ],
-      "after": [
-        "Kubernetes",
-        "Terraform",
-        "gRPC",
-        "Docker",
-        "Observability",
-        "CI/CD",
-        "PostgreSQL",
-        "ClickHouse",
-        "Node.js",
-        "React",
-        "TDD"
-      ],
-      "added": [
-        "Terraform"
-      ],
-      "reason": "Core infrastructure tools"
+      "id": "proj:5.c1",
+      "op": "rewrite",
+      "before": "Open-source tracing dashboard",
+      "after": "Built an open-source tracing dashboard.",
+      "from": true
+    },
+    {
+      "id": "proj:5.c2",
+      "op": "rewrite",
+      "before": "React + TypeScript front end over a ClickHouse backend; 1.2K GitHub stars.",
+      "after": "Implemented a React and TypeScript front end over a ClickHouse backend; the project earned 1.2K GitHub stars.",
+      "from": true
     }
   ],
   "coverage": {
@@ -292,7 +302,7 @@
       "found": 3,
       "total": 5,
       "missing": [
-        "Terraform",
+        "observability",
         "incident response"
       ]
     },
@@ -304,8 +314,193 @@
       ]
     }
   },
+  "matchAnalysis": {
+    "company": "Vercel",
+    "role": "Senior Backend Engineer — Infrastructure",
+    "seniority": "senior",
+    "location": "San Francisco, CA (Hybrid)",
+    "about_company": "Vercel is seeking an Infrastructure team engineer to design and operate distributed systems behind its edge network and build APIs used by millions of developers every day.",
+    "requirements": [
+      {
+        "text": "3+ years building backend services in Go or TypeScript",
+        "kind": "required",
+        "evidence": [
+          "exp:3",
+          "skill:Go",
+          "skill:TypeScript"
+        ],
+        "strength": "strong"
+      },
+      {
+        "text": "Experience operating Kubernetes in production",
+        "kind": "required",
+        "evidence": [
+          "exp:3",
+          "skill:Kubernetes"
+        ],
+        "strength": "strong"
+      },
+      {
+        "text": "Strong understanding of observability and incident response",
+        "kind": "required",
+        "evidence": [
+          "skill:Observability",
+          "proj:5"
+        ],
+        "strength": "partial"
+      },
+      {
+        "text": "Track record of shipping reliable APIs at scale",
+        "kind": "required",
+        "evidence": [
+          "exp:3"
+        ],
+        "strength": "strong"
+      },
+      {
+        "text": "Experience with PostgreSQL or ClickHouse",
+        "kind": "preferred",
+        "evidence": [
+          "skill:PostgreSQL",
+          "skill:ClickHouse",
+          "proj:5"
+        ],
+        "strength": "strong"
+      },
+      {
+        "text": "Open-source contributions",
+        "kind": "preferred",
+        "evidence": [
+          "proj:5"
+        ],
+        "strength": "strong"
+      },
+      {
+        "text": "Experience with edge or CDN infrastructure",
+        "kind": "preferred",
+        "evidence": [],
+        "strength": "none"
+      }
+    ],
+    "keywords": [
+      {
+        "term": "Go",
+        "importance": "core",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "TypeScript",
+        "importance": "core",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "Kubernetes",
+        "importance": "core",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "observability",
+        "importance": "core",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "incident response",
+        "importance": "core",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "PostgreSQL",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "ClickHouse",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "Open-source contributions",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "edge",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "CDN",
+        "importance": "supporting",
+        "alias": "Content Delivery Network",
+        "bothForms": false
+      },
+      {
+        "term": "metrics",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "tracing",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "alerting",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "API design",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      },
+      {
+        "term": "platform reliability",
+        "importance": "supporting",
+        "alias": "",
+        "bothForms": false
+      }
+    ],
+    "hard_requirements": [
+      {
+        "type": "location",
+        "text": "San Francisco, CA (Hybrid)",
+        "kind": "required",
+        "met": "no",
+        "evidence": []
+      },
+      {
+        "type": "years_experience",
+        "text": "3+ years building backend services in Go or TypeScript",
+        "kind": "required",
+        "met": "yes",
+        "evidence": [
+          "exp:3",
+          "skill:Go",
+          "skill:TypeScript"
+        ]
+      }
+    ],
+    "checks": {
+      "droppedKeywords": [],
+      "droppedEvidence": []
+    }
+  },
   "jobText": "Senior Backend Engineer — Infrastructure\nVercel · San Francisco, CA (Hybrid)\n\nAbout the role\nVercel is seeking a Senior Backend Engineer to join our Infrastructure team. You will design and operate the distributed systems behind our edge network and build the APIs used by millions of developers every day. You'll own services end to end: design, rollout, on-call, and the observability that keeps them honest.\n\nWhat you'll do\n- Design and operate high-throughput backend services in Go and TypeScript\n- Run production workloads on Kubernetes, including upgrades and capacity planning\n- Build observability (metrics, tracing, alerting) and lead incident response\n- Partner with product engineering on API design and platform reliability\n\nRequirements\n- 3+ years building backend services in Go or TypeScript\n- Experience operating Kubernetes in production\n- Strong understanding of observability and incident response\n- Track record of shipping reliable APIs at scale\n\nNice to have\n- Experience with PostgreSQL or ClickHouse\n- Open-source contributions\n- Experience with edge or CDN infrastructure\n",
   "company": "Vercel",
   "role": "Senior Backend Engineer — Infrastructure",
-  "generatedAt": "2026-10-06T00:00:00.000Z"
+  "generatedAt": "2026-11-03T00:00:00.000Z"
 }

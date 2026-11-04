@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Resume Studio",
-  "version": "1.1.0",
-  "description": "Tailors your own resume to each job posting for ATS, shows every change, and writes the cover letter. Bring your own OpenAI key.",
+  "version": "1.1.1",
+  "description": "Writes a one-page, ATS-friendly resume and cover letter for each job from your own profile. Bring your own OpenAI key.",
 
   "icons": {
     "16": "icons/icon16.png",

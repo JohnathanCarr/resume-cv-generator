@@ -4,7 +4,7 @@ Runs the generation endpoints over a small set of profiles × job postings and
 scores each output against a fixed rubric, so prompt changes can be compared.
 
 ```bash
-node test/eval/run.js --label my-change            # everything (≈30 docs, ~$1)
+node test/eval/run.js --label my-change            # everything (30 docs, about $3)
 node test/eval/run.js --profiles david --jobs 02   # one pair, quick check
 node test/eval/run.js --only cover --label x       # one document type
 node test/eval/run.js --label x --baseline         # also copy the summary to baselines/
@@ -17,6 +17,7 @@ The key comes from `OPENAI_API_KEY` or `test/eval/.env`. Full outputs land in
 `runs/<timestamp>-<label>/` (gitignored); `baselines/` holds committed
 summaries to compare against.
 
+- `cost.mjs` — what each document costs the user, from the usage OpenAI reports on every response and the prices in that file (update them with the model). The judge's calls are left out. Printed after each run and saved in the summary: typical and worst case, with and without a saved company brief, and by step.
 - `profiles/` — synthetic profiles (committed) and `profiles/local/` for real ones (gitignored)
 - `jobs/` — postings; line 2 is `Company · Location`, which `run.js` uses to know the company
 - `scoreV2.mjs` — **resume rubric v2** (default; `design/tailoring-v2.md`).

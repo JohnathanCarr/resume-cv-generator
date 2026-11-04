@@ -345,7 +345,7 @@ class ResumeStudioApp {
         if (chip) {
             chip.classList.toggle('hidden', !(cov && cov.after.total));
             if (cov && cov.after.total) {
-                chip.textContent = `Key ATS keywords ${cov.before.found}/${cov.after.total} → ${cov.after.found}/${cov.after.total}`;
+                chip.textContent = `ATS Keywords ${cov.before.found}/${cov.after.total} → ${cov.after.found}/${cov.after.total}`;
                 chip.title = cov.after.missing?.length ? `Still missing (not in your profile): ${cov.after.missing.join(', ')}` : 'Every key keyword from the posting is on your resume.';
             }
         }
@@ -815,7 +815,7 @@ class ResumeStudioApp {
         parts.push('Resume written for this posting from your profile.');
         const cov = meta.coverage;
         if (cov && cov.after.total) {
-            parts.push(`Key ATS keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
+            parts.push(`ATS Keywords: ${cov.before.found} of ${cov.after.total} → ${cov.after.found} of ${cov.after.total}.`);
         }
         if (added.length) {
             parts.push(`Added to this resume only: ${added.join(', ')}. Add them to your profile to keep them.`);

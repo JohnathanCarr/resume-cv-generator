@@ -254,6 +254,26 @@
     assert(store.onboarding.firstGeneratedAt, 'first generation not recorded');
   });
 
+  await check('preview rescales when the panel resizes, without a ResizeObserver loop', async () => {
+    const frame = $('.resume-content .resume-frame');
+    const sheet = frame.parentElement;
+    const box = $('.resume-content');
+    const loops = [];
+    const onError = e => { if (/ResizeObserver/.test(e.message)) loops.push(e.message); };
+    window.addEventListener('error', onError);
+    for (const width of ['500px', '640px', '380px', '']) {
+      box.style.width = width;
+      await sleep(150);
+      const scale = sheet.clientWidth / 816;
+      assert(Math.abs(new DOMMatrix(getComputedStyle(frame).transform).a - scale) < 0.01, `scale at ${width || 'auto'}: ${frame.style.transform}, expected ${scale.toFixed(3)}`);
+      const r = sheet.getBoundingClientRect();
+      assert(Math.abs(r.height / r.width - 11 / 8.5) < 0.02, `sheet at ${width || 'auto'} is ${Math.round(r.width)}×${Math.round(r.height)}`);
+    }
+    window.removeEventListener('error', onError);
+    errors.splice(0, errors.length, ...errors.filter(x => !/ResizeObserver/.test(x)));
+    assert(!loops.length, `${loops.length} ResizeObserver loop warning(s)`);
+  });
+
   await check('resume PDF: file name dialog, then print view', async () => {
     $('#download-resume-pdf').click();
     await waitFor('file name dialog', () => visible('filename-modal'));

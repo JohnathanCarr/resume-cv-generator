@@ -3,8 +3,9 @@
 // schema, the validator's rules, and the conversion to a resume document.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges, entryRelevance, isScreeningSkill, minSkillItems } from '../../extension/generation/compose.js';
-import { makeLayout } from '../../extension/generation/layout.js';
+import { sourceIndex, renderProfileForCompose, COMPOSE_SCHEMA, validateComposition, toResumeDoc, namedTerms, numbersIn, normalizeSectionOrder, sanitizeComposition, fitComposition, DEFAULT_SECTION_ORDER, composeChanges, entryRelevance, isScreeningSkill, minSkillItems, numberedRequirements } from '../../extension/generation/compose.js';
+import { makeLayout, estimateDocHeight } from '../../extension/generation/layout.js';
+import { extraText } from '../../extension/generation/resumeDoc.js';
 import { previewResumes } from '../../extension/generation/highlight.js';
 import { resumeDocToSchema } from '../../extension/generation/baseline.js';
 import { scoreResumeV2 } from '../eval/scoreV2.mjs';
@@ -360,4 +361,78 @@ test('a Skills section far past the target goes back for repair', () => {
   assert.ok(codes(validateComposition(c, many, m)).includes('too_many_skills'));
   c.skill_groups = [{ label: 'Tools', items: Array.from({ length: 40 }, (_, i) => `Tool${i}`) }];
   assert.ok(!codes(validateComposition(c, many, m)).includes('too_many_skills'));
+});
+
+// A job with repetitive bullets and a project proving something new.
+const pickerProfile = {
+  ...profile,
+  experiences: [
+    { id: '3', title: 'Engineer', company: 'Harbor', start: '2022', end: 'Present', bullets: ['a', 'b', 'c', 'd', 'e'] },
+    { id: '4', title: 'Intern', company: 'Pine', start: '2021', end: '2021', bullets: ['f', 'g'] }
+  ],
+  projects: [{ id: '5', name: 'tidepool', bullets: ['h', 'i', 'j'] }, { id: '6', name: 'gull', bullets: ['k', 'l'] }],
+  extras: []
+};
+const pickerMatch = {
+  keywords: [{ term: 'Go', importance: 'core', alias: '' }, { term: 'Docker', importance: 'core', alias: '' }],
+  requirements: [
+    { text: 'Go services', kind: 'required', strength: 'strong', evidence: ['exp:3', 'proj:5'] },
+    { text: 'Containers', kind: 'required', strength: 'strong', evidence: ['proj:5'] },
+    { text: 'Kubernetes', kind: 'required', strength: 'none', evidence: [] }
+  ]
+};
+const bl = (text, id, proves = []) => ({ text, sources: [id], proves });
+const pickerComp = () => ({
+  ...good(),
+  extras: [],
+  experience: [
+    { id: 'exp:3', bullets: [bl('Built Go services', 'exp:3.b1', ['R1']), bl('Built more Go services', 'exp:3.b2', ['R1']), bl('Built other Go services', 'exp:3.b3', ['R1']), bl('Kept Go services running', 'exp:3.b4', ['R1'])] },
+    { id: 'exp:4', bullets: [bl('Wrote reports', 'exp:4.b1'), bl('Filed tickets', 'exp:4.b2')] }
+  ],
+  projects: [{ id: 'proj:5', bullets: [bl('Ran the queue in Docker containers', 'proj:5.b1', ['R2']), bl('Shipped workers', 'proj:5.b2'), bl('Wrote migrations', 'proj:5.b3')] }]
+});
+const overBy = (lines) => { const L = makeLayout({}); return { L, offset: L.capacityPx - estimateDocHeight(L, toResumeDoc(pickerComp(), pickerProfile), extraText) + lines * L.kinds.bullet.lineHeight }; };
+
+test('requirements are numbered by their place, only the ones the candidate can show', () => {
+  assert.deepEqual(numberedRequirements(pickerMatch).map(q => q.id), ['R1', 'R2']);
+  const p = numberedRequirements({ requirements: [{ text: 'x', kind: 'required', strength: 'none' }, { text: 'y', kind: 'preferred', strength: 'partial' }] });
+  assert.deepEqual(p, [{ id: 'R2', kind: 'preferred', text: 'y' }]);
+});
+
+test('the bullet that adds least goes first; a project proving something new outlasts a repetitive job', () => {
+  const { L, offset } = overBy(3);
+  const fit = fitComposition(pickerComp(), pickerProfile, pickerMatch, L, { offsetPx: offset });
+  assert.ok(fit.trimmed.length, 'something was trimmed');
+  const job = fit.comp.experience.find(e => e.id === 'exp:3').bullets.map(b => b.text);
+  assert.ok(fit.comp.projects[0].bullets.some(b => b.text.includes('Docker')), 'the only proof of R2 stays');
+  assert.ok(job.length < 4 || fit.trimmed.some(t => t.startsWith('proj:5')), 'bullets repeat R1 or add nothing, so they go');
+  assert.ok(fit.comp.experience.every(e => e.bullets.length >= 1), 'every job keeps a bullet');
+});
+
+test('floors hold: newest job 2, the relevant top project 2, other jobs 1; past them only as a last resort', () => {
+  const counts = (fit) => [...fit.comp.experience, ...fit.comp.projects].map(e => e.bullets.length);
+  const near = overBy(3);
+  assert.deepEqual(counts(fitComposition(pickerComp(), pickerProfile, pickerMatch, near.L, { offsetPx: near.offset })), [2, 1, 2]);
+  const far = overBy(9);
+  const fit = fitComposition(pickerComp(), pickerProfile, pickerMatch, far.L, { offsetPx: far.offset });
+  assert.ok(fit.comp.experience.length === 2 && counts(fit).every(n => n >= 1), 'a job and its last bullet are never removed');
+  assert.ok(fit.comp.projects[0].bullets[0].text.includes('Docker'), 'the only proof of a requirement is what stays');
+});
+
+test('a bullet with no proves list, or one naming unknown requirements, still works', () => {
+  const c = pickerComp();
+  for (const e of [...c.experience, ...c.projects]) for (const b of e.bullets) delete b.proves;
+  c.experience[0].bullets[0].proves = ['R9', 'nonsense', 'R3'];   // R3 is the requirement the candidate cannot show
+  const { L, offset } = overBy(2);
+  assert.ok(fitComposition(c, pickerProfile, pickerMatch, L, { offsetPx: offset }).trimmed.length);
+});
+
+test('the prompt numbers the requirements and asks for more than fits', async () => {
+  const { buildComposeMessages } = await import('../../extension/generation/composePrompt.js');
+  const [sys, user] = buildComposeMessages({ profile: pickerProfile, jobText: 'x', match: { ...pickerMatch, company: '', role: '', seniority: 'mid', hard_requirements: [] }, layout: makeLayout({}) });
+  assert.match(user.content, /- R1 \[required\] Go services/);
+  assert.match(user.content, /- R2 \[required\] Containers/);
+  assert.ok(!/- R3 /.test(user.content), 'a requirement the candidate cannot show has no number');
+  assert.match(sys.content, /list in proves/);
+  assert.equal(user.content.match(/write about (\d+) lines/) !== null, true);
 });

@@ -820,10 +820,6 @@ class ResumeStudioApp {
         if (added.length) {
             parts.push(`Added to this resume only: ${added.join(', ')}. Add them to your profile to keep them.`);
         }
-        const removed = meta.page?.trimmed?.length || 0;
-        if (removed) {
-            parts.push(`Removed ${removed} less relevant item${removed === 1 ? '' : 's'} to fit one page.`);
-        }
         if (overflow > 1) {
             parts.push(`It still runs to ${overflow.toFixed(2)} pages. Shorten a few bullets in your profile and try again.`);
         }

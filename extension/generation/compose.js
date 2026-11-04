@@ -19,7 +19,7 @@
 // profile:workAuthorization and profile:clearance.
 
 import { normalizeTerm, corpusHas, profileCorpus } from './keywords.js';
-import { estimateDocHeight } from './layout.js';
+import { estimateDocHeight, lineCount } from './layout.js';
 import { extraText, newestFirst } from './resumeDoc.js';
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -136,11 +136,21 @@ const LINE = {
   },
   required: ['text', 'sources']
 };
+// A bullet also names the posting requirements it proves, so the page can be
+// fitted by what each bullet adds (fitComposition).
+const BULLET = {
+  ...LINE,
+  properties: {
+    ...LINE.properties,
+    proves: { type: 'array', items: { type: 'string' }, description: 'Numbers of the posting requirements this bullet really proves ("R2"); empty when none.' }
+  },
+  required: ['text', 'sources', 'proves']
+};
 const PICK = (desc) => ({ type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: desc } }, required: ['id'] });
 const ENTRY = (desc) => ({
   type: 'object',
   additionalProperties: false,
-  properties: { id: { type: 'string', description: desc }, bullets: { type: 'array', items: LINE } },
+  properties: { id: { type: 'string', description: desc }, bullets: { type: 'array', items: BULLET } },
   required: ['id', 'bullets']
 });
 
@@ -602,6 +612,16 @@ export function isExpansion(a, b) {
   return test(a, b) || test(b, a);
 }
 
+// The posting's requirements the candidate can show, numbered as the prompt
+// lists them: [{ id: 'R1', kind, text }]. The number is the requirement's place
+// in the match, so it stays the same through repairs. Pure.
+export function numberedRequirements(match) {
+  return ((match && match.requirements) || [])
+    .map((q, i) => ({ id: `R${i + 1}`, q }))
+    .filter(({ q }) => q && q.strength !== 'none')
+    .map(({ id, q }) => ({ id, kind: q.kind, text: q.text }));
+}
+
 function protectedProof(match) {
   const ids = new Set();
   for (const q of ((match && match.requirements) || []).filter(q => q.kind === 'required' && q.strength !== 'none')) {
@@ -623,38 +643,52 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
   const keep = protectedProof(match);
   const limitPx = layout.capacityPx - layout.kinds.bullet.lineHeight * 0.5;
   const height = () => estimateDocHeight(layout, toResumeDoc(c, profile), extraText) + offsetPx;
-  const isProof = (b) => (b.sources || []).some(id => keep.has(id));
-  const entryProtected = (e) => keep.has(e.id) || (e.bullets || []).some(isProof);
   const trimmed = [];
 
-  const dropLastBullet = (entry, min) => {
-    const bullets = entry.bullets || [];
-    if (bullets.length <= min) return false;
-    for (let j = bullets.length - 1; j >= 0; j--) {
-      if (isProof(bullets[j])) continue;
-      trimmed.push(`${entry.id} bullet: ${bullets[j].text}`);
-      bullets.splice(j, 1);
-      return true;
-    }
-    return false;
+  // What a bullet adds to the page: each requirement it proves that no other
+  // bullet proves (required 3, preferred 1.5; a repeat 0.3), each core keyword
+  // no other bullet shows (0.5), per line of the page it takes. The model
+  // writes more than fits (the prompt's budget runs over), so this decides what
+  // stays. Ties: the less relevant entry, then the longer bullet, then the later.
+  const reqs = new Map(numberedRequirements(match).map(q => [q.id, q]));
+  const core = ((match && match.keywords) || []).filter(k => k && (typeof k === 'string' || k.importance === 'core')).map(k => normalizeTerm(typeof k === 'string' ? k : k.term));
+  const allBullets = () => [...(c.experience || []), ...(c.projects || [])].flatMap(e => (e.bullets || []).map((b, j) => ({ e, b, j })));
+  const provedBy = (b) => (b.proves || []).filter(id => reqs.has(id));
+  const provesAlone = (b, id) => !allBullets().some(o => o.b !== b && provedBy(o.b).includes(id));
+  const linesOf = (b) => Math.max(1, lineCount(layout, 'bullet', b.text));
+  const worth = (b) => {
+    let v = 0;
+    for (const id of provedBy(b)) v += provesAlone(b, id) ? (reqs.get(id).kind === 'required' ? 3 : 1.5) : 0.3;
+    const text = ` ${normalizeTerm(b.text)} `;
+    const others = ` ${allBullets().filter(o => o.b !== b).map(o => normalizeTerm(o.b.text)).join(' ')} `;
+    for (const t of core) if (t && corpusHas(text, t) && !corpusHas(others, t)) v += 0.5;
+    return v / linesOf(b);
   };
-  // Bullets go by relevance (entryRelevance), job or project alike: the next
-  // bullet cut is the one worth least, a bullet of an entry being worth its
-  // score shared over its bullets, so a long, weakly relevant entry shrinks
-  // first. Floors: every job keeps a bullet and the newest job two; a
-  // project keeps one until whole projects go (least relevant first, the last
-  // project only once the newest job is down to two).
+  const lastProofOfRequired = (b) => provedBy(b).some(id => reqs.get(id).kind === 'required' && provesAlone(b, id));
+
+  // Floors: every job keeps a bullet and the newest job two; the most relevant
+  // project keeps two when it matters to this posting, any other project one
+  // until whole projects go.
   const rel = entryRelevance(profile, match);
+  const top = Math.max(0.5, ...rel.values());
   const newestId = (newestFirst((profile.experiences || []).filter(x => (c.experience || []).some(e => e.id === `exp:${x.id}`)))[0] || {}).id;
-  const floor = (e) => (e.id === `exp:${newestId}` ? 2 : 1);
-  const entries = () => [...(c.experience || []), ...(c.projects || [])];
-  const cheapestBullet = (floorOf) => {
-    const can = entries().filter(e => (e.bullets || []).length > floorOf(e) && (e.bullets || []).some(b => !isProof(b)));
-    if (!can.length) return false;
-    const worth = (e) => (rel.get(e.id) || 0.5) / e.bullets.length;
-    const e = can.reduce((a, x) => (worth(x) < worth(a) ? x : a));
-    return dropLastBullet(e, floorOf(e));
+  const topProject = () => (c.projects || []).reduce((a, x) => (!a || (rel.get(x.id) || 0) > (rel.get(a.id) || 0) ? x : a), null);
+  const floor = (e) => {
+    if (e.id === `exp:${newestId}`) return 2;
+    const tp = topProject();
+    return tp && e.id === tp.id && (rel.get(e.id) || 0) >= top * 0.3 ? 2 : 1;
   };
+  const cheapestBullet = (floorOf, { sparing = false } = {}) => {
+    const can = allBullets().filter(({ e, b }) => e.bullets.length > floorOf(e) && !(sparing && lastProofOfRequired(b)));
+    if (!can.length) return false;
+    const rank = can.map(x => ({ ...x, w: worth(x.b), r: rel.get(x.e.id) || 0.5, n: linesOf(x.b) }));
+    rank.sort((p, q) => p.w - q.w || p.r - q.r || q.n - p.n || q.j - p.j);
+    const { e, b } = rank[0];
+    trimmed.push(`${e.id} bullet: ${b.text}`);
+    e.bullets.splice(e.bullets.indexOf(b), 1);
+    return true;
+  };
+  const entryProtected = (e) => keep.has(e.id) || (e.bullets || []).some(lastProofOfRequired);
   const dropProject = (min) => {
     const open = (c.projects || []).filter(p => !entryProtected(p));
     if ((c.projects || []).length <= min || !open.length) return false;
@@ -665,8 +699,9 @@ export function fitComposition(comp, profile, match, layout, { offsetPx = 0 } = 
   };
   const steps = [
     () => { const i = [...(c.extras || [])].reverse().findIndex(e => !keep.has(e.id)); if (i < 0) return false; const at = c.extras.length - 1 - i; trimmed.push(`extra ${c.extras[at].id}`); c.extras.splice(at, 1); return true; },
-    () => cheapestBullet(floor),
+    () => cheapestBullet(floor, { sparing: true }),
     () => dropProject(1),
+    () => cheapestBullet(floor),
     () => dropProject(0),
     () => cheapestBullet(() => 1)
   ];

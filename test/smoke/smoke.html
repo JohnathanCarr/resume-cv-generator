@@ -63,7 +63,7 @@
     // The composer: the profile's own lines, each citing itself.
     resume_composition: () => {
       const p = store.profile;
-      const entry = (kind) => (x) => ({ id: `${kind}:${x.id}`, bullets: (x.bullets || []).map((text, i) => ({ text, sources: [`${kind}:${x.id}.b${i + 1}`] })) });
+      const entry = (kind) => (x) => ({ id: `${kind}:${x.id}`, bullets: (x.bullets || []).map((text, i) => ({ text, sources: [`${kind}:${x.id}.b${i + 1}`], proves: [] })) });
       return {
         summary: { text: p.summary || '', sources: ['profile:summary'] },
         skill_groups: [{ label: 'Skills', items: p.skills || [] }],
